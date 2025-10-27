@@ -1,0 +1,13 @@
+{
+  "projectId": "2ab0f06c",
+  "projectName": "securt-kit",
+  "enabledLibraryNames": [],
+  "enableComponentCompletion": true,
+  "enableAttributeCompletion": true,
+  "enableEventCompletion": true,
+  "enableSlotCompletion": true,
+  "enableHoverDocumentation": true,
+  "enableRightClickDocumentation": true,
+  "enableCaching": true,
+  "enableDebugMode": false
+}
