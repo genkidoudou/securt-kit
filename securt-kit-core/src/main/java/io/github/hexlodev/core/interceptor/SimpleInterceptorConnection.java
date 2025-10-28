@@ -7,19 +7,77 @@ import java.util.concurrent.Executor;
 import java.util.logging.Logger;
 
 /**
- * 简化的连接包装器 - 只拦截Statement创建
+ * 简化的连接包装器 - 拦截Statement创建
+ * 
+ * <p>这个类实现了 {@link Connection} 接口，通过装饰器模式包装真实的数据库连接。
+ * 主要功能是拦截Statement、PreparedStatement和CallableStatement的创建过程，
+ * 返回包装后的对象以支持SQL拦截和日志记录功能。</p>
+ * 
+ * <p>主要功能：</p>
+ * <ul>
+ *   <li>拦截 {@code createStatement()} 方法，返回 {@link SimpleInterceptorStatement}</li>
+ *   <li>拦截 {@code prepareStatement()} 方法，返回 {@link SimpleInterceptorPreparedStatement}</li>
+ *   <li>拦截 {@code prepareCall()} 方法，返回 {@link SimpleInterceptorCallableStatement}</li>
+ *   <li>记录连接创建和Statement创建的日志</li>
+ *   <li>其他Connection方法直接委托给底层连接</li>
+ * </ul>
+ * 
+ * <p>使用场景：</p>
+ * <pre>{@code
+ * // 通过拦截器驱动获取连接
+ * Connection conn = DriverManager.getConnection("jdbc:interceptor:h2:mem:testdb", props);
+ * 
+ * // 创建Statement会被拦截
+ * Statement stmt = conn.createStatement();
+ * // 实际返回的是 SimpleInterceptorStatement
+ * 
+ * // 创建PreparedStatement会被拦截
+ * PreparedStatement pstmt = conn.prepareStatement("SELECT * FROM users");
+ * // 实际返回的是 SimpleInterceptorPreparedStatement
+ * }</pre>
+ * 
+ * @author hexlodev
+ * @since 1.0.0
+ * @see Connection
+ * @see SimpleInterceptorStatement
+ * @see SimpleInterceptorPreparedStatement
+ * @see SimpleInterceptorCallableStatement
  */
 public class SimpleInterceptorConnection implements Connection {
     
+    /** 日志记录器 */
     private static final Logger logger = Logger.getLogger(SimpleInterceptorConnection.class.getName());
+    
+    /** 被包装的真实数据库连接 */
     private final Connection delegate;
     
+    /**
+     * 构造函数
+     * 
+     * <p>创建一个新的连接包装器，包装真实的数据库连接。
+     * 构造函数会记录连接被拦截的日志信息。</p>
+     * 
+     * @param delegate 真实的数据库连接，不能为null
+     * @throws IllegalArgumentException 如果delegate为null
+     */
     public SimpleInterceptorConnection(Connection delegate) {
+        if (delegate == null) {
+            throw new IllegalArgumentException("Delegate connection cannot be null");
+        }
         this.delegate = delegate;
         logger.info("Connection intercepted: " + delegate.getClass().getSimpleName());
     }
     
-    // 拦截Statement创建方法
+    /**
+     * 创建Statement对象 - 拦截方法
+     * 
+     * <p>拦截Statement的创建过程，返回包装后的 {@link SimpleInterceptorStatement} 对象。
+     * 包装后的Statement支持SQL拦截、表名解析和性能监控功能。</p>
+     * 
+     * @return 包装后的Statement对象
+     * @throws SQLException 如果创建Statement失败
+     * @see SimpleInterceptorStatement
+     */
     @Override
     public Statement createStatement() throws SQLException {
         Statement statement = delegate.createStatement();
@@ -27,6 +85,17 @@ public class SimpleInterceptorConnection implements Connection {
         return new SimpleInterceptorStatement(statement);
     }
     
+    /**
+     * 创建PreparedStatement对象 - 拦截方法
+     * 
+     * <p>拦截PreparedStatement的创建过程，返回包装后的 {@link SimpleInterceptorPreparedStatement} 对象。
+     * 包装后的PreparedStatement支持SQL拦截、参数记录、表名解析和性能监控功能。</p>
+     * 
+     * @param sql SQL语句模板，包含参数占位符（?）
+     * @return 包装后的PreparedStatement对象
+     * @throws SQLException 如果创建PreparedStatement失败
+     * @see SimpleInterceptorPreparedStatement
+     */
     @Override
     public PreparedStatement prepareStatement(String sql) throws SQLException {
         PreparedStatement statement = delegate.prepareStatement(sql);
@@ -34,6 +103,17 @@ public class SimpleInterceptorConnection implements Connection {
         return new SimpleInterceptorPreparedStatement(statement, sql);
     }
     
+    /**
+     * 创建CallableStatement对象 - 拦截方法
+     * 
+     * <p>拦截CallableStatement的创建过程，返回包装后的 {@link SimpleInterceptorCallableStatement} 对象。
+     * 包装后的CallableStatement支持SQL拦截、参数记录、表名解析和性能监控功能。</p>
+     * 
+     * @param sql 存储过程调用SQL语句
+     * @return 包装后的CallableStatement对象
+     * @throws SQLException 如果创建CallableStatement失败
+     * @see SimpleInterceptorCallableStatement
+     */
     @Override
     public CallableStatement prepareCall(String sql) throws SQLException {
         CallableStatement statement = delegate.prepareCall(sql);

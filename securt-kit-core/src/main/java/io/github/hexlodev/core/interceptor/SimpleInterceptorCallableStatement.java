@@ -1,6 +1,8 @@
 package io.github.hexlodev.core.interceptor;
 
+import io.github.hexlodev.core.utils.TableNameParser;
 import java.sql.*;
+import java.util.Collection;
 import java.util.logging.Logger;
 
 /**
@@ -17,10 +19,26 @@ public class SimpleInterceptorCallableStatement implements CallableStatement {
         this.sql = sql;
     }
     
+    /**
+     * 解析SQL中的表名并打印
+     */
+    private void logTableNames() {
+        try {
+            TableNameParser parser = new TableNameParser(sql);
+            Collection<String> tables = parser.tables();
+            if (!tables.isEmpty()) {
+                logger.info("📋 [TABLES] " + String.join(", ", tables));
+            }
+        } catch (Exception e) {
+            logger.warning("Failed to parse table names from SQL: " + e.getMessage());
+        }
+    }
+    
     // 拦截执行方法
     @Override
     public ResultSet executeQuery() throws SQLException {
         logger.info("🔍 [CALLABLE QUERY] " + sql);
+        logTableNames();
         long startTime = System.currentTimeMillis();
         ResultSet resultSet = delegate.executeQuery();
         long endTime = System.currentTimeMillis();
@@ -31,6 +49,7 @@ public class SimpleInterceptorCallableStatement implements CallableStatement {
     @Override
     public int executeUpdate() throws SQLException {
         logger.info("📝 [CALLABLE UPDATE] " + sql);
+        logTableNames();
         long startTime = System.currentTimeMillis();
         int result = delegate.executeUpdate();
         long endTime = System.currentTimeMillis();
@@ -41,6 +60,7 @@ public class SimpleInterceptorCallableStatement implements CallableStatement {
     @Override
     public boolean execute() throws SQLException {
         logger.info("⚡ [CALLABLE EXECUTE] " + sql);
+        logTableNames();
         long startTime = System.currentTimeMillis();
         boolean result = delegate.execute();
         long endTime = System.currentTimeMillis();
