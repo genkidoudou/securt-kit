@@ -71,9 +71,9 @@ public class TableCache {
                         }
                         fieldEncryptorMap.put(fieldName, ClassUtil.loadClass(strategy));
                     }
-//                    if (CollectionUtil.isNotEmpty(fieldEncryptorMap)) {
-//                        parserEntityClass.put(tableName, fieldEncryptorMap);
-//                    }
+                    if (CollectionUtil.isNotEmpty(fieldEncryptorMap)) {
+                        parserEntityClass.put(tableName, fieldEncryptorMap);
+                    }
 
                 }
 

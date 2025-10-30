@@ -9,13 +9,12 @@ import io.github.hexlodev.core.config.FieldEncryptorProperties;
 import io.github.hexlodev.core.parser.dto.ColumnTableDto;
 import io.github.hexlodev.core.parser.dto.FieldEncryptorInfoDto;
 import io.github.hexlodev.core.parser.visitor.PoJoEncrtptorStatementVisitor;
+import io.github.hexlodev.core.utils.TableNameParser;
 import net.sf.jsqlparser.JSQLParserException;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -79,7 +78,7 @@ public class SecurtkitUtils {
         }
 
         // 重置计数器
-        PLACEHOLDER_COUNTER.set(0);
+        PLACEHOLDER_COUNTER.set(1);
 
         // 使用正则表达式替换问号，但要避免替换字符串字面量中的问号
         Pattern pattern = Pattern.compile("\\?");
@@ -93,6 +92,21 @@ public class SecurtkitUtils {
         matcher.appendTail(sb);
 
         return sb.toString();
+    }
+
+
+    /**
+     * 是否需要加解密处理
+     * @since 2025/10/29
+     * @param tables 表名
+     * @return
+     */
+    public static boolean needEncrypt(Collection<String> tables) {
+        if (CollectionUtil.isEmpty(tables)) {
+            return false;
+        }
+        Set<String> tables1 = TableCache.getTables();
+        return CollectionUtil.containsAny(tables1, tables);
     }
 
     public static void main(String[] args) {

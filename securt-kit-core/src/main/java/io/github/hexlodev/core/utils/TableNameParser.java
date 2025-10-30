@@ -380,7 +380,7 @@ public final class TableNameParser {
      * @return 表名集合，如果没有找到表名则返回空集合
      * @see #accept(TableNameVisitor)
      */
-    public Collection<String> tables() {
+    public HashSet<String> tables() {
         Map<String, String> tableMap = new HashMap<>();
         accept(token -> {
             String name = token.getValue();

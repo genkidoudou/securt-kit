@@ -12,18 +12,5 @@ import org.springframework.context.annotation.ComponentScan;
 })
 public class TestApplication {
 
-    @Bean
-    public FieldEncryptorStrategy defaultFieldEncryptorStrategy() {
-        return new FieldEncryptorStrategy() {
-            @Override
-            public String encryption(String oldValue) {
-                return oldValue;
-            }
 
-            @Override
-            public String decryption(String oldValue) {
-                return oldValue;
-            }
-        };
-    }
 }
