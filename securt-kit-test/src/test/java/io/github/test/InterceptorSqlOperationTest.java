@@ -18,6 +18,8 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -143,9 +145,8 @@ public class InterceptorSqlOperationTest {
     }
 
 
-
     @Test
-    void  testDelete() throws Exception {
+    void testDelete() throws Exception {
 
         // 加载MyBatis配置
         java.io.InputStream input = Resources.getResourceAsStream("mybatis-config-test.xml");
@@ -157,6 +158,24 @@ public class InterceptorSqlOperationTest {
             int rows = mapper.insertUser("张三", "19112341234", 14, "张三@163.com", 1L);
             int rows2 = mapper.deleteUserByPhone("19112341234");
             assertEquals(1, rows2, "应该有一行被更新");
+        }
+    }
+
+    @Test
+
+    public void select1() throws IOException, SQLException {
+        // 加载MyBatis配置
+        java.io.InputStream input = Resources.getResourceAsStream("mybatis-config-test.xml");
+        SqlSessionFactory sqlSessionFactory = new SqlSessionFactoryBuilder().build(input);
+        try (SqlSession sqlSession = sqlSessionFactory.openSession()) {
+            Connection connection = sqlSession.getConnection();
+            setUpTable(connection);
+            UserMapper mapper = sqlSession.getMapper(UserMapper.class);
+            int rows = mapper.insertUser("张三", "19112341234", 14, "张三@163.com", 1L);
+            List<Map> maps = mapper.selectAll();
+            for (Map map : maps) {
+                System.out.println(map);
+            }
         }
     }
 

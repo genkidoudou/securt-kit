@@ -2,7 +2,11 @@ package io.github.test;
 
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
+
+import java.util.List;
+import java.util.Map;
 
 public interface UserMapper {
     @Update("UPDATE user SET name = #{name}, phone = #{phone}, age = #{age}, email = #{email} WHERE id = #{id}")
@@ -22,4 +26,8 @@ public interface UserMapper {
 
     @Delete("DELETE FROM user WHERE phone = #{phone}")
     int deleteUserByPhone(@Param("phone") String phone);
+
+
+    @Select("SELECT name,phone FROM user")
+    List<Map> selectAll();
 }
