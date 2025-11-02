@@ -82,8 +82,8 @@ public class SimpleInterceptorStatement implements Statement {
     }
 
     /**
-     * 解析SQL中的表名并打印
-     *
+     * 解析SQL中的表名并记录日志
+     * 
      * <p>使用 {@link TableNameParser} 解析SQL语句中的表名，并将结果记录到日志中。
      * 解析失败时不会影响SQL执行，只会记录警告日志。</p>
      *
@@ -94,7 +94,7 @@ public class SimpleInterceptorStatement implements Statement {
             TableNameParser parser = new TableNameParser(sql);
             Collection<String> tables = parser.tables();
             if (!tables.isEmpty()) {
-                logger.info("📋 [TABLES] " + String.join(", ", tables));
+                logger.fine("[TABLES] " + String.join(", ", tables));
             }
         } catch (Exception e) {
             logger.warning("Failed to parse table names from SQL: " + e.getMessage());
@@ -113,12 +113,10 @@ public class SimpleInterceptorStatement implements Statement {
      */
     @Override
     public ResultSet executeQuery(String sql) throws SQLException {
-        logger.info("🔍 [SQL QUERY] " + sql);
+        logger.info("[SQL QUERY] " + sql);
         logTableNames(sql);
         long startTime = System.currentTimeMillis();
-        ResultSet resultSet = delegate.executeQuery(sql);
-        long endTime = System.currentTimeMillis();
-        logger.info("✅ [QUERY RESULT] Executed in " + (endTime - startTime) + "ms");
+        
         // 解析表集合用于解密
         java.util.Set<String> tables = new java.util.HashSet<>();
         Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> mapListPair = null;
@@ -127,15 +125,27 @@ public class SimpleInterceptorStatement implements Statement {
             TableNameParser parser = new TableNameParser(sql);
             tables.addAll(parser.tables());
         } catch (Exception ignore) {
+            // 解析失败不影响执行
         }
+        
         if (SecurtkitUtils.needEncrypt(tables)) {
             try {
                 mapListPair = SecurtkitUtils.parseSql(sql);
             } catch (JSQLParserException e) {
-                throw new RuntimeException(e);
+                logger.warning("Failed to parse SQL for decryption: " + e.getMessage());
             }
         }
-        return ResultSetDecryptingProxy.wrap(resultSet, tables, mapListPair, sql);
+        
+        try {
+            ResultSet resultSet = delegate.executeQuery(sql);
+            long endTime = System.currentTimeMillis();
+            logger.info("[QUERY RESULT] Executed in " + (endTime - startTime) + "ms");
+            return ResultSetDecryptingProxy.wrap(resultSet, tables, mapListPair, sql);
+        } catch (SQLException e) {
+            long endTime = System.currentTimeMillis();
+            logger.severe("[QUERY ERROR] Failed after " + (endTime - startTime) + "ms: " + e.getMessage());
+            throw e;
+        }
     }
 
     /**
@@ -150,13 +160,19 @@ public class SimpleInterceptorStatement implements Statement {
      */
     @Override
     public int executeUpdate(String sql) throws SQLException {
-        logger.info("📝 [SQL UPDATE] " + sql);
+        logger.info("[SQL UPDATE] " + sql);
         logTableNames(sql);
         long startTime = System.currentTimeMillis();
-        int result = delegate.executeUpdate(sql);
-        long endTime = System.currentTimeMillis();
-        logger.info("✅ [UPDATE RESULT] Executed in " + (endTime - startTime) + "ms, affected rows: " + result);
-        return result;
+        try {
+            int result = delegate.executeUpdate(sql);
+            long endTime = System.currentTimeMillis();
+            logger.info("[UPDATE RESULT] Executed in " + (endTime - startTime) + "ms, affected rows: " + result);
+            return result;
+        } catch (SQLException e) {
+            long endTime = System.currentTimeMillis();
+            logger.severe("[UPDATE ERROR] Failed after " + (endTime - startTime) + "ms: " + e.getMessage());
+            throw e;
+        }
     }
 
     /**
@@ -171,13 +187,19 @@ public class SimpleInterceptorStatement implements Statement {
      */
     @Override
     public boolean execute(String sql) throws SQLException {
-        logger.info("⚡ [SQL EXECUTE] " + sql);
+        logger.info("[SQL EXECUTE] " + sql);
         logTableNames(sql);
         long startTime = System.currentTimeMillis();
-        boolean result = delegate.execute(sql);
-        long endTime = System.currentTimeMillis();
-        logger.info("✅ [EXECUTE RESULT] Executed in " + (endTime - startTime) + "ms, result: " + result);
-        return result;
+        try {
+            boolean result = delegate.execute(sql);
+            long endTime = System.currentTimeMillis();
+            logger.info("[EXECUTE RESULT] Executed in " + (endTime - startTime) + "ms, result: " + result);
+            return result;
+        } catch (SQLException e) {
+            long endTime = System.currentTimeMillis();
+            logger.severe("[EXECUTE ERROR] Failed after " + (endTime - startTime) + "ms: " + e.getMessage());
+            throw e;
+        }
     }
 
     // 其他Statement方法直接委托

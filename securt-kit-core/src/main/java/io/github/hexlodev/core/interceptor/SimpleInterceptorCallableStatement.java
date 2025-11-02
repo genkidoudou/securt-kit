@@ -6,96 +6,154 @@ import java.util.Collection;
 import java.util.logging.Logger;
 
 /**
- * 简化的CallableStatement包装器 - 只拦截核心执行方法
+ * CallableStatement拦截器 - 拦截存储过程调用
+ * 
+ * <p>该类实现了{@link CallableStatement}接口，通过装饰器模式包装真实的CallableStatement对象。
+ * 主要功能是拦截存储过程的调用，记录SQL日志和执行性能。</p>
+ * 
+ * <p>主要功能：</p>
+ * <ul>
+ *   <li>拦截存储过程的执行方法（executeQuery、executeUpdate、execute）</li>
+ *   <li>记录SQL语句和执行时间</li>
+ *   <li>解析SQL中的表名</li>
+ * </ul>
+ * 
+ * @author hexlodev
+ * @since 1.0.0
+ * @see CallableStatement
  */
 public class SimpleInterceptorCallableStatement implements CallableStatement {
     
+    /** 日志记录器 */
     private static final Logger logger = Logger.getLogger(SimpleInterceptorCallableStatement.class.getName());
+    
+    /** 被包装的真实CallableStatement对象 */
     private final CallableStatement delegate;
+    
+    /** 存储过程SQL语句 */
     private final String sql;
     
+    /**
+     * 构造函数
+     * 
+     * @param delegate 真实的CallableStatement对象，不能为null
+     * @param sql 存储过程SQL语句
+     */
     public SimpleInterceptorCallableStatement(CallableStatement delegate, String sql) {
+        if (delegate == null) {
+            throw new IllegalArgumentException("Delegate CallableStatement cannot be null");
+        }
         this.delegate = delegate;
         this.sql = sql;
     }
     
     /**
-     * 解析SQL中的表名并打印
+     * 解析SQL中的表名并记录日志
      */
     private void logTableNames() {
         try {
             TableNameParser parser = new TableNameParser(sql);
             Collection<String> tables = parser.tables();
             if (!tables.isEmpty()) {
-                logger.info("📋 [TABLES] " + String.join(", ", tables));
+                logger.fine("[TABLES] " + String.join(", ", tables));
             }
         } catch (Exception e) {
             logger.warning("Failed to parse table names from SQL: " + e.getMessage());
         }
     }
     
-    // 拦截执行方法
+    /**
+     * 执行存储过程查询 - 拦截方法
+     * 
+     * @return 查询结果集
+     * @throws SQLException 如果执行失败
+     */
     @Override
     public ResultSet executeQuery() throws SQLException {
-        logger.info("🔍 [CALLABLE QUERY] " + sql);
+        logger.info("[CALLABLE QUERY] " + sql);
         logTableNames();
         long startTime = System.currentTimeMillis();
-        ResultSet resultSet = delegate.executeQuery();
-        long endTime = System.currentTimeMillis();
-        logger.info("✅ [CALLABLE QUERY RESULT] Executed in " + (endTime - startTime) + "ms");
-        return resultSet;
+        try {
+            ResultSet resultSet = delegate.executeQuery();
+            long endTime = System.currentTimeMillis();
+            logger.info("[CALLABLE QUERY RESULT] Executed in " + (endTime - startTime) + "ms");
+            return resultSet;
+        } catch (SQLException e) {
+            long endTime = System.currentTimeMillis();
+            logger.severe("[CALLABLE QUERY ERROR] Failed after " + (endTime - startTime) + "ms: " + e.getMessage());
+            throw e;
+        }
     }
     
+    /**
+     * 执行存储过程更新 - 拦截方法
+     * 
+     * @return 受影响的行数
+     * @throws SQLException 如果执行失败
+     */
     @Override
     public int executeUpdate() throws SQLException {
-        logger.info("📝 [CALLABLE UPDATE] " + sql);
+        logger.info("[CALLABLE UPDATE] " + sql);
         logTableNames();
         long startTime = System.currentTimeMillis();
-        int result = delegate.executeUpdate();
-        long endTime = System.currentTimeMillis();
-        logger.info("✅ [CALLABLE UPDATE RESULT] Executed in " + (endTime - startTime) + "ms, affected rows: " + result);
-        return result;
+        try {
+            int result = delegate.executeUpdate();
+            long endTime = System.currentTimeMillis();
+            logger.info("[CALLABLE UPDATE RESULT] Executed in " + (endTime - startTime) + "ms, affected rows: " + result);
+            return result;
+        } catch (SQLException e) {
+            long endTime = System.currentTimeMillis();
+            logger.severe("[CALLABLE UPDATE ERROR] Failed after " + (endTime - startTime) + "ms: " + e.getMessage());
+            throw e;
+        }
     }
     
+    /**
+     * 执行存储过程 - 拦截方法
+     * 
+     * @return 执行结果
+     * @throws SQLException 如果执行失败
+     */
     @Override
     public boolean execute() throws SQLException {
-        logger.info("⚡ [CALLABLE EXECUTE] " + sql);
+        logger.info("[CALLABLE EXECUTE] " + sql);
         logTableNames();
         long startTime = System.currentTimeMillis();
-        boolean result = delegate.execute();
-        long endTime = System.currentTimeMillis();
-        logger.info("✅ [CALLABLE EXECUTE RESULT] Executed in " + (endTime - startTime) + "ms, result: " + result);
-        return result;
+        try {
+            boolean result = delegate.execute();
+            long endTime = System.currentTimeMillis();
+            logger.info("[CALLABLE EXECUTE RESULT] Executed in " + (endTime - startTime) + "ms, result: " + result);
+            return result;
+        } catch (SQLException e) {
+            long endTime = System.currentTimeMillis();
+            logger.severe("[CALLABLE EXECUTE ERROR] Failed after " + (endTime - startTime) + "ms: " + e.getMessage());
+            throw e;
+        }
     }
     
-    // 拦截参数设置方法
+    // 参数设置方法直接委托，不记录日志以提高性能
     @Override
     public void setString(int parameterIndex, String x) throws SQLException {
-        logger.fine("Setting string parameter " + parameterIndex + " = " + x);
         delegate.setString(parameterIndex, x);
     }
     
     @Override
     public void setInt(int parameterIndex, int x) throws SQLException {
-        logger.fine("Setting int parameter " + parameterIndex + " = " + x);
         delegate.setInt(parameterIndex, x);
     }
     
     @Override
     public void setLong(int parameterIndex, long x) throws SQLException {
-        logger.fine("Setting long parameter " + parameterIndex + " = " + x);
         delegate.setLong(parameterIndex, x);
     }
     
     @Override
     public void setDouble(int parameterIndex, double x) throws SQLException {
-        logger.fine("Setting double parameter " + parameterIndex + " = " + x);
         delegate.setDouble(parameterIndex, x);
     }
     
     @Override
     public void setBoolean(int parameterIndex, boolean x) throws SQLException {
-        logger.fine("Setting boolean parameter " + parameterIndex + " = " + x);
         delegate.setBoolean(parameterIndex, x);
     }
     
