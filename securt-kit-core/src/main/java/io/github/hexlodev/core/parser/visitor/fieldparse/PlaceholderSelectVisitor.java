@@ -238,29 +238,29 @@ public class PlaceholderSelectVisitor extends PlaceholderFieldParseTable impleme
      */
     @Override
     public void visit(Values aThis) {
-        log.info("【securt-kit】开始处理Values: {}", aThis.toString());
-        log.info("【securt-kit】upstreamExpressionList大小: {}", upstreamExpressionList.size());
+//        log.info("【securt-kit】开始处理Values: {}", aThis.toString());
+//        log.info("【securt-kit】upstreamExpressionList大小: {}", upstreamExpressionList.size());
         
         ExpressionList<Expression> expressions = (ExpressionList<Expression>) aThis.getExpressions();
-        log.info("【securt-kit】expressions大小: {}", expressions.size());
+//        log.info("【securt-kit】expressions大小: {}", expressions.size());
         
         // 检查是否是批量插入（多个VALUES子句）
         boolean isBatchInsert = expressions.size() > 1 && expressions.get(0) instanceof ExpressionList;
         
         if (isBatchInsert) {
-            log.info("【securt-kit】处理批量Values，VALUES子句数量: {}", expressions.size());
+//            log.info("【securt-kit】处理批量Values，VALUES子句数量: {}", expressions.size());
             // 处理批量插入：每个VALUES子句都需要处理
             for (int valuesIndex = 0; valuesIndex < expressions.size(); valuesIndex++) {
                 Expression expressionList = expressions.get(valuesIndex);
                 if (expressionList instanceof ExpressionList) {
                     ExpressionList eList = (ExpressionList) expressionList;
-                    log.info("【securt-kit】处理第{}个ExpressionList，大小: {}", valuesIndex + 1, eList.size());
+//                    log.info("【securt-kit】处理第{}个ExpressionList，大小: {}", valuesIndex + 1, eList.size());
                     for (int i = 0; i < eList.size(); i++) {
                         Expression curExp = (Expression) eList.get(i);
                         Expression upstreamExpression = this.upstreamExpressionList.get(i);
                         // 使用标准的占位符格式，不添加批次索引
-                        log.info("【securt-kit】处理表达式对 {}: upstream={}, current={}", 
-                                i, upstreamExpression, curExp);
+//                        log.info("【securt-kit】处理表达式对 {}: upstream={}, current={}",
+//                                i, upstreamExpression, curExp);
                         JsqlparserUtil.parseWhereColumTable(this.getLayer(),
                                 this.getLayerFieldTableMap(),
                                 upstreamExpression,
@@ -274,11 +274,11 @@ public class PlaceholderSelectVisitor extends PlaceholderFieldParseTable impleme
             // 处理单个VALUES子句
             if (expressions.get(0) instanceof ExpressionList) {
                 ExpressionList eList = (ExpressionList) expressions.get(0);
-                log.info("【securt-kit】处理单个ExpressionList，大小: {}", eList.size());
+//                log.info("【securt-kit】处理单个ExpressionList，大小: {}", eList.size());
                 for (int i = 0; i < eList.size(); i++) {
                     Expression curExp = (Expression) eList.get(i);
                     Expression upstreamExpression = this.upstreamExpressionList.get(i);
-                    log.info("【securt-kit】处理表达式对 {}: upstream={}, current={}", i, upstreamExpression, curExp);
+//                    log.info("【securt-kit】处理表达式对 {}: upstream={}, current={}", i, upstreamExpression, curExp);
                     JsqlparserUtil.parseWhereColumTable(this.getLayer(),
                             this.getLayerFieldTableMap(),
                             upstreamExpression,
@@ -287,11 +287,11 @@ public class PlaceholderSelectVisitor extends PlaceholderFieldParseTable impleme
                             i); // 传递 INSERT 字段索引
                 }
             } else {
-                log.info("【securt-kit】处理单个Values");
+//                log.info("【securt-kit】处理单个Values");
                 for (int i = 0; i < expressions.size(); i++) {
                     Expression curExp = (Expression) expressions.get(i);
                     Expression upstreamExpression = this.upstreamExpressionList.get(i);
-                    log.info("【securt-kit】处理表达式对 {}: upstream={}, current={}", i, upstreamExpression, curExp);
+//                    log.info("【securt-kit】处理表达式对 {}: upstream={}, current={}", i, upstreamExpression, curExp);
                     JsqlparserUtil.parseWhereColumTable(this.getLayer(),
                             this.getLayerFieldTableMap(),
                             upstreamExpression,
@@ -302,7 +302,7 @@ public class PlaceholderSelectVisitor extends PlaceholderFieldParseTable impleme
             }
         }
         
-        log.info("【securt-kit】Values处理完成，placeholderColumnTableMap大小: {}", this.getPlaceholderColumnTableMap().size());
+//        log.info("【securt-kit】Values处理完成，placeholderColumnTableMap大小: {}", this.getPlaceholderColumnTableMap().size());
     }
 
     @Override

@@ -40,12 +40,21 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
     private final Map<Integer, Object> parameterValues = new LinkedHashMap<>();
 
 
+    private Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> pair;
+
     public SimpleInterceptorPreparedStatement(PreparedStatement delegate, String sql) {
         this.delegate = delegate;
         this.sql = sql;
         this.isUpdate = sql.toLowerCase().startsWith("update") || sql.toLowerCase().startsWith("insert") || sql.toLowerCase().startsWith("delete");
         TableNameParser tableNameParser = new TableNameParser(sql);
         this.tables = tableNameParser.tables();
+        if (SecurtkitUtils.needEncrypt(this.tables)) {
+            try {
+                this.pair = SecurtkitUtils.parseSql(this.sql);
+            } catch (JSQLParserException e) {
+                throw new RuntimeException(e);
+            }
+        }
     }
 
     /**
@@ -108,7 +117,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
         ResultSet resultSet = delegate.executeQuery();
         long endTime = System.currentTimeMillis();
         logger.info("✅ [PREPARED QUERY RESULT] Executed in " + (endTime - startTime) + "ms");
-        return resultSet;
+        return ResultSetDecryptingProxy.wrap(resultSet, this.tables,this.pair,this.sql);
     }
 
     @Override
@@ -141,31 +150,31 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
         logger.fine("Setting string parameter " + parameterIndex + " = " + x);
         String newValue = x;
 
-        if (SecurtkitUtils.needEncrypt(this.tables)) {
-            try {
-                Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> pair = SecurtkitUtils.parseSql(this.sql);
-                Optional<ColumnTableDto> first = null;
-                if (isUpdate) {
+        if (SecurtkitUtils.needEncrypt(this.tables) && null != this.pair) {
+
+            Optional<ColumnTableDto> first = null;
+            first = pair.getKey().values().stream()
+                    .filter(a -> a.getInsertFieldIndex() == parameterIndex)
+                    .findFirst();
+            // TODO 暂时注释
+              /*  if (isUpdate) {
                     first = pair.getKey().values().stream()
                             .filter(a -> a.getInsertFieldIndex() == parameterIndex)
                             .findFirst();
                 } else {
                     // 支持delete/where自动加密（根据表加密配置+参数名/列名/SQL实际解析，可拓展，否则条件参数直接跳过加密）
                     first = Optional.empty();
-                }
+                }*/
 
-                if (first != null && first.isPresent()) {
-                    ColumnTableDto columnTableDto = first.get();
-                    String sourceColumn = columnTableDto.getSourceColumn();
-                    String sourceTableName = this.tables.iterator().next();
-                    Class<? extends FieldEncryptorStrategy> fieldEncryptorStrategy = TableCache.getTableFieldEncryptInfo(sourceTableName, sourceColumn);
-                    if (fieldEncryptorStrategy != null) {
-                        FieldEncryptorStrategy strategy = SpringUtil.getBean(fieldEncryptorStrategy);
-                        newValue = strategy.encryption(x);
-                    }
+            if (first != null && first.isPresent()) {
+                ColumnTableDto columnTableDto = first.get();
+                String sourceColumn = columnTableDto.getSourceColumn();
+                String sourceTableName = this.tables.iterator().next();
+                Class<? extends FieldEncryptorStrategy> fieldEncryptorStrategy = TableCache.getTableFieldEncryptInfo(columnTableDto.getSourceTableName(), sourceColumn);
+                if (fieldEncryptorStrategy != null) {
+                    FieldEncryptorStrategy strategy = SpringUtil.getBean(fieldEncryptorStrategy);
+                    newValue = strategy.encryption(x);
                 }
-            } catch (JSQLParserException e) {
-                throw new RuntimeException(e);
             }
         }
         delegate.setString(parameterIndex, newValue);
@@ -624,7 +633,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     @Override
     public ResultSet getResultSet() throws SQLException {
-        return delegate.getResultSet();
+        return ResultSetDecryptingProxy.wrap(delegate.getResultSet(),  this.tables,this.pair,this.sql);
     }
 
     // 添加所有缺失的execute方法

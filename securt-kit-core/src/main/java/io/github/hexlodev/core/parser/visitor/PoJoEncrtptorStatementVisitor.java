@@ -158,15 +158,15 @@ public class PoJoEncrtptorStatementVisitor implements StatementVisitor {
         }
         //4.加密处理set的数据
         List<UpdateSet> updateSets = update.getUpdateSets();
-        log.info("【securt-kit】UPDATE SET数量: {}", updateSets.size());
+//        log.info("【securt-kit】UPDATE SET数量: {}", updateSets.size());
         for (UpdateSet updateSet : updateSets) {
             List<Column> columns = updateSet.getColumns();
             ExpressionList<Expression> expressions = (ExpressionList<Expression>) updateSet.getValues();
-            log.info("【securt-kit】UPDATE SET字段数量: {}", columns.size());
+//            log.info("【securt-kit】UPDATE SET字段数量: {}", columns.size());
             for (int i = 0; i < columns.size(); i++) {
                 Column column = columns.get(i);
                 Expression expression = expressions.get(i);
-                log.info("【securt-kit】UPDATE SET字段: {} = {}", column.getColumnName(), expression.toString());
+//                log.info("【securt-kit】UPDATE SET字段: {} = {}", column.getColumnName(), expression.toString());
 
                 //处理左右两边表达式的占位符信息
                 JsqlparserUtil.parseWhereColumTable(fieldParseTableFromItemVisitor.getLayer(),
@@ -177,12 +177,12 @@ public class PoJoEncrtptorStatementVisitor implements StatementVisitor {
             }
         }
 
-        log.info("【securt-kit】UPDATE处理完成，placeholderColumnTableMap大小: {}", this.placeholderColumnTableMap.size());
+//        log.info("【securt-kit】UPDATE处理完成，placeholderColumnTableMap大小: {}", this.placeholderColumnTableMap.size());
         for (Map.Entry<String, ColumnTableDto> entry : this.placeholderColumnTableMap.entrySet()) {
-            log.info("【securt-kit】占位符: {} -> 表: {}, 字段: {}",
-                    entry.getKey(),
-                    entry.getValue().getSourceTableName(),
-                    entry.getValue().getSourceColumn());
+//            log.info("【securt-kit】占位符: {} -> 表: {}, 字段: {}",
+//                    entry.getKey(),
+//                    entry.getValue().getSourceTableName(),
+//                    entry.getValue().getSourceColumn());
         }
     }
 
@@ -191,21 +191,21 @@ public class PoJoEncrtptorStatementVisitor implements StatementVisitor {
      */
     @Override
     public void visit(Insert insert) {
-        log.info("【securt-kit】开始处理INSERT语句: {}", insert.toString());
+//        log.info("【securt-kit】开始处理INSERT语句: {}", insert.toString());
 
         //1.insert 的表
         Table table = insert.getTable();
-        log.info("【securt-kit】INSERT表名: {}", table.getName());
+//        log.info("【securt-kit】INSERT表名: {}", table.getName());
 
         //2.解析当前insert字段所属的表结构信息
         //2.1 获取当前insert语句中的所有字段
         List<Column> columns = insert.getColumns();
-        log.info("【securt-kit】INSERT字段数量: {}", columns != null ? columns.size() : 0);
-        if (columns != null) {
-            for (Column column : columns) {
-                log.info("【securt-kit】INSERT字段: {}", column.getColumnName());
-            }
-        }
+//        log.info("【securt-kit】INSERT字段数量: {}", columns != null ? columns.size() : 0);
+//        if (columns != null) {
+//            for (Column column : columns) {
+//                log.info("【securt-kit】INSERT字段: {}", column.getColumnName());
+//            }
+//        }
 
         if (CollectionUtils.isEmpty(columns)) {
             log.warn("【securt-kit】insert 语句未指定表字段顺序，不支持自动加解密，请规范语法 原sql:{}", insert.toString());

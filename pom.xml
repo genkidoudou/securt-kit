@@ -30,6 +30,12 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!-- 统一管理 jsqlparser 版本，确保所有模块使用相同版本 -->
+            <dependency>
+                <groupId>com.github.jsqlparser</groupId>
+                <artifactId>jsqlparser</artifactId>
+                <version>4.9</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
