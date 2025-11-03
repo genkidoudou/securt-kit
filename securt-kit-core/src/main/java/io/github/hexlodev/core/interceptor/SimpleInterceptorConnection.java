@@ -1,10 +1,11 @@
 package io.github.hexlodev.core.interceptor;
 
+import lombok.extern.slf4j.Slf4j;
+
 import java.sql.*;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Executor;
-import java.util.logging.Logger;
 
 /**
  * 简化的连接包装器 - 拦截Statement创建
@@ -43,10 +44,8 @@ import java.util.logging.Logger;
  * @see SimpleInterceptorPreparedStatement
  * @see SimpleInterceptorCallableStatement
  */
+@Slf4j
 public class SimpleInterceptorConnection implements Connection {
-    
-    /** 日志记录器 */
-    private static final Logger logger = Logger.getLogger(SimpleInterceptorConnection.class.getName());
     
     /** 被包装的真实数据库连接 */
     private final Connection delegate;
@@ -65,7 +64,7 @@ public class SimpleInterceptorConnection implements Connection {
             throw new IllegalArgumentException("Delegate connection cannot be null");
         }
         this.delegate = delegate;
-        logger.info("Connection intercepted: " + delegate.getClass().getSimpleName());
+        log.info("Connection intercepted: " + delegate.getClass().getSimpleName());
     }
     
     /**
@@ -81,7 +80,7 @@ public class SimpleInterceptorConnection implements Connection {
     @Override
     public Statement createStatement() throws SQLException {
         Statement statement = delegate.createStatement();
-        logger.info("Statement created");
+        log.info("Statement created");
         return new SimpleInterceptorStatement(statement);
     }
     
@@ -99,7 +98,7 @@ public class SimpleInterceptorConnection implements Connection {
     @Override
     public PreparedStatement prepareStatement(String sql) throws SQLException {
         PreparedStatement statement = delegate.prepareStatement(sql);
-        logger.info("PreparedStatement created for SQL: " + sql);
+        log.info("PreparedStatement created for SQL: " + sql);
         return new SimpleInterceptorPreparedStatement(statement, sql);
     }
     
@@ -117,7 +116,7 @@ public class SimpleInterceptorConnection implements Connection {
     @Override
     public CallableStatement prepareCall(String sql) throws SQLException {
         CallableStatement statement = delegate.prepareCall(sql);
-        logger.info("CallableStatement created for SQL: " + sql);
+        log.info("CallableStatement created for SQL: " + sql);
         return new SimpleInterceptorCallableStatement(statement, sql);
     }
     
@@ -149,7 +148,7 @@ public class SimpleInterceptorConnection implements Connection {
     
     @Override
     public void close() throws SQLException {
-        logger.info("Connection closed");
+        log.info("Connection closed");
         delegate.close();
     }
     
@@ -207,21 +206,21 @@ public class SimpleInterceptorConnection implements Connection {
     @Override
     public Statement createStatement(int resultSetType, int resultSetConcurrency) throws SQLException {
         Statement statement = delegate.createStatement(resultSetType, resultSetConcurrency);
-        logger.info("Statement created with type=" + resultSetType + ", concurrency=" + resultSetConcurrency);
+        log.info("Statement created with type=" + resultSetType + ", concurrency=" + resultSetConcurrency);
         return new SimpleInterceptorStatement(statement);
     }
     
     @Override
     public PreparedStatement prepareStatement(String sql, int resultSetType, int resultSetConcurrency) throws SQLException {
         PreparedStatement statement = delegate.prepareStatement(sql, resultSetType, resultSetConcurrency);
-        logger.info("PreparedStatement created with type=" + resultSetType + ", concurrency=" + resultSetConcurrency);
+        log.info("PreparedStatement created with type=" + resultSetType + ", concurrency=" + resultSetConcurrency);
         return new SimpleInterceptorPreparedStatement(statement, sql);
     }
     
     @Override
     public CallableStatement prepareCall(String sql, int resultSetType, int resultSetConcurrency) throws SQLException {
         CallableStatement statement = delegate.prepareCall(sql, resultSetType, resultSetConcurrency);
-        logger.info("CallableStatement created with type=" + resultSetType + ", concurrency=" + resultSetConcurrency);
+        log.info("CallableStatement created with type=" + resultSetType + ", concurrency=" + resultSetConcurrency);
         return new SimpleInterceptorCallableStatement(statement, sql);
     }
     
@@ -269,42 +268,42 @@ public class SimpleInterceptorConnection implements Connection {
     @Override
     public Statement createStatement(int resultSetType, int resultSetConcurrency, int resultSetHoldability) throws SQLException {
         Statement statement = delegate.createStatement(resultSetType, resultSetConcurrency, resultSetHoldability);
-        logger.info("Statement created with type=" + resultSetType + ", concurrency=" + resultSetConcurrency + ", holdability=" + resultSetHoldability);
+        log.info("Statement created with type=" + resultSetType + ", concurrency=" + resultSetConcurrency + ", holdability=" + resultSetHoldability);
         return new SimpleInterceptorStatement(statement);
     }
     
     @Override
     public PreparedStatement prepareStatement(String sql, int resultSetType, int resultSetConcurrency, int resultSetHoldability) throws SQLException {
         PreparedStatement statement = delegate.prepareStatement(sql, resultSetType, resultSetConcurrency, resultSetHoldability);
-        logger.info("PreparedStatement created with type=" + resultSetType + ", concurrency=" + resultSetConcurrency + ", holdability=" + resultSetHoldability);
+        log.info("PreparedStatement created with type=" + resultSetType + ", concurrency=" + resultSetConcurrency + ", holdability=" + resultSetHoldability);
         return new SimpleInterceptorPreparedStatement(statement, sql);
     }
     
     @Override
     public CallableStatement prepareCall(String sql, int resultSetType, int resultSetConcurrency, int resultSetHoldability) throws SQLException {
         CallableStatement statement = delegate.prepareCall(sql, resultSetType, resultSetConcurrency, resultSetHoldability);
-        logger.info("CallableStatement created with type=" + resultSetType + ", concurrency=" + resultSetConcurrency + ", holdability=" + resultSetHoldability);
+        log.info("CallableStatement created with type=" + resultSetType + ", concurrency=" + resultSetConcurrency + ", holdability=" + resultSetHoldability);
         return new SimpleInterceptorCallableStatement(statement, sql);
     }
     
     @Override
     public PreparedStatement prepareStatement(String sql, int autoGeneratedKeys) throws SQLException {
         PreparedStatement statement = delegate.prepareStatement(sql, autoGeneratedKeys);
-        logger.info("PreparedStatement created with autoGeneratedKeys=" + autoGeneratedKeys);
+        log.info("PreparedStatement created with autoGeneratedKeys=" + autoGeneratedKeys);
         return new SimpleInterceptorPreparedStatement(statement, sql);
     }
     
     @Override
     public PreparedStatement prepareStatement(String sql, int[] columnIndexes) throws SQLException {
         PreparedStatement statement = delegate.prepareStatement(sql, columnIndexes);
-        logger.info("PreparedStatement created with columnIndexes");
+        log.info("PreparedStatement created with columnIndexes");
         return new SimpleInterceptorPreparedStatement(statement, sql);
     }
     
     @Override
     public PreparedStatement prepareStatement(String sql, String[] columnNames) throws SQLException {
         PreparedStatement statement = delegate.prepareStatement(sql, columnNames);
-        logger.info("PreparedStatement created with columnNames");
+        log.info("PreparedStatement created with columnNames");
         return new SimpleInterceptorPreparedStatement(statement, sql);
     }
     

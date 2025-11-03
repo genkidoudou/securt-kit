@@ -14,17 +14,16 @@ import java.lang.reflect.Proxy;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import lombok.extern.slf4j.Slf4j;
+
 import java.sql.Statement;
 import java.util.*;
-import java.util.logging.Logger;
 
 /**
  * 动态代理包装 ResultSet，按表字段配置对读取的数据进行解密。
  */
+@Slf4j
 final class ResultSetDecryptingProxy implements InvocationHandler {
-
-    /** 日志记录器 */
-    private static final Logger logger = Logger.getLogger(ResultSetDecryptingProxy.class.getName());
 
     private final ResultSet delegate;
     private final Set<String> tables;

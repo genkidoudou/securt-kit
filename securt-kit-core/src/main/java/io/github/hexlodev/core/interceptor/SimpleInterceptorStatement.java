@@ -5,13 +5,13 @@ import io.github.hexlodev.core.parser.SecurtkitUtils;
 import io.github.hexlodev.core.parser.dto.ColumnTableDto;
 import io.github.hexlodev.core.parser.dto.FieldEncryptorInfoDto;
 import io.github.hexlodev.core.utils.TableNameParser;
+import lombok.extern.slf4j.Slf4j;
 import net.sf.jsqlparser.JSQLParserException;
 
 import java.sql.*;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.logging.Logger;
 
 /**
  * 简化的Statement包装器 - 拦截SQL执行
@@ -58,10 +58,8 @@ import java.util.logging.Logger;
  * @see TableNameParser
  * @see SimpleInterceptorConnection
  */
+@Slf4j
 public class SimpleInterceptorStatement implements Statement {
-
-    /** 日志记录器 */
-    private static final Logger logger = Logger.getLogger(SimpleInterceptorStatement.class.getName());
 
     /** 被包装的真实Statement对象 */
     private final Statement delegate;
@@ -94,10 +92,10 @@ public class SimpleInterceptorStatement implements Statement {
             TableNameParser parser = new TableNameParser(sql);
             Collection<String> tables = parser.tables();
             if (!tables.isEmpty()) {
-                logger.fine("[TABLES] " + String.join(", ", tables));
+                log.debug("[TABLES] " + String.join(", ", tables));
             }
         } catch (Exception e) {
-            logger.warning("Failed to parse table names from SQL: " + e.getMessage());
+            log.warn("Failed to parse table names from SQL: " + e.getMessage());
         }
     }
 
@@ -113,7 +111,7 @@ public class SimpleInterceptorStatement implements Statement {
      */
     @Override
     public ResultSet executeQuery(String sql) throws SQLException {
-        logger.info("[SQL QUERY] " + sql);
+        log.info("[SQL QUERY] " + sql);
         logTableNames(sql);
         long startTime = System.currentTimeMillis();
         
@@ -132,18 +130,18 @@ public class SimpleInterceptorStatement implements Statement {
             try {
                 mapListPair = SecurtkitUtils.parseSql(sql);
             } catch (JSQLParserException e) {
-                logger.warning("Failed to parse SQL for decryption: " + e.getMessage());
+                log.warn("Failed to parse SQL for decryption: " + e.getMessage());
             }
         }
         
         try {
             ResultSet resultSet = delegate.executeQuery(sql);
             long endTime = System.currentTimeMillis();
-            logger.info("[QUERY RESULT] Executed in " + (endTime - startTime) + "ms");
+            log.info("[QUERY RESULT] Executed in " + (endTime - startTime) + "ms");
             return ResultSetDecryptingProxy.wrap(resultSet, tables, mapListPair, sql);
         } catch (SQLException e) {
             long endTime = System.currentTimeMillis();
-            logger.severe("[QUERY ERROR] Failed after " + (endTime - startTime) + "ms: " + e.getMessage());
+            log.error("[QUERY ERROR] Failed after " + (endTime - startTime) + "ms: " + e.getMessage());
             throw e;
         }
     }
@@ -160,17 +158,17 @@ public class SimpleInterceptorStatement implements Statement {
      */
     @Override
     public int executeUpdate(String sql) throws SQLException {
-        logger.info("[SQL UPDATE] " + sql);
+        log.info("[SQL UPDATE] " + sql);
         logTableNames(sql);
         long startTime = System.currentTimeMillis();
         try {
             int result = delegate.executeUpdate(sql);
             long endTime = System.currentTimeMillis();
-            logger.info("[UPDATE RESULT] Executed in " + (endTime - startTime) + "ms, affected rows: " + result);
+            log.info("[UPDATE RESULT] Executed in " + (endTime - startTime) + "ms, affected rows: " + result);
             return result;
         } catch (SQLException e) {
             long endTime = System.currentTimeMillis();
-            logger.severe("[UPDATE ERROR] Failed after " + (endTime - startTime) + "ms: " + e.getMessage());
+            log.error("[UPDATE ERROR] Failed after " + (endTime - startTime) + "ms: " + e.getMessage());
             throw e;
         }
     }
@@ -187,17 +185,17 @@ public class SimpleInterceptorStatement implements Statement {
      */
     @Override
     public boolean execute(String sql) throws SQLException {
-        logger.info("[SQL EXECUTE] " + sql);
+        log.info("[SQL EXECUTE] " + sql);
         logTableNames(sql);
         long startTime = System.currentTimeMillis();
         try {
             boolean result = delegate.execute(sql);
             long endTime = System.currentTimeMillis();
-            logger.info("[EXECUTE RESULT] Executed in " + (endTime - startTime) + "ms, result: " + result);
+            log.info("[EXECUTE RESULT] Executed in " + (endTime - startTime) + "ms, result: " + result);
             return result;
         } catch (SQLException e) {
             long endTime = System.currentTimeMillis();
-            logger.severe("[EXECUTE ERROR] Failed after " + (endTime - startTime) + "ms: " + e.getMessage());
+            log.error("[EXECUTE ERROR] Failed after " + (endTime - startTime) + "ms: " + e.getMessage());
             throw e;
         }
     }
@@ -305,29 +303,29 @@ public class SimpleInterceptorStatement implements Statement {
 
     @Override
     public void addBatch(String sql) throws SQLException {
-        logger.info("Adding to batch: " + sql);
+        log.info("Adding to batch: " + sql);
         delegate.addBatch(sql);
     }
 
     @Override
     public void clearBatch() throws SQLException {
-        logger.info("Clearing batch");
+        log.info("Clearing batch");
         delegate.clearBatch();
     }
 
     @Override
     public int[] executeBatch() throws SQLException {
-        logger.info("Executing batch");
+        log.info("Executing batch");
         long startTime = System.currentTimeMillis();
         int[] result = delegate.executeBatch();
         long endTime = System.currentTimeMillis();
-        logger.info("Batch executed in " + (endTime - startTime) + "ms");
+        log.info("Batch executed in " + (endTime - startTime) + "ms");
         return result;
     }
 
     @Override
     public void close() throws SQLException {
-        logger.info("Statement closed");
+        log.info("Statement closed");
         delegate.close();
     }
 
@@ -379,61 +377,61 @@ public class SimpleInterceptorStatement implements Statement {
     // 添加所有缺失的execute方法
     @Override
     public boolean execute(String sql, int autoGeneratedKeys) throws SQLException {
-        logger.info("Executing statement with autoGeneratedKeys: " + sql);
+        log.info("Executing statement with autoGeneratedKeys: " + sql);
         long startTime = System.currentTimeMillis();
         boolean result = delegate.execute(sql, autoGeneratedKeys);
         long endTime = System.currentTimeMillis();
-        logger.info("Statement executed in " + (endTime - startTime) + "ms, result: " + result);
+        log.info("Statement executed in " + (endTime - startTime) + "ms, result: " + result);
         return result;
     }
 
     @Override
     public boolean execute(String sql, int[] columnIndexes) throws SQLException {
-        logger.info("Executing statement with column indexes: " + sql);
+        log.info("Executing statement with column indexes: " + sql);
         long startTime = System.currentTimeMillis();
         boolean result = delegate.execute(sql, columnIndexes);
         long endTime = System.currentTimeMillis();
-        logger.info("Statement executed in " + (endTime - startTime) + "ms, result: " + result);
+        log.info("Statement executed in " + (endTime - startTime) + "ms, result: " + result);
         return result;
     }
 
     @Override
     public boolean execute(String sql, String[] columnNames) throws SQLException {
-        logger.info("Executing statement with column names: " + sql);
+        log.info("Executing statement with column names: " + sql);
         long startTime = System.currentTimeMillis();
         boolean result = delegate.execute(sql, columnNames);
         long endTime = System.currentTimeMillis();
-        logger.info("Statement executed in " + (endTime - startTime) + "ms, result: " + result);
+        log.info("Statement executed in " + (endTime - startTime) + "ms, result: " + result);
         return result;
     }
 
     @Override
     public int executeUpdate(String sql, int autoGeneratedKeys) throws SQLException {
-        logger.info("Executing update with autoGeneratedKeys: " + sql);
+        log.info("Executing update with autoGeneratedKeys: " + sql);
         long startTime = System.currentTimeMillis();
         int result = delegate.executeUpdate(sql, autoGeneratedKeys);
         long endTime = System.currentTimeMillis();
-        logger.info("Update executed in " + (endTime - startTime) + "ms, affected rows: " + result);
+        log.info("Update executed in " + (endTime - startTime) + "ms, affected rows: " + result);
         return result;
     }
 
     @Override
     public int executeUpdate(String sql, int[] columnIndexes) throws SQLException {
-        logger.info("Executing update with column indexes: " + sql);
+        log.info("Executing update with column indexes: " + sql);
         long startTime = System.currentTimeMillis();
         int result = delegate.executeUpdate(sql, columnIndexes);
         long endTime = System.currentTimeMillis();
-        logger.info("Update executed in " + (endTime - startTime) + "ms, affected rows: " + result);
+        log.info("Update executed in " + (endTime - startTime) + "ms, affected rows: " + result);
         return result;
     }
 
     @Override
     public int executeUpdate(String sql, String[] columnNames) throws SQLException {
-        logger.info("Executing update with column names: " + sql);
+        log.info("Executing update with column names: " + sql);
         long startTime = System.currentTimeMillis();
         int result = delegate.executeUpdate(sql, columnNames);
         long endTime = System.currentTimeMillis();
-        logger.info("Update executed in " + (endTime - startTime) + "ms, affected rows: " + result);
+        log.info("Update executed in " + (endTime - startTime) + "ms, affected rows: " + result);
         return result;
     }
 

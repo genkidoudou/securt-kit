@@ -1,9 +1,9 @@
 package io.github.hexlodev.core.interceptor;
 
 import io.github.hexlodev.core.utils.TableNameParser;
+import lombok.extern.slf4j.Slf4j;
 import java.sql.*;
 import java.util.Collection;
-import java.util.logging.Logger;
 
 /**
  * CallableStatement拦截器 - 拦截存储过程调用
@@ -22,10 +22,8 @@ import java.util.logging.Logger;
  * @since 1.0.0
  * @see CallableStatement
  */
+@Slf4j
 public class SimpleInterceptorCallableStatement implements CallableStatement {
-    
-    /** 日志记录器 */
-    private static final Logger logger = Logger.getLogger(SimpleInterceptorCallableStatement.class.getName());
     
     /** 被包装的真实CallableStatement对象 */
     private final CallableStatement delegate;
@@ -55,10 +53,10 @@ public class SimpleInterceptorCallableStatement implements CallableStatement {
             TableNameParser parser = new TableNameParser(sql);
             Collection<String> tables = parser.tables();
             if (!tables.isEmpty()) {
-                logger.fine("[TABLES] " + String.join(", ", tables));
+                log.debug("[TABLES] " + String.join(", ", tables));
             }
         } catch (Exception e) {
-            logger.warning("Failed to parse table names from SQL: " + e.getMessage());
+            log.warn("Failed to parse table names from SQL: " + e.getMessage());
         }
     }
     
@@ -70,17 +68,17 @@ public class SimpleInterceptorCallableStatement implements CallableStatement {
      */
     @Override
     public ResultSet executeQuery() throws SQLException {
-        logger.info("[CALLABLE QUERY] " + sql);
+        log.info("[CALLABLE QUERY] " + sql);
         logTableNames();
         long startTime = System.currentTimeMillis();
         try {
             ResultSet resultSet = delegate.executeQuery();
             long endTime = System.currentTimeMillis();
-            logger.info("[CALLABLE QUERY RESULT] Executed in " + (endTime - startTime) + "ms");
+            log.info("[CALLABLE QUERY RESULT] Executed in " + (endTime - startTime) + "ms");
             return resultSet;
         } catch (SQLException e) {
             long endTime = System.currentTimeMillis();
-            logger.severe("[CALLABLE QUERY ERROR] Failed after " + (endTime - startTime) + "ms: " + e.getMessage());
+            log.error("[CALLABLE QUERY ERROR] Failed after " + (endTime - startTime) + "ms: " + e.getMessage());
             throw e;
         }
     }
@@ -93,17 +91,17 @@ public class SimpleInterceptorCallableStatement implements CallableStatement {
      */
     @Override
     public int executeUpdate() throws SQLException {
-        logger.info("[CALLABLE UPDATE] " + sql);
+        log.info("[CALLABLE UPDATE] " + sql);
         logTableNames();
         long startTime = System.currentTimeMillis();
         try {
             int result = delegate.executeUpdate();
             long endTime = System.currentTimeMillis();
-            logger.info("[CALLABLE UPDATE RESULT] Executed in " + (endTime - startTime) + "ms, affected rows: " + result);
+            log.info("[CALLABLE UPDATE RESULT] Executed in " + (endTime - startTime) + "ms, affected rows: " + result);
             return result;
         } catch (SQLException e) {
             long endTime = System.currentTimeMillis();
-            logger.severe("[CALLABLE UPDATE ERROR] Failed after " + (endTime - startTime) + "ms: " + e.getMessage());
+            log.error("[CALLABLE UPDATE ERROR] Failed after " + (endTime - startTime) + "ms: " + e.getMessage());
             throw e;
         }
     }
@@ -116,17 +114,17 @@ public class SimpleInterceptorCallableStatement implements CallableStatement {
      */
     @Override
     public boolean execute() throws SQLException {
-        logger.info("[CALLABLE EXECUTE] " + sql);
+        log.info("[CALLABLE EXECUTE] " + sql);
         logTableNames();
         long startTime = System.currentTimeMillis();
         try {
             boolean result = delegate.execute();
             long endTime = System.currentTimeMillis();
-            logger.info("[CALLABLE EXECUTE RESULT] Executed in " + (endTime - startTime) + "ms, result: " + result);
+            log.info("[CALLABLE EXECUTE RESULT] Executed in " + (endTime - startTime) + "ms, result: " + result);
             return result;
         } catch (SQLException e) {
             long endTime = System.currentTimeMillis();
-            logger.severe("[CALLABLE EXECUTE ERROR] Failed after " + (endTime - startTime) + "ms: " + e.getMessage());
+            log.error("[CALLABLE EXECUTE ERROR] Failed after " + (endTime - startTime) + "ms: " + e.getMessage());
             throw e;
         }
     }
@@ -235,7 +233,7 @@ public class SimpleInterceptorCallableStatement implements CallableStatement {
     
     @Override
     public void addBatch() throws SQLException {
-        logger.info("Adding callable statement to batch");
+        log.info("Adding callable statement to batch");
         delegate.addBatch();
     }
     
@@ -402,91 +400,91 @@ public class SimpleInterceptorCallableStatement implements CallableStatement {
     
     @Override
     public void setURL(String parameterName, java.net.URL val) throws SQLException {
-        logger.fine("Setting URL parameter " + parameterName + " = " + val);
+        log.debug("Setting URL parameter " + parameterName + " = " + val);
         delegate.setURL(parameterName, val);
     }
     
     @Override
     public void setNull(String parameterName, int sqlType) throws SQLException {
-        logger.fine("Setting null parameter " + parameterName + " with type " + sqlType);
+        log.debug("Setting null parameter " + parameterName + " with type " + sqlType);
         delegate.setNull(parameterName, sqlType);
     }
     
     @Override
     public void setBoolean(String parameterName, boolean x) throws SQLException {
-        logger.fine("Setting boolean parameter " + parameterName + " = " + x);
+        log.debug("Setting boolean parameter " + parameterName + " = " + x);
         delegate.setBoolean(parameterName, x);
     }
     
     @Override
     public void setByte(String parameterName, byte x) throws SQLException {
-        logger.fine("Setting byte parameter " + parameterName + " = " + x);
+        log.debug("Setting byte parameter " + parameterName + " = " + x);
         delegate.setByte(parameterName, x);
     }
     
     @Override
     public void setShort(String parameterName, short x) throws SQLException {
-        logger.fine("Setting short parameter " + parameterName + " = " + x);
+        log.debug("Setting short parameter " + parameterName + " = " + x);
         delegate.setShort(parameterName, x);
     }
     
     @Override
     public void setInt(String parameterName, int x) throws SQLException {
-        logger.fine("Setting int parameter " + parameterName + " = " + x);
+        log.debug("Setting int parameter " + parameterName + " = " + x);
         delegate.setInt(parameterName, x);
     }
     
     @Override
     public void setLong(String parameterName, long x) throws SQLException {
-        logger.fine("Setting long parameter " + parameterName + " = " + x);
+        log.debug("Setting long parameter " + parameterName + " = " + x);
         delegate.setLong(parameterName, x);
     }
     
     @Override
     public void setFloat(String parameterName, float x) throws SQLException {
-        logger.fine("Setting float parameter " + parameterName + " = " + x);
+        log.debug("Setting float parameter " + parameterName + " = " + x);
         delegate.setFloat(parameterName, x);
     }
     
     @Override
     public void setDouble(String parameterName, double x) throws SQLException {
-        logger.fine("Setting double parameter " + parameterName + " = " + x);
+        log.debug("Setting double parameter " + parameterName + " = " + x);
         delegate.setDouble(parameterName, x);
     }
     
     @Override
     public void setBigDecimal(String parameterName, java.math.BigDecimal x) throws SQLException {
-        logger.fine("Setting BigDecimal parameter " + parameterName + " = " + x);
+        log.debug("Setting BigDecimal parameter " + parameterName + " = " + x);
         delegate.setBigDecimal(parameterName, x);
     }
     
     @Override
     public void setString(String parameterName, String x) throws SQLException {
-        logger.fine("Setting string parameter " + parameterName + " = " + x);
+        log.debug("Setting string parameter " + parameterName + " = " + x);
         delegate.setString(parameterName, x);
     }
     
     @Override
     public void setBytes(String parameterName, byte[] x) throws SQLException {
-        logger.fine("Setting bytes parameter " + parameterName);
+        log.debug("Setting bytes parameter " + parameterName);
         delegate.setBytes(parameterName, x);
     }
     
     @Override
     public void setDate(String parameterName, Date x) throws SQLException {
-        logger.fine("Setting date parameter " + parameterName + " = " + x);
+        log.debug("Setting date parameter " + parameterName + " = " + x);
         delegate.setDate(parameterName, x);
     }
     
     @Override
     public void setTime(String parameterName, Time x) throws SQLException {
-        logger.fine("Setting time parameter " + parameterName + " = " + x);
+        log.debug("Setting time parameter " + parameterName + " = " + x);
         delegate.setTime(parameterName, x);
     }
     
     @Override
     public void setTimestamp(String parameterName, Timestamp x) throws SQLException {
-        logger.fine("Setting timestamp parameter " + parameterName + " = " + x);
+        log.debug("Setting timestamp parameter " + parameterName + " = " + x);
         delegate.setTimestamp(parameterName, x);
     }
     
@@ -819,13 +817,13 @@ public class SimpleInterceptorCallableStatement implements CallableStatement {
     // 注册输出参数
     @Override
     public void registerOutParameter(int parameterIndex, int sqlType) throws SQLException {
-        logger.info("Registering out parameter " + parameterIndex + " with type " + sqlType);
+        log.info("Registering out parameter " + parameterIndex + " with type " + sqlType);
         delegate.registerOutParameter(parameterIndex, sqlType);
     }
     
     @Override
     public void registerOutParameter(int parameterIndex, int sqlType, int scale) throws SQLException {
-        logger.info("Registering out parameter " + parameterIndex + " with type " + sqlType + " and scale " + scale);
+        log.info("Registering out parameter " + parameterIndex + " with type " + sqlType + " and scale " + scale);
         delegate.registerOutParameter(parameterIndex, sqlType, scale);
     }
     
@@ -951,25 +949,25 @@ public class SimpleInterceptorCallableStatement implements CallableStatement {
     
     @Override
     public void registerOutParameter(int parameterIndex, int sqlType, String typeName) throws SQLException {
-        logger.info("Registering out parameter " + parameterIndex + " with type " + sqlType + " and typeName " + typeName);
+        log.info("Registering out parameter " + parameterIndex + " with type " + sqlType + " and typeName " + typeName);
         delegate.registerOutParameter(parameterIndex, sqlType, typeName);
     }
     
     @Override
     public void registerOutParameter(String parameterName, int sqlType) throws SQLException {
-        logger.info("Registering out parameter " + parameterName + " with type " + sqlType);
+        log.info("Registering out parameter " + parameterName + " with type " + sqlType);
         delegate.registerOutParameter(parameterName, sqlType);
     }
     
     @Override
     public void registerOutParameter(String parameterName, int sqlType, int scale) throws SQLException {
-        logger.info("Registering out parameter " + parameterName + " with type " + sqlType + " and scale " + scale);
+        log.info("Registering out parameter " + parameterName + " with type " + sqlType + " and scale " + scale);
         delegate.registerOutParameter(parameterName, sqlType, scale);
     }
     
     @Override
     public void registerOutParameter(String parameterName, int sqlType, String typeName) throws SQLException {
-        logger.info("Registering out parameter " + parameterName + " with type " + sqlType + " and typeName " + typeName);
+        log.info("Registering out parameter " + parameterName + " with type " + sqlType + " and typeName " + typeName);
         delegate.registerOutParameter(parameterName, sqlType, typeName);
     }
     
@@ -1101,7 +1099,7 @@ public class SimpleInterceptorCallableStatement implements CallableStatement {
     
     @Override
     public void close() throws SQLException {
-        logger.info("CallableStatement closed");
+        log.info("CallableStatement closed");
         delegate.close();
     }
     
@@ -1193,31 +1191,31 @@ public class SimpleInterceptorCallableStatement implements CallableStatement {
     
     @Override
     public boolean execute(String sql) throws SQLException {
-        logger.info("Executing callable statement with SQL: " + sql);
+        log.info("Executing callable statement with SQL: " + sql);
         long startTime = System.currentTimeMillis();
         boolean result = delegate.execute(sql);
         long endTime = System.currentTimeMillis();
-        logger.info("Callable statement executed in " + (endTime - startTime) + "ms, result: " + result);
+        log.info("Callable statement executed in " + (endTime - startTime) + "ms, result: " + result);
         return result;
     }
     
     @Override
     public int executeUpdate(String sql) throws SQLException {
-        logger.info("Executing callable update with SQL: " + sql);
+        log.info("Executing callable update with SQL: " + sql);
         long startTime = System.currentTimeMillis();
         int result = delegate.executeUpdate(sql);
         long endTime = System.currentTimeMillis();
-        logger.info("Callable update executed in " + (endTime - startTime) + "ms, affected rows: " + result);
+        log.info("Callable update executed in " + (endTime - startTime) + "ms, affected rows: " + result);
         return result;
     }
     
     @Override
     public ResultSet executeQuery(String sql) throws SQLException {
-        logger.info("Executing callable query with SQL: " + sql);
+        log.info("Executing callable query with SQL: " + sql);
         long startTime = System.currentTimeMillis();
         ResultSet resultSet = delegate.executeQuery(sql);
         long endTime = System.currentTimeMillis();
-        logger.info("Callable query executed in " + (endTime - startTime) + "ms");
+        log.info("Callable query executed in " + (endTime - startTime) + "ms");
         return resultSet;
     }
 }

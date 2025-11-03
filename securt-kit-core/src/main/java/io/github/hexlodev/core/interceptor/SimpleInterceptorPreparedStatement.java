@@ -17,7 +17,6 @@ import java.security.NoSuchAlgorithmException;
 import java.sql.*;
 import java.sql.Date;
 import java.util.*;
-import java.util.logging.Logger;
 
 /**
  * PreparedStatement拦截器 - 实现字段加密解密功能
@@ -121,9 +120,9 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
         try {
             TableNameParser tableNameParser = new TableNameParser(this.sql);
             this.tables = tableNameParser.tables();
-            logger.fine("Parsed tables from SQL: " + this.tables);
+            log.debug("Parsed tables from SQL: " + this.tables);
         } catch (Exception e) {
-            logger.warning("Failed to parse table names from SQL: " + this.sql + ", error: " + e.getMessage());
+            log.warn("Failed to parse table names from SQL: " + this.sql + ", error: " + e.getMessage());
             this.tables = new HashSet<>();
         }
 
@@ -131,13 +130,13 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
         if (SecurtkitUtils.needEncrypt(this.tables)) {
             try {
                 this.pair = SecurtkitUtils.parseSql(this.sql);
-                logger.info("SQL requires encryption, parsed " + (this.pair != null ? this.pair.getValue().size() : 0) + " fields");
+                log.info("SQL requires encryption, parsed " + (this.pair != null ? this.pair.getValue().size() : 0) + " fields");
             } catch (JSQLParserException e) {
-                logger.severe("Failed to parse SQL for encryption: " + this.sql + ", error: " + e.getMessage());
+                log.error("Failed to parse SQL for encryption: " + this.sql + ", error: " + e.getMessage());
                 throw new RuntimeException("SQL parsing failed for encryption", e);
             }
         } else {
-            logger.fine("Tables do not require encryption: " + this.tables);
+            log.debug("Tables do not require encryption: " + this.tables);
         }
     }
 
@@ -202,22 +201,22 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
     @Override
     public ResultSet executeQuery() throws SQLException {
         String finalSql = buildFinalSql();
-        logger.info("[PREPARED QUERY] " + sql);
+        log.info("[PREPARED QUERY] " + sql);
         if (!sql.equals(finalSql)) {
-            logger.fine("[FINAL SQL] " + finalSql);
+            log.debug("[FINAL SQL] " + finalSql);
         }
 
         long startTime = System.currentTimeMillis();
         try {
             ResultSet resultSet = delegate.executeQuery();
             long endTime = System.currentTimeMillis();
-            logger.info("[PREPARED QUERY RESULT] Executed in " + (endTime - startTime) + "ms");
+            log.info("[PREPARED QUERY RESULT] Executed in " + (endTime - startTime) + "ms");
 
             // 包装结果集以实现自动解密
             return ResultSetDecryptingProxy.wrap(resultSet, this.tables, this.pair, this.sql);
         } catch (SQLException e) {
             long endTime = System.currentTimeMillis();
-            logger.severe("[PREPARED QUERY ERROR] Failed after " + (endTime - startTime) + "ms: " + e.getMessage());
+            log.error("[PREPARED QUERY ERROR] Failed after " + (endTime - startTime) + "ms: " + e.getMessage());
             throw e;
         }
     }
@@ -233,20 +232,20 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
     @Override
     public int executeUpdate() throws SQLException {
         String finalSql = buildFinalSql();
-        logger.info("[PREPARED UPDATE] " + sql);
+        log.info("[PREPARED UPDATE] " + sql);
         if (!sql.equals(finalSql)) {
-            logger.fine("[FINAL SQL] " + finalSql);
+            log.debug("[FINAL SQL] " + finalSql);
         }
 
         long startTime = System.currentTimeMillis();
         try {
             int result = delegate.executeUpdate();
             long endTime = System.currentTimeMillis();
-            logger.info("[PREPARED UPDATE RESULT] Executed in " + (endTime - startTime) + "ms, affected rows: " + result);
+            log.info("[PREPARED UPDATE RESULT] Executed in " + (endTime - startTime) + "ms, affected rows: " + result);
             return result;
         } catch (SQLException e) {
             long endTime = System.currentTimeMillis();
-            logger.severe("[PREPARED UPDATE ERROR] Failed after " + (endTime - startTime) + "ms: " + e.getMessage());
+            log.error("[PREPARED UPDATE ERROR] Failed after " + (endTime - startTime) + "ms: " + e.getMessage());
             throw e;
         }
     }
@@ -262,20 +261,20 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
     @Override
     public boolean execute() throws SQLException {
         String finalSql = buildFinalSql();
-        logger.info("[PREPARED EXECUTE] " + sql);
+        log.info("[PREPARED EXECUTE] " + sql);
         if (!sql.equals(finalSql)) {
-            logger.fine("[FINAL SQL] " + finalSql);
+            log.debug("[FINAL SQL] " + finalSql);
         }
 
         long startTime = System.currentTimeMillis();
         try {
             boolean result = delegate.execute();
             long endTime = System.currentTimeMillis();
-            logger.info("[PREPARED EXECUTE RESULT] Executed in " + (endTime - startTime) + "ms, result: " + result);
+            log.info("[PREPARED EXECUTE RESULT] Executed in " + (endTime - startTime) + "ms, result: " + result);
             return result;
         } catch (SQLException e) {
             long endTime = System.currentTimeMillis();
-            logger.severe("[PREPARED EXECUTE ERROR] Failed after " + (endTime - startTime) + "ms: " + e.getMessage());
+            log.error("[PREPARED EXECUTE ERROR] Failed after " + (endTime - startTime) + "ms: " + e.getMessage());
             throw e;
         }
     }
@@ -320,9 +319,9 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
                     try {
                         FieldEncryptorStrategy strategy = SpringUtil.getBean(fieldEncryptorStrategy);
                         newValue = strategy.encryption(x);
-                        logger.fine("Encrypted field: " + sourceColumn + " in table: " + columnTableDto.getSourceTableName());
+                        log.debug("Encrypted field: " + sourceColumn + " in table: " + columnTableDto.getSourceTableName());
                     } catch (Exception e) {
-                        logger.warning("Failed to encrypt field " + sourceColumn + ": " + e.getMessage());
+                        log.warn("Failed to encrypt field " + sourceColumn + ": " + e.getMessage());
                         // 加密失败时使用原始值，避免SQL执行失败
                     }
                 }
@@ -472,7 +471,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
      */
     @Override
     public void addBatch() throws SQLException {
-        logger.fine("Adding prepared statement to batch");
+        log.debug("Adding prepared statement to batch");
         delegate.addBatch();
     }
 
@@ -773,7 +772,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
      */
     @Override
     public void close() throws SQLException {
-        logger.fine("PreparedStatement closed");
+        log.debug("PreparedStatement closed");
         delegate.close();
     }
 
@@ -872,11 +871,11 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
      */
     @Override
     public boolean execute(String sql) throws SQLException {
-        logger.warning("Using execute(String) on PreparedStatement - this bypasses prepared statement optimization");
+        log.warn("Using execute(String) on PreparedStatement - this bypasses prepared statement optimization");
         long startTime = System.currentTimeMillis();
         boolean result = delegate.execute(sql);
         long endTime = System.currentTimeMillis();
-        logger.info("[EXECUTE] Executed in " + (endTime - startTime) + "ms, result: " + result);
+        log.info("[EXECUTE] Executed in " + (endTime - startTime) + "ms, result: " + result);
         return result;
     }
 
@@ -889,11 +888,11 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
      */
     @Override
     public int executeUpdate(String sql) throws SQLException {
-        logger.warning("Using executeUpdate(String) on PreparedStatement - this bypasses prepared statement optimization");
+        log.warn("Using executeUpdate(String) on PreparedStatement - this bypasses prepared statement optimization");
         long startTime = System.currentTimeMillis();
         int result = delegate.executeUpdate(sql);
         long endTime = System.currentTimeMillis();
-        logger.info("[EXECUTE UPDATE] Executed in " + (endTime - startTime) + "ms, affected rows: " + result);
+        log.info("[EXECUTE UPDATE] Executed in " + (endTime - startTime) + "ms, affected rows: " + result);
         return result;
     }
 
@@ -906,11 +905,11 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
      */
     @Override
     public ResultSet executeQuery(String sql) throws SQLException {
-        logger.warning("Using executeQuery(String) on PreparedStatement - this bypasses prepared statement optimization");
+        log.warn("Using executeQuery(String) on PreparedStatement - this bypasses prepared statement optimization");
         long startTime = System.currentTimeMillis();
         ResultSet resultSet = delegate.executeQuery(sql);
         long endTime = System.currentTimeMillis();
-        logger.info("[EXECUTE QUERY] Executed in " + (endTime - startTime) + "ms");
+        log.info("[EXECUTE QUERY] Executed in " + (endTime - startTime) + "ms");
         return resultSet;
     }
 }

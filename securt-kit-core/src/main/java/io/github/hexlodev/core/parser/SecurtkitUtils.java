@@ -14,7 +14,6 @@ import net.sf.jsqlparser.statement.Statement;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 

@@ -3,6 +3,7 @@ package io.github.hexlodev.core.interceptor;
 import cn.hutool.extra.spring.SpringUtil;
 import io.github.hexlodev.core.TableCache;
 import io.github.hexlodev.core.config.FieldEncryptorProperties;
+import lombok.extern.slf4j.Slf4j;
 
 import java.sql.*;
 import java.util.Enumeration;
@@ -43,12 +44,8 @@ import java.util.logging.Logger;
  * @see SimpleInterceptorConnection
  * @since 1.0.0
  */
+@Slf4j
 public class SimpleInterceptorDriver implements Driver {
-
-    /**
-     * 日志记录器
-     */
-    private static final Logger logger = Logger.getLogger(SimpleInterceptorDriver.class.getName());
 
     /**
      * 拦截器URL前缀，用于识别需要拦截的数据库连接
@@ -66,14 +63,20 @@ public class SimpleInterceptorDriver implements Driver {
     static {
         try {
             DriverManager.registerDriver(new SimpleInterceptorDriver());
-            logger.info("SimpleInterceptorDriver registered successfully");
+            // 返回包装的连接，支持拦截功能
+
+            FieldEncryptorProperties bean = SpringUtil.getBean(FieldEncryptorProperties.class);
+            if (null != bean && bean.isEnable()) {
+                TableCache.init(bean);
+            }
+            log.info("SimpleInterceptorDriver registered successfully");
         } catch (SQLException e) {
-            logger.severe("Failed to register SimpleInterceptorDriver: " + e.getMessage());
+            log.error("Failed to register SimpleInterceptorDriver: " + e.getMessage());
         }
     }
 
     /**
-     * 建立数据库连接 - 核心拦截方法
+     * 建立数据库连接 - 核心拦截方法z
      *
      * <p>这是拦截器的核心方法，负责：</p>
      * <ol>
@@ -100,7 +103,7 @@ public class SimpleInterceptorDriver implements Driver {
 
         // 提取真实的JDBC URL（去掉interceptor前缀）
         String realUrl = "jdbc:" + url.substring(JDBC_INTERCEPTOR_PREFIX.length());
-        logger.info("Intercepting connection to: " + realUrl);
+        log.info("Intercepting connection to: " + realUrl);
 
         // 查找底层的JDBC驱动
         Driver underlyingDriver = findUnderlyingDriver(realUrl);
@@ -114,12 +117,7 @@ public class SimpleInterceptorDriver implements Driver {
             return null;
         }
 
-        // 返回包装的连接，支持拦截功能
 
-        FieldEncryptorProperties bean = SpringUtil.getBean(FieldEncryptorProperties.class);
-        if (null != bean && bean.isEnable()) {
-            TableCache.init(bean);
-        }
         return new SimpleInterceptorConnection(realConnection);
     }
 

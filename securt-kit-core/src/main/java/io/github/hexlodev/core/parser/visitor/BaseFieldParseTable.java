@@ -2,8 +2,7 @@ package io.github.hexlodev.core.parser.visitor;
 
 import io.github.hexlodev.core.parser.dto.FieldInfoDto;
 import lombok.Getter;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -16,6 +15,7 @@ import java.util.Set;
  * - layerFieldTableMap：第 layer 层 FROM/JOIN 中可用的全部字段（表别名 → 源表/源列全集）
  * 说明：当存在子查询/派生表时，同层的字段不一定属于同一张物理表
  */
+@Slf4j
 @Getter
 public class BaseFieldParseTable {
     /**
@@ -40,9 +40,6 @@ public class BaseFieldParseTable {
      * ------查询的表拥有的全部 "字段原名"和所属的真实表名
      */
     private Map<String, Map<String, Set<FieldInfoDto>>> layerFieldTableMap;
-
-
-    protected static final Logger log = LoggerFactory.getLogger(BaseFieldParseTable.class);
 
     public BaseFieldParseTable(int layer,
                                Map<String, Map<String, Set<FieldInfoDto>>> layerSelectTableFieldMap,
