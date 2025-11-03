@@ -1,6 +1,6 @@
 package io.github.test;
 
-import io.github.test.entity.UserEntity;
+import com.example.entity.UserEntity;
 import org.apache.ibatis.annotations.*;
 
 import java.util.List;

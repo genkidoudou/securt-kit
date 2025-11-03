@@ -8,6 +8,7 @@ import io.github.hexlodev.core.parser.dto.ColumnTableDto;
 import io.github.hexlodev.core.parser.dto.FieldEncryptorInfoDto;
 import io.github.hexlodev.core.strategy.FieldEncryptorStrategy;
 import io.github.hexlodev.core.utils.TableNameParser;
+import lombok.extern.slf4j.Slf4j;
 import net.sf.jsqlparser.JSQLParserException;
 
 import java.nio.charset.StandardCharsets;
@@ -20,10 +21,10 @@ import java.util.logging.Logger;
 
 /**
  * PreparedStatement拦截器 - 实现字段加密解密功能
- * 
+ *
  * <p>该类实现了{@link PreparedStatement}接口，通过装饰器模式包装真实的PreparedStatement对象。
  * 主要功能是在SQL执行前后进行字段的自动加密和解密处理。</p>
- * 
+ *
  * <p>主要功能：</p>
  * <ul>
  *   <li>拦截PreparedStatement的参数设置方法，对需要加密的字段值进行加密处理</li>
@@ -31,7 +32,7 @@ import java.util.logging.Logger;
  *   <li>对查询结果集进行包装，实现字段的自动解密</li>
  *   <li>支持INSERT、UPDATE、DELETE等SQL语句的字段加密</li>
  * </ul>
- * 
+ *
  * <p>加密流程：</p>
  * <ol>
  *   <li>解析SQL语句，识别需要加密的表和字段</li>
@@ -39,29 +40,36 @@ import java.util.logging.Logger;
  *   <li>执行SQL时，使用加密后的参数值</li>
  *   <li>查询结果返回时，自动解密加密字段的值</li>
  * </ol>
- * 
+ *
  * @author hexlodev
- * @since 1.0.0
  * @see PreparedStatement
  * @see FieldEncryptorStrategy
  * @see ResultSetDecryptingProxy
+ * @since 1.0.0
  */
+@Slf4j
 public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     /** 日志记录器 */
-    private static final Logger logger = Logger.getLogger(SimpleInterceptorPreparedStatement.class.getName());
-    
-    /** 被包装的真实PreparedStatement对象 */
+
+    /**
+     * 被包装的真实PreparedStatement对象
+     */
     private final PreparedStatement delegate;
-    
-    /** 原始SQL语句 */
+
+    /**
+     * 原始SQL语句
+     */
     private final String sql;
-    
-    /** 是否为更新类操作（INSERT/UPDATE/DELETE） */
+
+    /**
+     * 是否为更新类操作（INSERT/UPDATE/DELETE）
+     */
     private boolean isUpdate;
-    
+
     /**
      * SQL语句中涉及的表名集合
+     *
      * @since 1.0.0
      */
     private HashSet<String> tables;
@@ -81,18 +89,18 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     /**
      * 构造函数
-     * 
+     *
      * <p>创建PreparedStatement拦截器，初始化时：
      * <ol>
      *   <li>解析SQL语句中的表名</li>
      *   <li>判断是否需要加密处理</li>
      *   <li>如果需要加密，则解析SQL获取字段映射关系</li>
      * </ol>
-     * 
+     *
      * @param delegate 真实的PreparedStatement对象，不能为null
-     * @param sql 原始SQL语句，不能为null或空
+     * @param sql      原始SQL语句，不能为null或空
      * @throws IllegalArgumentException 如果delegate或sql为null
-     * @throws RuntimeException 如果SQL解析失败
+     * @throws RuntimeException         如果SQL解析失败
      */
     public SimpleInterceptorPreparedStatement(PreparedStatement delegate, String sql) {
         if (delegate == null) {
@@ -101,14 +109,14 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
         if (sql == null || sql.trim().isEmpty()) {
             throw new IllegalArgumentException("SQL statement cannot be null or empty");
         }
-        
+
         this.delegate = delegate;
         this.sql = sql.trim();
-        
+
         // 判断是否为更新类操作（INSERT/UPDATE/DELETE）
         String lowerSql = this.sql.toLowerCase();
         this.isUpdate = lowerSql.startsWith("update") || lowerSql.startsWith("insert") || lowerSql.startsWith("delete");
-        
+
         // 解析SQL中的表名
         try {
             TableNameParser tableNameParser = new TableNameParser(this.sql);
@@ -118,7 +126,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
             logger.warning("Failed to parse table names from SQL: " + this.sql + ", error: " + e.getMessage());
             this.tables = new HashSet<>();
         }
-        
+
         // 如果表需要加密，则解析SQL获取字段映射关系
         if (SecurtkitUtils.needEncrypt(this.tables)) {
             try {
@@ -185,9 +193,9 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     /**
      * 执行查询SQL - 拦截方法
-     * 
+     *
      * <p>拦截查询操作，记录SQL语句和执行时间，并对结果集进行包装以实现自动解密。</p>
-     * 
+     *
      * @return 查询结果集，已包装为支持自动解密的ResultSet
      * @throws SQLException 如果SQL执行失败
      */
@@ -198,13 +206,13 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
         if (!sql.equals(finalSql)) {
             logger.fine("[FINAL SQL] " + finalSql);
         }
-        
+
         long startTime = System.currentTimeMillis();
         try {
             ResultSet resultSet = delegate.executeQuery();
             long endTime = System.currentTimeMillis();
             logger.info("[PREPARED QUERY RESULT] Executed in " + (endTime - startTime) + "ms");
-            
+
             // 包装结果集以实现自动解密
             return ResultSetDecryptingProxy.wrap(resultSet, this.tables, this.pair, this.sql);
         } catch (SQLException e) {
@@ -216,9 +224,9 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     /**
      * 执行更新SQL（INSERT/UPDATE/DELETE） - 拦截方法
-     * 
+     *
      * <p>拦截更新操作，记录SQL语句、执行时间和影响的行数。</p>
-     * 
+     *
      * @return 受影响的行数
      * @throws SQLException 如果SQL执行失败
      */
@@ -229,7 +237,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
         if (!sql.equals(finalSql)) {
             logger.fine("[FINAL SQL] " + finalSql);
         }
-        
+
         long startTime = System.currentTimeMillis();
         try {
             int result = delegate.executeUpdate();
@@ -245,9 +253,9 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     /**
      * 执行SQL - 拦截方法
-     * 
+     *
      * <p>通用执行方法，可用于执行任何类型的SQL语句。记录SQL语句、执行时间和结果。</p>
-     * 
+     *
      * @return 如果第一个结果是ResultSet对象则返回true，否则返回false
      * @throws SQLException 如果SQL执行失败
      */
@@ -258,7 +266,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
         if (!sql.equals(finalSql)) {
             logger.fine("[FINAL SQL] " + finalSql);
         }
-        
+
         long startTime = System.currentTimeMillis();
         try {
             boolean result = delegate.execute();
@@ -274,12 +282,12 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     /**
      * 设置字符串参数 - 拦截方法
-     * 
+     *
      * <p>如果该参数对应需要加密的字段，则会在设置前进行加密处理。
      * 加密后的值会被缓存，用于后续的SQL日志输出。</p>
-     * 
+     *
      * @param parameterIndex 参数索引，从1开始
-     * @param x 参数值
+     * @param x              参数值
      * @throws SQLException 如果设置参数失败
      */
     @Override
@@ -305,9 +313,9 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
             if (first != null && first.isPresent()) {
                 ColumnTableDto columnTableDto = first.get();
                 String sourceColumn = columnTableDto.getSourceColumn();
-                Class<? extends FieldEncryptorStrategy> fieldEncryptorStrategy = 
-                    TableCache.getTableFieldEncryptInfo(columnTableDto.getSourceTableName(), sourceColumn);
-                
+                Class<? extends FieldEncryptorStrategy> fieldEncryptorStrategy =
+                        TableCache.getTableFieldEncryptInfo(columnTableDto.getSourceTableName(), sourceColumn);
+
                 if (fieldEncryptorStrategy != null) {
                     try {
                         FieldEncryptorStrategy strategy = SpringUtil.getBean(fieldEncryptorStrategy);
@@ -320,16 +328,16 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
                 }
             }
         }
-        
+
         delegate.setString(parameterIndex, newValue);
         parameterValues.put(parameterIndex, newValue);
     }
 
     /**
      * 设置整数参数
-     * 
+     *
      * @param parameterIndex 参数索引，从1开始
-     * @param x 参数值
+     * @param x              参数值
      * @throws SQLException 如果设置参数失败
      */
     @Override
@@ -340,9 +348,9 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     /**
      * 设置长整数参数
-     * 
+     *
      * @param parameterIndex 参数索引，从1开始
-     * @param x 参数值
+     * @param x              参数值
      * @throws SQLException 如果设置参数失败
      */
     @Override
@@ -353,9 +361,9 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     /**
      * 设置双精度浮点数参数
-     * 
+     *
      * @param parameterIndex 参数索引，从1开始
-     * @param x 参数值
+     * @param x              参数值
      * @throws SQLException 如果设置参数失败
      */
     @Override
@@ -366,9 +374,9 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     /**
      * 设置布尔值参数
-     * 
+     *
      * @param parameterIndex 参数索引，从1开始
-     * @param x 参数值
+     * @param x              参数值
      * @throws SQLException 如果设置参数失败
      */
     @Override
@@ -459,7 +467,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     /**
      * 将当前PreparedStatement添加到批处理
-     * 
+     *
      * @throws SQLException 如果添加失败
      */
     @Override
@@ -760,7 +768,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     /**
      * 关闭PreparedStatement
-     * 
+     *
      * @throws SQLException 如果关闭失败
      */
     @Override
@@ -811,7 +819,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     @Override
     public ResultSet getResultSet() throws SQLException {
-        return ResultSetDecryptingProxy.wrap(delegate.getResultSet(),  this.tables,this.pair,this.sql);
+        return ResultSetDecryptingProxy.wrap(delegate.getResultSet(), this.tables, this.pair, this.sql);
     }
 
     // 添加所有缺失的execute方法
@@ -857,7 +865,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     /**
      * 执行给定的SQL语句（PreparedStatement通常不应使用此方法）
-     * 
+     *
      * @param sql SQL语句
      * @return 执行结果
      * @throws SQLException 如果执行失败
@@ -874,7 +882,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     /**
      * 执行更新SQL（PreparedStatement通常不应使用此方法）
-     * 
+     *
      * @param sql SQL语句
      * @return 受影响的行数
      * @throws SQLException 如果执行失败
@@ -891,7 +899,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     /**
      * 执行查询SQL（PreparedStatement通常不应使用此方法）
-     * 
+     *
      * @param sql SQL语句
      * @return 查询结果集
      * @throws SQLException 如果执行失败

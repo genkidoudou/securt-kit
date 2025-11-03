@@ -7,6 +7,7 @@ import io.github.hexlodev.core.TableCache;
 import io.github.hexlodev.core.parser.dto.ColumnTableDto;
 import io.github.hexlodev.core.parser.dto.FieldEncryptorInfoDto;
 import io.github.hexlodev.core.parser.visitor.PoJoEncrtptorStatementVisitor;
+import lombok.extern.slf4j.Slf4j;
 import net.sf.jsqlparser.JSQLParserException;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
@@ -19,10 +20,10 @@ import java.util.regex.Pattern;
 
 /**
  * SQL解析工具类 - 核心解析入口
- * 
+ *
  * <p>该类提供了SQL语句解析的核心功能，主要用于解析PreparedStatement中的SQL语句，
  * 识别需要加密的字段，并建立占位符与表字段的映射关系。</p>
- * 
+ *
  * <p>主要功能：</p>
  * <ul>
  *   <li>将SQL中的问号占位符（?）替换为自定义占位符，以便进行SQL解析</li>
@@ -30,7 +31,7 @@ import java.util.regex.Pattern;
  *   <li>建立占位符索引与表字段的映射关系</li>
  *   <li>识别需要加密的字段列表</li>
  * </ul>
- * 
+ *
  * <p>使用示例：</p>
  * <pre>{@code
  * String sql = "UPDATE user SET name = ?, phone = ? WHERE id = ?";
@@ -38,27 +39,29 @@ import java.util.regex.Pattern;
  * // result.getKey() 包含占位符到表字段的映射
  * // result.getValue() 包含需要加密的字段信息
  * }</pre>
- * 
+ *
  * @author hexlodev
  * @since 1.0.0
  */
+@Slf4j
 public class SecurtkitUtils {
-    
+
     /** 日志记录器 */
-    private static final Logger logger = Logger.getLogger(SecurtkitUtils.class.getName());
-    
+
     /**
      * 占位符前缀
      * 用于替换SQL中的问号占位符，便于SQL解析器识别
      */
     public static final String PLACEHOLDER = "SECURT_KIT_PLACEHOLDER_";
-    
-    /** 占位符计数器，用于生成唯一的占位符标识 */
+
+    /**
+     * 占位符计数器，用于生成唯一的占位符标识
+     */
     private static final AtomicInteger PLACEHOLDER_COUNTER = new AtomicInteger(0);
 
     /**
      * 解析SQL语句，获取占位符与表字段的映射关系以及需要加密的字段列表
-     * 
+     *
      * <p>该方法会执行以下步骤：</p>
      * <ol>
      *   <li>将SQL中的问号占位符替换为自定义占位符</li>
@@ -66,30 +69,30 @@ public class SecurtkitUtils {
      *   <li>通过访问者模式提取表字段信息和加密字段信息</li>
      *   <li>建立占位符索引与表字段的映射关系</li>
      * </ol>
-     * 
+     *
      * @param sql 要解析的SQL语句，包含问号占位符（如：UPDATE user SET name = ? WHERE id = ?）
      * @return Pair对象，包含：
-     *         <ul>
-     *           <li>Key: 占位符到ColumnTableDto的映射（占位符名称 -> 表字段信息）</li>
-     *           <li>Value: 需要加密的字段信息列表</li>
-     *         </ul>
+     * <ul>
+     *   <li>Key: 占位符到ColumnTableDto的映射（占位符名称 -> 表字段信息）</li>
+     *   <li>Value: 需要加密的字段信息列表</li>
+     * </ul>
      * @throws JSQLParserException 如果SQL解析失败
      * @since 1.0.0
      */
     public static Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> parseSql(String sql) throws JSQLParserException {
         if (StrUtil.isBlank(sql)) {
-            logger.warning("Attempted to parse empty SQL statement");
+            log.warn("Attempted to parse empty SQL statement");
             return Pair.of(Collections.emptyMap(), Collections.emptyList());
         }
-        
+
         try {
             // 1. 将SQL中的?占位符替换成自定义的特殊符号，以便SQL解析器识别
             String placeholderSql = question2Placeholder(sql);
-            logger.fine("Replaced placeholders in SQL: " + placeholderSql);
-            
+            log.debug("Replaced placeholders in SQL: " + placeholderSql);
+
             // 2. 使用JSQLParser解析SQL语句
             Statement statement = CCJSqlParserUtil.parse(placeholderSql);
-            
+
             // 3. 使用访问者模式提取表字段信息和加密字段信息
             PoJoEncrtptorStatementVisitor visitor = new PoJoEncrtptorStatementVisitor();
             statement.accept(visitor);
@@ -105,30 +108,30 @@ public class SecurtkitUtils {
                     value.setInsertFieldIndex(index);
                 }
             }
-            
+
             List<FieldEncryptorInfoDto> fieldEncryptorInfos = visitor.getFieldEncryptorInfos();
-            logger.fine("Parsed SQL: found " + placeholderColumnTableMap.size() + " placeholders, " 
-                       + fieldEncryptorInfos.size() + " fields need encryption");
-            
+            log.debug("Parsed SQL: found " + placeholderColumnTableMap.size() + " placeholders, "
+                    + fieldEncryptorInfos.size() + " fields need encryption");
+
             return Pair.of(placeholderColumnTableMap, fieldEncryptorInfos);
         } catch (JSQLParserException e) {
-            logger.severe("Failed to parse SQL: " + sql + ", error: " + e.getMessage());
+            log.error("Failed to parse SQL: " + sql + ", error: " + e.getMessage());
             throw e;
         }
     }
 
     /**
      * 将SQL中的问号占位符（?）替换为自定义占位符
-     * 
+     *
      * <p>该方法会将SQL中的所有问号占位符替换为格式为{@code SECURT_KIT_PLACEHOLDER_N}的占位符，
      * 其中N为占位符的索引（从1开始）。这样做的目的是让SQL解析器能够识别和区分不同的占位符。</p>
-     * 
+     *
      * <p>示例：</p>
      * <pre>{@code
      * 输入: "UPDATE user SET name = ?, phone = ? WHERE id = ?"
      * 输出: "UPDATE user SET name = SECURT_KIT_PLACEHOLDER_1, phone = SECURT_KIT_PLACEHOLDER_2 WHERE id = SECURT_KIT_PLACEHOLDER_3"
      * }</pre>
-     * 
+     *
      * @param sql 原始SQL语句
      * @return 替换占位符后的SQL语句，如果输入为空则返回原值
      */
@@ -156,10 +159,10 @@ public class SecurtkitUtils {
 
     /**
      * 判断给定的表集合是否需要加密处理
-     * 
+     *
      * <p>该方法会检查传入的表名集合是否与配置中需要加密的表有交集。
      * 如果有任何表在加密配置中，则返回true，表示需要进行加密处理。</p>
-     * 
+     *
      * @param tables 要检查的表名集合，不能为null
      * @return 如果需要加密处理返回true，否则返回false
      * @since 1.0.0
@@ -169,12 +172,6 @@ public class SecurtkitUtils {
             return false;
         }
         Set<String> configuredTables = TableCache.getTables();
-        boolean needEncrypt = CollectionUtil.containsAny(configuredTables, tables);
-        
-        if (needEncrypt) {
-            logger.fine("Tables require encryption: " + tables);
-        }
-        
-        return needEncrypt;
+        return CollectionUtil.containsAny(configuredTables, tables);
     }
 }

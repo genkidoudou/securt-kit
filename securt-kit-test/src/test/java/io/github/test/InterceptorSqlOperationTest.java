@@ -1,12 +1,9 @@
 package io.github.test;
 
-import cn.hutool.core.collection.CollectionUtil;
-import cn.hutool.db.DbUtil;
 import cn.hutool.db.ds.simple.SimpleDataSource;
 import io.github.hexlodev.core.TableCache;
 import io.github.hexlodev.core.config.FieldEncryptorProperties;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,12 +12,9 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
 
 import javax.sql.DataSource;
 import java.io.IOException;
-import java.io.Serializable;
 import java.sql.*;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -28,7 +22,7 @@ import org.apache.ibatis.io.Resources;
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.apache.ibatis.session.SqlSessionFactoryBuilder;
-import io.github.test.entity.UserEntity;
+import com.example.entity.UserEntity;
 
 /**
  * 测试拦截器对SQL操作的拦截和处理（增删改查）
