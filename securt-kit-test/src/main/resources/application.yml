@@ -33,7 +33,7 @@ mybatis:
   # Mapper XML 文件路径
   mapper-locations: classpath:mapper/*.xml
   # 实体类包路径
-  type-aliases-package: io.github.test.entity
+  type-aliases-package: com.example.entity,io.github.test.entity
   # 配置属性
   configuration:
     # 开启驼峰命名转换
@@ -66,7 +66,7 @@ mybatis-plus:
   # Mapper XML 文件路径
   mapper-locations: classpath:mapper/*.xml
   # 实体类包路径
-  type-aliases-package: io.github.test.entity
+  type-aliases-package: com.example.entity,io.github.test.entity
   # 配置属性
   configuration:
     # 开启驼峰命名转换
@@ -116,6 +116,9 @@ securtkit:
         fields:
           - field-name: name
           - field-name: phone
-      -  table-name: orders
+      - table-name: orders
+        fields:
+          - field-name: customer_name
+          - field-name: customer_phone
     enable: true
 

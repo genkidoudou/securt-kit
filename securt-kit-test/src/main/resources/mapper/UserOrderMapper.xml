@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.mapper.UserOrderMapper">
+
+  <!-- 结果映射 -->
+  <resultMap id="UserOrderResultMap" type="com.example.dto.UserOrderDTO">
+    <!-- 用户字段 -->
+    <id column="user_id" property="userId" jdbcType="BIGINT"/>
+    <result column="user_name" property="userName" jdbcType="VARCHAR"/>
+    <result column="user_phone" property="userPhone" jdbcType="VARCHAR"/>
+    <result column="user_age" property="userAge" jdbcType="INTEGER"/>
+    <result column="user_email" property="userEmail" jdbcType="VARCHAR"/>
+    
+    <!-- 订单字段 -->
+    <result column="order_id" property="orderId" jdbcType="BIGINT"/>
+    <result column="order_no" property="orderNo" jdbcType="VARCHAR"/>
+    <result column="customer_name" property="customerName" jdbcType="VARCHAR"/>
+    <result column="customer_phone" property="customerPhone" jdbcType="VARCHAR"/>
+    <result column="amount" property="amount" jdbcType="DECIMAL"/>
+    <result column="order_status" property="orderStatus" jdbcType="VARCHAR"/>
+  </resultMap>
+
+  <!-- 查询用户及其所有订单（内连接） -->
+  <select id="selectUserWithOrders" parameterType="java.lang.Long" resultMap="UserOrderResultMap">
+    SELECT 
+      u.id AS user_id,
+      u.name AS user_name,
+      u.phone AS user_phone,
+      u.age AS user_age,
+      u.email AS user_email,
+      o.id AS order_id,
+      o.order_no,
+      o.customer_name,
+      o.customer_phone,
+      o.amount,
+      o.status AS order_status
+    FROM user u
+    INNER JOIN orders o ON u.id = o.user_id
+    WHERE u.id = #{userId}
+    ORDER BY o.id DESC
+  </select>
+
+  <!-- 查询所有用户及其订单（左连接） -->
+  <select id="selectAllUsersWithOrders" resultMap="UserOrderResultMap">
+    SELECT 
+      u.id AS user_id,
+      u.name AS user_name,
+      u.phone AS user_phone,
+      u.age AS user_age,
+      u.email AS user_email,
+      o.id AS order_id,
+      o.order_no,
+      o.customer_name,
+      o.customer_phone,
+      o.amount,
+      o.status AS order_status
+    FROM user u
+    LEFT JOIN orders o ON u.id = o.user_id
+    ORDER BY u.id, o.id DESC
+  </select>
+
+  <!-- 根据订单号查询用户和订单信息 -->
+  <select id="selectUserOrderByOrderNo" parameterType="java.lang.String" resultMap="UserOrderResultMap">
+    SELECT 
+      u.id AS user_id,
+      u.name AS user_name,
+      u.phone AS user_phone,
+      u.age AS user_age,
+      u.email AS user_email,
+      o.id AS order_id,
+      o.order_no,
+      o.customer_name,
+      o.customer_phone,
+      o.amount,
+      o.status AS order_status
+    FROM user u
+    INNER JOIN orders o ON u.id = o.user_id
+    WHERE o.order_no = #{orderNo}
+  </select>
+
+  <!-- 查询订单及其用户信息（从订单表出发） -->
+  <select id="selectOrdersWithUsers" resultMap="UserOrderResultMap">
+    SELECT 
+      u.id AS user_id,
+      u.name AS user_name,
+      u.phone AS user_phone,
+      u.age AS user_age,
+      u.email AS user_email,
+      o.id AS order_id,
+      o.order_no,
+      o.customer_name,
+      o.customer_phone,
+      o.amount,
+      o.status AS order_status
+    FROM orders o
+    INNER JOIN user u ON o.user_id = u.id
+    ORDER BY o.id DESC
+  </select>
+
+  <!-- 统计每个用户的订单数量和总金额 -->
+  <select id="selectUserOrderStats" resultMap="UserOrderResultMap">
+    SELECT 
+      u.id AS user_id,
+      u.name AS user_name,
+      u.phone AS user_phone,
+      u.age AS user_age,
+      u.email AS user_email,
+      COUNT(o.id) AS order_id,
+      SUM(o.amount) AS amount
+    FROM user u
+    LEFT JOIN orders o ON u.id = o.user_id
+    GROUP BY u.id, u.name, u.phone, u.age, u.email
+    ORDER BY u.id
+  </select>
+
+</mapper>
+
