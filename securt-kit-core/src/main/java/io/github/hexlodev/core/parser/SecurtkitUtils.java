@@ -60,13 +60,18 @@ public class SecurtkitUtils {
 
     /**
      * 解析SQL语句，获取占位符与表字段的映射关系以及需要加密的字段列表
+     * <p>
+     * 该方法使用缓存机制，相同 SQL 的解析结果会被缓存，显著提升性能。
+     * </p>
      *
      * <p>该方法会执行以下步骤：</p>
      * <ol>
+     *   <li>检查缓存，如果命中则直接返回</li>
      *   <li>将SQL中的问号占位符替换为自定义占位符</li>
      *   <li>使用JSQLParser解析SQL语句</li>
      *   <li>通过访问者模式提取表字段信息和加密字段信息</li>
      *   <li>建立占位符索引与表字段的映射关系</li>
+     *   <li>将解析结果存入缓存</li>
      * </ol>
      *
      * @param sql 要解析的SQL语句，包含问号占位符（如：UPDATE user SET name = ? WHERE id = ?）
@@ -79,6 +84,21 @@ public class SecurtkitUtils {
      * @since 1.0.0
      */
     public static Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> parseSql(String sql) throws JSQLParserException {
+        // 使用缓存进行解析
+        return SqlParseCache.parseSql(sql, SecurtkitUtils::doParseSql);
+    }
+
+    /**
+     * 实际执行 SQL 解析的内部方法
+     * <p>
+     * 该方法不包含缓存逻辑，由 {@link #parseSql(String)} 通过缓存层调用。
+     * </p>
+     *
+     * @param sql 要解析的SQL语句
+     * @return 解析结果
+     * @throws JSQLParserException 如果SQL解析失败
+     */
+    private static Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> doParseSql(String sql) throws JSQLParserException {
         if (StrUtil.isBlank(sql)) {
             log.warn("Attempted to parse empty SQL statement");
             return Pair.of(Collections.emptyMap(), Collections.emptyList());

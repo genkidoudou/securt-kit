@@ -21,14 +21,18 @@ public class FieldEncryptorProperties {
      * 是否开启
      * @since 2025/10/7
      */
-
     private boolean enable;
+
+    /**
+     * SQL 解析缓存配置
+     * @since 1.0.0
+     */
+    private SqlParseCacheConfig sqlParseCache;
 
     /**
      * 表配置
      * @since 2025/10/8
      */
-
     private List<TableConfig> tables;
 
 
@@ -85,8 +89,28 @@ public class FieldEncryptorProperties {
          * 字段加密策略(不配置使用默认的策略)
          * @since 2025/10/8
          */
-
         private String strategy;
+    }
+
+    /**
+     * SQL 解析缓存配置
+     * @author hexlodev
+     * @since 1.0.0
+     */
+    @Data
+    public static class SqlParseCacheConfig {
+        /**
+         * 是否启用 SQL 解析缓存
+         * 默认值：true（启用缓存可以显著提升性能）
+         */
+        private boolean enable = true;
+
+        /**
+         * 缓存最大容量
+         * 默认值：1000（最多缓存 1000 条 SQL 解析结果）
+         * 建议值：500-2000，根据应用实际 SQL 数量调整
+         */
+        private int maxSize = 1000;
     }
 
 }

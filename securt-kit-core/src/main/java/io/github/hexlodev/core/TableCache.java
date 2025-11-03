@@ -10,7 +10,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 @Slf4j
 public class TableCache {
@@ -88,7 +87,36 @@ public class TableCache {
                 FIELD_ENCRYPT_TABLE.add(tableName);
             }
         }
+
+        // 初始化 SQL 解析缓存配置
+        initSqlParseCache(fieldEncryptorProperties);
+
         log.debug("【securt-kit】配置文件表缓存初始化完成，需处理的表为:{}", TABLE_FIELD_ENCRYPT_INFO);
+    }
+
+    /**
+     * 初始化 SQL 解析缓存配置
+     *
+     * @param properties 配置属性
+     */
+    private static void initSqlParseCache(FieldEncryptorProperties properties) {
+        if (properties == null) {
+            return;
+        }
+
+        FieldEncryptorProperties.SqlParseCacheConfig cacheConfig = properties.getSqlParseCache();
+        if (cacheConfig == null) {
+            // 如果未配置，使用默认值（启用缓存，容量1000）
+            io.github.hexlodev.core.parser.SqlParseCache.init(true, 1000);
+            log.debug("【securt-kit】SQL 解析缓存使用默认配置: enable=true, maxSize=1000");
+        } else {
+            io.github.hexlodev.core.parser.SqlParseCache.init(
+                    cacheConfig.isEnable(),
+                    cacheConfig.getMaxSize()
+            );
+            log.debug("【securt-kit】SQL 解析缓存配置: enable={}, maxSize={}",
+                    cacheConfig.isEnable(), cacheConfig.getMaxSize());
+        }
     }
 
 

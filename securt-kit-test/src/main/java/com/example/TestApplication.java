@@ -11,7 +11,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * @since 1.0.0
  */
 @SpringBootApplication
-@MapperScan(basePackages = {"com.example.mapper", "io.github.test.mapper"})
+@MapperScan(basePackages = {"com.example.mapper"})
 public class TestApplication {
 
     public static void main(String[] args) {
