@@ -3,7 +3,7 @@ package io.github.hexlodev.core;
 import cn.hutool.core.collection.CollectionUtil;
 import cn.hutool.core.util.ClassUtil;
 import cn.hutool.core.util.StrUtil;
-import cn.hutool.extra.spring.SpringUtil;
+import io.github.hexlodev.core.cache.StrategyCache;
 import io.github.hexlodev.core.config.FieldEncryptorProperties;
 import io.github.hexlodev.core.strategy.FieldEncryptorStrategy;
 import lombok.extern.slf4j.Slf4j;
@@ -46,7 +46,16 @@ public class TableCache {
             log.debug("fieldEncryptorProperties未配置,请先配置");
             return;
         }
-        FieldEncryptorStrategy defaultFieldEncryptorStrategy = SpringUtil.getBean(FieldEncryptorStrategy.class);
+        // 使用策略缓存获取默认策略实例
+        FieldEncryptorStrategy defaultFieldEncryptorStrategy;
+        try {
+            // 尝试获取默认策略（通过接口类型）
+            defaultFieldEncryptorStrategy = StrategyCache.getStrategy(FieldEncryptorStrategy.class);
+        } catch (Exception e) {
+            log.warn("Failed to get default strategy, will use strategy class name instead: {}", e.getMessage());
+            // 如果无法获取默认策略，将在后续逻辑中使用策略类名
+            defaultFieldEncryptorStrategy = null;
+        }
         Map<String, Map<String, Class<? extends FieldEncryptorStrategy>>> parserEntityClass = new HashMap<>();
 
 
@@ -66,7 +75,13 @@ public class TableCache {
                         String fieldName = field.getFieldName();
                         String strategy = field.getStrategy();
                         if (StrUtil.isBlank(strategy)) {
-                            strategy = defaultFieldEncryptorStrategy.getClass().getName();
+                            // 如果没有配置策略，使用默认策略的类名
+                            if (defaultFieldEncryptorStrategy != null) {
+                                strategy = defaultFieldEncryptorStrategy.getClass().getName();
+                            } else {
+                                log.warn("No default strategy available and no strategy configured for field: {}.{}", tableName, fieldName);
+                                continue; // 跳过该字段
+                            }
                         }
                         fieldEncryptorMap.put(fieldName, ClassUtil.loadClass(strategy));
                     }

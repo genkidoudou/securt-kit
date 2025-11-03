@@ -1,8 +1,8 @@
 package io.github.hexlodev.core.interceptor;
 
 import cn.hutool.core.lang.Pair;
-import cn.hutool.extra.spring.SpringUtil;
 import io.github.hexlodev.core.TableCache;
+import io.github.hexlodev.core.cache.StrategyCache;
 import io.github.hexlodev.core.parser.SecurtkitUtils;
 import io.github.hexlodev.core.parser.dto.ColumnTableDto;
 import io.github.hexlodev.core.parser.dto.FieldEncryptorInfoDto;
@@ -317,7 +317,8 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
                 if (fieldEncryptorStrategy != null) {
                     try {
-                        FieldEncryptorStrategy strategy = SpringUtil.getBean(fieldEncryptorStrategy);
+                        // 使用策略缓存获取策略实例
+                        FieldEncryptorStrategy strategy = StrategyCache.getStrategy(fieldEncryptorStrategy);
                         newValue = strategy.encryption(x);
                         log.debug("Encrypted field: " + sourceColumn + " in table: " + columnTableDto.getSourceTableName());
                     } catch (Exception e) {

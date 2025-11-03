@@ -1,8 +1,8 @@
 package io.github.hexlodev.core.interceptor;
 
 import cn.hutool.core.lang.Pair;
-import cn.hutool.extra.spring.SpringUtil;
 import io.github.hexlodev.core.TableCache;
+import io.github.hexlodev.core.cache.StrategyCache;
 import io.github.hexlodev.core.parser.SecurtkitUtils;
 import io.github.hexlodev.core.parser.dto.ColumnTableDto;
 import io.github.hexlodev.core.parser.dto.FieldEncryptorInfoDto;
@@ -116,7 +116,8 @@ final class ResultSetDecryptingProxy implements InvocationHandler {
         FieldEncryptorInfoDto fieldEncryptorInfoDto = fieldEncryptorInfoDtos.stream().filter(a -> a.getColumnName().toLowerCase(Locale.ROOT).equals(normalizedColumn)).findFirst().orElse(null);
         if (null != fieldEncryptorInfoDto) {
             Class<? extends FieldEncryptorStrategy> strategyClass = TableCache.getTableFieldEncryptInfo(fieldEncryptorInfoDto.getSourceTableName(), fieldEncryptorInfoDto.getSourceColumn());
-            FieldEncryptorStrategy strategy = SpringUtil.getBean(strategyClass);
+            // 使用策略缓存获取策略实例
+            FieldEncryptorStrategy strategy = StrategyCache.getStrategy(strategyClass);
             return strategy.decryption(value);
         }
         return value;
@@ -158,7 +159,8 @@ final class ResultSetDecryptingProxy implements InvocationHandler {
         if (strategyClass == null) {
             return value;
         }
-        FieldEncryptorStrategy strategy = SpringUtil.getBean(strategyClass);
+        // 使用策略缓存获取策略实例
+        FieldEncryptorStrategy strategy = StrategyCache.getStrategy(strategyClass);
         try {
             return strategy.decryption(value);
         } catch (Throwable t) {
