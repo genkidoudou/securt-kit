@@ -4,14 +4,13 @@ import cn.hutool.core.lang.Pair;
 import io.github.hexlodev.core.parser.SecurtkitUtils;
 import io.github.hexlodev.core.parser.dto.ColumnTableDto;
 import io.github.hexlodev.core.parser.dto.FieldEncryptorInfoDto;
-import io.github.hexlodev.core.utils.TableNameParser;
 import lombok.extern.slf4j.Slf4j;
 import net.sf.jsqlparser.JSQLParserException;
 
 import java.sql.*;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 简化的Statement包装器 - 拦截SQL执行
@@ -89,8 +88,8 @@ public class SimpleInterceptorStatement implements Statement {
      */
     private void logTableNames(String sql) {
         try {
-            TableNameParser parser = new TableNameParser(sql);
-            Collection<String> tables = parser.tables();
+            // 使用缓存优化的表名解析
+            Set<String> tables = io.github.hexlodev.core.parser.SqlParseCache.parseTableNames(sql);
             if (!tables.isEmpty()) {
                 log.debug("[TABLES] " + String.join(", ", tables));
             }
@@ -115,13 +114,13 @@ public class SimpleInterceptorStatement implements Statement {
         logTableNames(sql);
         long startTime = System.currentTimeMillis();
         
-        // 解析表集合用于解密
+        // 解析表集合用于解密（使用缓存优化）
         java.util.Set<String> tables = new java.util.HashSet<>();
         Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> mapListPair = null;
 
         try {
-            TableNameParser parser = new TableNameParser(sql);
-            tables.addAll(parser.tables());
+            // 使用缓存优化的表名解析
+            tables = io.github.hexlodev.core.parser.SqlParseCache.parseTableNames(sql);
         } catch (Exception ignore) {
             // 解析失败不影响执行
         }

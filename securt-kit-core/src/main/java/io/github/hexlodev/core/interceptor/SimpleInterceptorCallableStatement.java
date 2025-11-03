@@ -1,9 +1,8 @@
 package io.github.hexlodev.core.interceptor;
 
-import io.github.hexlodev.core.utils.TableNameParser;
 import lombok.extern.slf4j.Slf4j;
 import java.sql.*;
-import java.util.Collection;
+import java.util.Set;
 
 /**
  * CallableStatement拦截器 - 拦截存储过程调用
@@ -50,8 +49,8 @@ public class SimpleInterceptorCallableStatement implements CallableStatement {
      */
     private void logTableNames() {
         try {
-            TableNameParser parser = new TableNameParser(sql);
-            Collection<String> tables = parser.tables();
+            // 使用缓存优化的表名解析
+            Set<String> tables = io.github.hexlodev.core.parser.SqlParseCache.parseTableNames(sql);
             if (!tables.isEmpty()) {
                 log.debug("[TABLES] " + String.join(", ", tables));
             }

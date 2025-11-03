@@ -7,7 +7,6 @@ import io.github.hexlodev.core.parser.SecurtkitUtils;
 import io.github.hexlodev.core.parser.dto.ColumnTableDto;
 import io.github.hexlodev.core.parser.dto.FieldEncryptorInfoDto;
 import io.github.hexlodev.core.strategy.FieldEncryptorStrategy;
-import io.github.hexlodev.core.utils.TableNameParser;
 import lombok.extern.slf4j.Slf4j;
 import net.sf.jsqlparser.JSQLParserException;
 
@@ -116,10 +115,11 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
         String lowerSql = this.sql.toLowerCase();
         this.isUpdate = lowerSql.startsWith("update") || lowerSql.startsWith("insert") || lowerSql.startsWith("delete");
 
-        // 解析SQL中的表名
+        // 解析SQL中的表名（使用缓存优化）
         try {
-            TableNameParser tableNameParser = new TableNameParser(this.sql);
-            this.tables = tableNameParser.tables();
+            // 使用 SqlParseCache 的表名解析方法，优先从缓存获取
+            Set<String> parsedTables = io.github.hexlodev.core.parser.SqlParseCache.parseTableNames(this.sql);
+            this.tables = parsedTables != null ? new HashSet<>(parsedTables) : new HashSet<>();
             log.debug("Parsed tables from SQL: " + this.tables);
         } catch (Exception e) {
             log.warn("Failed to parse table names from SQL: " + this.sql + ", error: " + e.getMessage());

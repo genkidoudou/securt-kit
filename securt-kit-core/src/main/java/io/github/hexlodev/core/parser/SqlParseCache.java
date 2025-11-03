@@ -2,17 +2,18 @@ package io.github.hexlodev.core.parser;
 
 import cn.hutool.cache.Cache;
 import cn.hutool.cache.CacheUtil;
+import cn.hutool.core.collection.CollectionUtil;
 import cn.hutool.core.lang.Pair;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.crypto.digest.DigestUtil;
 import io.github.hexlodev.core.parser.dto.ColumnTableDto;
 import io.github.hexlodev.core.parser.dto.FieldEncryptorInfoDto;
+import io.github.hexlodev.core.utils.TableNameParser;
 import lombok.extern.slf4j.Slf4j;
 import net.sf.jsqlparser.JSQLParserException;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * SQL 解析结果缓存
@@ -44,13 +45,24 @@ public class SqlParseCache {
     private static volatile boolean cacheEnabled = true;
 
     /**
-     * SQL 解析结果缓存
+     * SQL 解析结果缓存（包含表名信息）
      * Key: SQL 的 MD5 哈希值（规范化后的 SQL）
-     * Value: 解析结果 ParseResult
+     * Value: 解析结果 ParseResult（包含占位符映射、字段加密信息、表名集合）
      * 
      * 使用 Hutool 的 LRUCache 实现 LRU（最近最少使用）淘汰策略
+     * 
+     * 注意：此缓存同时服务于 SQL 完整解析和表名解析，合并缓存以减少内存占用
      */
     private static volatile Cache<String, ParseResult> SQL_PARSE_CACHE = CacheUtil.newLRUCache(DEFAULT_MAX_CACHE_SIZE);
+    
+    /**
+     * 表名解析缓存（轻量级，用于快速判断是否需要加密）
+     * Key: SQL 的 MD5 哈希值（规范化后的 SQL）
+     * Value: 表名集合
+     * 
+     * 当 SQL 解析缓存未命中时，使用此缓存避免重复解析表名
+     */
+    private static volatile Cache<String, Set<String>> TABLE_NAME_CACHE = CacheUtil.newLRUCache(DEFAULT_MAX_CACHE_SIZE * 2);
 
     /**
      * 当前缓存最大容量
@@ -71,13 +83,15 @@ public class SqlParseCache {
             maxSize = DEFAULT_MAX_CACHE_SIZE;
         }
         
-        if (cacheEnabled) {
+            if (cacheEnabled) {
             // 如果容量改变，重新创建缓存
             if (currentMaxSize != maxSize || SQL_PARSE_CACHE == null) {
                 synchronized (SqlParseCache.class) {
                     if (currentMaxSize != maxSize || SQL_PARSE_CACHE == null) {
                         Cache<String, ParseResult> oldCache = SQL_PARSE_CACHE;
                         SQL_PARSE_CACHE = CacheUtil.newLRUCache(maxSize);
+                        // 表名缓存容量设为 SQL 解析缓存的 2 倍（表名解析使用频率更高）
+                        TABLE_NAME_CACHE = CacheUtil.newLRUCache(maxSize * 2);
                         currentMaxSize = maxSize;
                         
                         // 如果旧缓存存在且有数据，可以选择迁移（这里简化处理，直接清空）
@@ -93,6 +107,7 @@ public class SqlParseCache {
             if (SQL_PARSE_CACHE != null) {
                 synchronized (SqlParseCache.class) {
                     SQL_PARSE_CACHE.clear();
+                    TABLE_NAME_CACHE.clear();
                     log.info("SQL parse cache disabled");
                 }
             }
@@ -114,11 +129,14 @@ public class SqlParseCache {
     public static class ParseResult {
         private final Map<String, ColumnTableDto> placeholderColumnTableMap;
         private final List<FieldEncryptorInfoDto> fieldEncryptorInfos;
+        private final Set<String> tableNames; // 表名集合（从解析结果中提取）
 
         public ParseResult(Map<String, ColumnTableDto> placeholderColumnTableMap,
-                          List<FieldEncryptorInfoDto> fieldEncryptorInfos) {
+                          List<FieldEncryptorInfoDto> fieldEncryptorInfos,
+                          Set<String> tableNames) {
             this.placeholderColumnTableMap = placeholderColumnTableMap;
             this.fieldEncryptorInfos = fieldEncryptorInfos;
+            this.tableNames = tableNames != null ? tableNames : Collections.emptySet();
         }
 
         public Map<String, ColumnTableDto> getPlaceholderColumnTableMap() {
@@ -127,6 +145,10 @@ public class SqlParseCache {
 
         public List<FieldEncryptorInfoDto> getFieldEncryptorInfos() {
             return fieldEncryptorInfos;
+        }
+
+        public Set<String> getTableNames() {
+            return tableNames;
         }
     }
 
@@ -170,13 +192,22 @@ public class SqlParseCache {
         // 4. 缓存未命中或未启用，执行解析
         Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> result = parser.parse(sql);
 
-        // 5. 如果缓存启用，缓存解析结果
+        // 5. 如果缓存启用，缓存解析结果（同时提取并缓存表名）
         if (cacheEnabled && SQL_PARSE_CACHE != null) {
             // 创建新的 HashMap 和 ArrayList，避免外部修改影响缓存
             Map<String, ColumnTableDto> cachedMap = new java.util.HashMap<>(result.getKey());
             List<FieldEncryptorInfoDto> cachedList = new java.util.ArrayList<>(result.getValue());
-            ParseResult parseResult = new ParseResult(cachedMap, cachedList);
+            
+            // 从解析结果中提取表名集合
+            Set<String> tableNames = extractTableNames(result.getKey(), result.getValue());
+            
+            ParseResult parseResult = new ParseResult(cachedMap, cachedList, tableNames);
             SQL_PARSE_CACHE.put(cacheKey, parseResult);
+            
+            // 同时缓存表名（用于快速路径）
+            if (TABLE_NAME_CACHE != null && !tableNames.isEmpty()) {
+                TABLE_NAME_CACHE.put(cacheKey, new HashSet<>(tableNames));
+            }
         }
 
         return result;
@@ -223,7 +254,99 @@ public class SqlParseCache {
         if (!cacheEnabled || SQL_PARSE_CACHE == null) {
             return new CacheStatsInfo(0, currentMaxSize, false);
         }
-        return new CacheStatsInfo(SQL_PARSE_CACHE.size(), currentMaxSize, true);
+        long totalSize = SQL_PARSE_CACHE.size();
+        long tableNameCacheSize = TABLE_NAME_CACHE != null ? TABLE_NAME_CACHE.size() : 0;
+        return new CacheStatsInfo(totalSize, currentMaxSize, true, tableNameCacheSize);
+    }
+
+    /**
+     * 从 SQL 解析结果中提取表名集合
+     *
+     * @param placeholderColumnTableMap 占位符到表字段的映射
+     * @param fieldEncryptorInfos 字段加密信息列表
+     * @return 表名集合（小写）
+     */
+    private static Set<String> extractTableNames(Map<String, ColumnTableDto> placeholderColumnTableMap,
+                                                  List<FieldEncryptorInfoDto> fieldEncryptorInfos) {
+        Set<String> tableNames = new HashSet<>();
+        
+        // 从占位符映射中提取表名
+        if (CollectionUtil.isNotEmpty(placeholderColumnTableMap)) {
+            for (ColumnTableDto dto : placeholderColumnTableMap.values()) {
+                if (StrUtil.isNotBlank(dto.getSourceTableName())) {
+                    tableNames.add(dto.getSourceTableName().toLowerCase());
+                }
+            }
+        }
+        
+        // 从字段加密信息中提取表名
+        if (CollectionUtil.isNotEmpty(fieldEncryptorInfos)) {
+            for (FieldEncryptorInfoDto dto : fieldEncryptorInfos) {
+                if (StrUtil.isNotBlank(dto.getSourceTableName())) {
+                    tableNames.add(dto.getSourceTableName().toLowerCase());
+                }
+            }
+        }
+        
+        return tableNames;
+    }
+
+    /**
+     * 解析 SQL 中的表名（轻量级方法，优先使用缓存）
+     * <p>
+     * 该方法优先从 SQL 解析缓存中提取表名，如果缓存未命中，
+     * 则使用轻量级的 TableNameParser 进行解析。
+     * </p>
+     *
+     * @param sql SQL 语句
+     * @return 表名集合（小写）
+     */
+    public static Set<String> parseTableNames(String sql) {
+        if (StrUtil.isBlank(sql)) {
+            return Collections.emptySet();
+        }
+
+        // 1. 规范化 SQL
+        String normalizedSql = normalizeSql(sql);
+        String cacheKey = DigestUtil.md5Hex(normalizedSql);
+
+        // 2. 优先从 SQL 解析缓存中提取表名
+        if (cacheEnabled && SQL_PARSE_CACHE != null) {
+            ParseResult cached = SQL_PARSE_CACHE.get(cacheKey);
+            if (cached != null && CollectionUtil.isNotEmpty(cached.getTableNames())) {
+                log.debug("Table names extracted from SQL parse cache");
+                return new HashSet<>(cached.getTableNames());
+            }
+        }
+
+        // 3. 从表名缓存中获取
+        if (cacheEnabled && TABLE_NAME_CACHE != null) {
+            Set<String> cachedTables = TABLE_NAME_CACHE.get(cacheKey);
+            if (cachedTables != null && !cachedTables.isEmpty()) {
+                log.debug("Table names found in table name cache");
+                return new HashSet<>(cachedTables);
+            }
+        }
+
+        // 4. 缓存未命中，使用轻量级解析器解析
+        try {
+            TableNameParser parser = new TableNameParser(sql);
+            Set<String> tableNames = parser.tables();
+            // 转换为小写并去重
+            Set<String> normalizedTableNames = tableNames.stream()
+                    .map(String::toLowerCase)
+                    .collect(Collectors.toSet());
+            
+            // 缓存结果
+            if (cacheEnabled && TABLE_NAME_CACHE != null) {
+                TABLE_NAME_CACHE.put(cacheKey, normalizedTableNames);
+            }
+            
+            return normalizedTableNames;
+        } catch (Exception e) {
+            log.warn("Failed to parse table names from SQL: {}", sql.substring(0, Math.min(50, sql.length())), e);
+            return Collections.emptySet();
+        }
     }
 
     /**
@@ -231,7 +354,8 @@ public class SqlParseCache {
      */
     public static void clear() {
         SQL_PARSE_CACHE.clear();
-        log.info("SQL parse cache cleared");
+        TABLE_NAME_CACHE.clear();
+        log.info("SQL parse cache and table name cache cleared");
     }
 
     /**
@@ -253,11 +377,17 @@ public class SqlParseCache {
         private final long size;
         private final long maxSize;
         private final boolean enabled;
+        private final long tableNameCacheSize;
 
         public CacheStatsInfo(long size, long maxSize, boolean enabled) {
+            this(size, maxSize, enabled, 0);
+        }
+
+        public CacheStatsInfo(long size, long maxSize, boolean enabled, long tableNameCacheSize) {
             this.size = size;
             this.maxSize = maxSize;
             this.enabled = enabled;
+            this.tableNameCacheSize = tableNameCacheSize;
         }
 
         public long getSize() {
@@ -270,6 +400,10 @@ public class SqlParseCache {
 
         public boolean isEnabled() {
             return enabled;
+        }
+
+        public long getTableNameCacheSize() {
+            return tableNameCacheSize;
         }
 
         public double getUsageRate() {
