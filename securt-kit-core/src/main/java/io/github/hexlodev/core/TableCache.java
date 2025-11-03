@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 public class TableCache {
@@ -23,90 +24,110 @@ public class TableCache {
 
     /**
      * 需要加密的表名集合（小写）
+     * <p>
+     * 使用 ConcurrentHashMap.newKeySet() 保证线程安全，性能优于 Collections.synchronizedSet()
+     * </p>
      */
-    private static final Set<String> FIELD_ENCRYPT_TABLE = new HashSet<>();
+    private static final Set<String> FIELD_ENCRYPT_TABLE = ConcurrentHashMap.newKeySet();
 
 
     /**
-     * 是否初始化
+     * 是否已初始化
+     * <p>
+     * 使用 AtomicBoolean 保证线程安全的初始化状态管理
+     * </p>
      *
      * @author luyanan
      * @since 2025/10/9
      */
-
-    private static final boolean init = false;
+    private static final AtomicBoolean INITIALIZED = new AtomicBoolean(false);
 
     /**
      * 初始化：先扫描实体（注解），再与配置文件合并
      * 注解优先：同表出现时跳过配置写入
+     * <p>
+     * 使用原子操作保证线程安全，防止重复初始化
+     * </p>
      */
     public static void init(FieldEncryptorProperties fieldEncryptorProperties) {
-        log.debug("【securt-kit】配置文件表缓存开始初始化");
-        if (null == fieldEncryptorProperties) {
-            log.debug("fieldEncryptorProperties未配置,请先配置");
+        // 使用原子操作检查并设置初始化状态，防止并发重复初始化
+        if (!INITIALIZED.compareAndSet(false, true)) {
+            log.warn("【securt-kit】TableCache already initialized, skipping...");
             return;
         }
-        // 使用策略缓存获取默认策略实例
-        FieldEncryptorStrategy defaultFieldEncryptorStrategy;
+        
         try {
-            // 尝试获取默认策略（通过接口类型）
-            defaultFieldEncryptorStrategy = StrategyCache.getStrategy(FieldEncryptorStrategy.class);
-        } catch (Exception e) {
-            log.warn("Failed to get default strategy, will use strategy class name instead: {}", e.getMessage());
-            // 如果无法获取默认策略，将在后续逻辑中使用策略类名
-            defaultFieldEncryptorStrategy = null;
-        }
-        Map<String, Map<String, Class<? extends FieldEncryptorStrategy>>> parserEntityClass = new HashMap<>();
+            log.debug("【securt-kit】配置文件表缓存开始初始化");
+            if (null == fieldEncryptorProperties) {
+                log.debug("fieldEncryptorProperties未配置,请先配置");
+                // 如果配置为空，重置初始化状态
+                INITIALIZED.set(false);
+                return;
+            }
+            
+            // 使用策略缓存获取默认策略实例
+            FieldEncryptorStrategy defaultFieldEncryptorStrategy;
+            try {
+                // 尝试获取默认策略（通过接口类型）
+                defaultFieldEncryptorStrategy = StrategyCache.getStrategy(FieldEncryptorStrategy.class);
+            } catch (Exception e) {
+                log.warn("Failed to get default strategy, will use strategy class name instead: {}", e.getMessage());
+                // 如果无法获取默认策略，将在后续逻辑中使用策略类名
+                defaultFieldEncryptorStrategy = null;
+            }
+            Map<String, Map<String, Class<? extends FieldEncryptorStrategy>>> parserEntityClass = new HashMap<>();
 
-
-        // 跟配置文件中的进行合并，
-        List<FieldEncryptorProperties.TableConfig> tables = fieldEncryptorProperties.getTables();
-        if (CollectionUtil.isNotEmpty(tables)) {
-            for (FieldEncryptorProperties.TableConfig table : tables) {
-                Map<String, Class<? extends FieldEncryptorStrategy>> fieldEncryptorMap = new HashMap<>();
-                String tableName = table.getTableName().toLowerCase(Locale.ROOT);
-                List<FieldEncryptorProperties.FieldConfig> fields = table.getFields();
-                if (CollectionUtil.isNotEmpty(fields)) {
-//                    if (parserEntityClass.containsKey(tableName)) {
-//                        // 以添加了注解的为准
-//                        continue;
-//                    }
-                    for (FieldEncryptorProperties.FieldConfig field : fields) {
-                        String fieldName = field.getFieldName();
-                        String strategy = field.getStrategy();
-                        if (StrUtil.isBlank(strategy)) {
-                            // 如果没有配置策略，使用默认策略的类名
-                            if (defaultFieldEncryptorStrategy != null) {
-                                strategy = defaultFieldEncryptorStrategy.getClass().getName();
-                            } else {
-                                log.warn("No default strategy available and no strategy configured for field: {}.{}", tableName, fieldName);
-                                continue; // 跳过该字段
+            // 跟配置文件中的进行合并
+            List<FieldEncryptorProperties.TableConfig> tables = fieldEncryptorProperties.getTables();
+            if (CollectionUtil.isNotEmpty(tables)) {
+                for (FieldEncryptorProperties.TableConfig table : tables) {
+                    Map<String, Class<? extends FieldEncryptorStrategy>> fieldEncryptorMap = new HashMap<>();
+                    String tableName = table.getTableName().toLowerCase(Locale.ROOT);
+                    List<FieldEncryptorProperties.FieldConfig> fields = table.getFields();
+                    if (CollectionUtil.isNotEmpty(fields)) {
+                        for (FieldEncryptorProperties.FieldConfig field : fields) {
+                            String fieldName = field.getFieldName();
+                            String strategy = field.getStrategy();
+                            if (StrUtil.isBlank(strategy)) {
+                                // 如果没有配置策略，使用默认策略的类名
+                                if (defaultFieldEncryptorStrategy != null) {
+                                    strategy = defaultFieldEncryptorStrategy.getClass().getName();
+                                } else {
+                                    log.warn("No default strategy available and no strategy configured for field: {}.{}", tableName, fieldName);
+                                    continue; // 跳过该字段
+                                }
                             }
+                            fieldEncryptorMap.put(fieldName, ClassUtil.loadClass(strategy));
                         }
-                        fieldEncryptorMap.put(fieldName, ClassUtil.loadClass(strategy));
+                        if (CollectionUtil.isNotEmpty(fieldEncryptorMap)) {
+                            parserEntityClass.put(tableName, fieldEncryptorMap);
+                        }
                     }
-                    if (CollectionUtil.isNotEmpty(fieldEncryptorMap)) {
-                        parserEntityClass.put(tableName, fieldEncryptorMap);
-                    }
-
                 }
-
             }
-        }
 
-        if (CollectionUtil.isNotEmpty(parserEntityClass)) {
-            for (Map.Entry<String, Map<String, Class<? extends FieldEncryptorStrategy>>> stringMapEntry : parserEntityClass.entrySet()) {
-                String tableName = stringMapEntry.getKey();
-                Map<String, Class<? extends FieldEncryptorStrategy>> value = stringMapEntry.getValue();
-                TABLE_FIELD_ENCRYPT_INFO.put(tableName, value);
-                FIELD_ENCRYPT_TABLE.add(tableName);
+            if (CollectionUtil.isNotEmpty(parserEntityClass)) {
+                for (Map.Entry<String, Map<String, Class<? extends FieldEncryptorStrategy>>> stringMapEntry : parserEntityClass.entrySet()) {
+                    String tableName = stringMapEntry.getKey();
+                    Map<String, Class<? extends FieldEncryptorStrategy>> value = stringMapEntry.getValue();
+                    TABLE_FIELD_ENCRYPT_INFO.put(tableName, value);
+                    FIELD_ENCRYPT_TABLE.add(tableName);
+                }
             }
+
+            // 初始化 SQL 解析缓存配置
+            initSqlParseCache(fieldEncryptorProperties);
+
+            log.debug("【securt-kit】配置文件表缓存初始化完成，需处理的表为:{}", TABLE_FIELD_ENCRYPT_INFO);
+        } catch (Exception e) {
+            // 初始化失败，重置状态以便下次重试
+            log.error("【securt-kit】TableCache initialization failed", e);
+            INITIALIZED.set(false);
+            // 清空可能已经部分写入的数据
+            TABLE_FIELD_ENCRYPT_INFO.clear();
+            FIELD_ENCRYPT_TABLE.clear();
+            throw new RuntimeException("Failed to initialize TableCache", e);
         }
-
-        // 初始化 SQL 解析缓存配置
-        initSqlParseCache(fieldEncryptorProperties);
-
-        log.debug("【securt-kit】配置文件表缓存初始化完成，需处理的表为:{}", TABLE_FIELD_ENCRYPT_INFO);
     }
 
     /**
@@ -158,8 +179,26 @@ public class TableCache {
     }
 
 
+    /**
+     * 检查是否已初始化
+     *
+     * @return true 如果已初始化，false 否则
+     */
     public static boolean isInit() {
-        return init;
+        return INITIALIZED.get();
+    }
+
+    /**
+     * 重置初始化状态（用于测试或配置热更新）
+     * <p>
+     * 清空所有缓存数据并将初始化状态重置为 false
+     * </p>
+     */
+    public static void reset() {
+        INITIALIZED.set(false);
+        TABLE_FIELD_ENCRYPT_INFO.clear();
+        FIELD_ENCRYPT_TABLE.clear();
+        log.info("【securt-kit】TableCache reset completed");
     }
 
     /**

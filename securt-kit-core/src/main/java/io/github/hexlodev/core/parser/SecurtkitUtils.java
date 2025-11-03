@@ -54,9 +54,14 @@ public class SecurtkitUtils {
     public static final String PLACEHOLDER = "SECURT_KIT_PLACEHOLDER_";
 
     /**
-     * 占位符计数器，用于生成唯一的占位符标识
+     * 占位符计数器（线程本地变量）
+     * <p>
+     * 使用 ThreadLocal 保证每个线程有独立的计数器，避免并发环境下计数错误。
+     * 这样每个线程解析 SQL 时都能正确地从 1 开始计数。
+     * </p>
      */
-    private static final AtomicInteger PLACEHOLDER_COUNTER = new AtomicInteger(0);
+    private static final ThreadLocal<AtomicInteger> PLACEHOLDER_COUNTER = 
+        ThreadLocal.withInitial(() -> new AtomicInteger(0));
 
     /**
      * 解析SQL语句，获取占位符与表字段的映射关系以及需要加密的字段列表
@@ -159,8 +164,10 @@ public class SecurtkitUtils {
             return sql;
         }
 
+        // 获取当前线程的计数器，每个线程独立计数，避免并发干扰
+        AtomicInteger counter = PLACEHOLDER_COUNTER.get();
         // 重置计数器，确保每次解析都从1开始
-        PLACEHOLDER_COUNTER.set(1);
+        counter.set(1);
 
         // 使用正则表达式匹配所有问号占位符
         Pattern pattern = Pattern.compile("\\?");
@@ -168,7 +175,7 @@ public class SecurtkitUtils {
 
         StringBuffer sb = new StringBuffer();
         while (matcher.find()) {
-            String replacement = PLACEHOLDER + PLACEHOLDER_COUNTER.getAndIncrement();
+            String replacement = PLACEHOLDER + counter.getAndIncrement();
             matcher.appendReplacement(sb, replacement);
         }
         matcher.appendTail(sb);
