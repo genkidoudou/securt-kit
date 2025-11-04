@@ -194,13 +194,13 @@ public class SqlParseCache {
         if (cacheEnabled && SQL_PARSE_CACHE != null) {
             ParseResult cached = SQL_PARSE_CACHE.get(cacheKey);
             if (cached != null) {
-                log.debug("Cache hit for SQL: {}", sql.substring(0, Math.min(50, sql.length())));
+                log.debug("Cache hit for SQL: {}", sql);
                 // 返回缓存的副本，避免外部修改影响缓存
                 Map<String, ColumnTableDto> mapCopy = new java.util.HashMap<>(cached.getPlaceholderColumnTableMap());
                 List<FieldEncryptorInfoDto> listCopy = new java.util.ArrayList<>(cached.getFieldEncryptorInfos());
                 return Pair.of(mapCopy, listCopy);
             }
-            log.debug("Cache miss for SQL: {}", sql.substring(0, Math.min(50, sql.length())));
+            log.debug("Cache miss for SQL: {}", sql);
         }
 
         // 4. 缓存未命中或未启用，执行解析
@@ -372,7 +372,7 @@ public class SqlParseCache {
             
             return normalizedTableNames;
         } catch (Exception e) {
-            log.warn("Failed to parse table names from SQL: {}", sql.substring(0, Math.min(50, sql.length())), e);
+            log.warn("Failed to parse table names from SQL: {}", sql, e);
             return Collections.emptySet();
         }
     }

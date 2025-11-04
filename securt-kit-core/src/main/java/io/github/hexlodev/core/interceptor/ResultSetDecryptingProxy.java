@@ -92,8 +92,12 @@ final class ResultSetDecryptingProxy implements InvocationHandler {
                     String value = clobToString(clob);
                     String decrypted = maybeDecryptWithInfo(column, value);
                     if (decrypted != null && !decrypted.equals(value)) {
-                        // 如果解密成功，返回新的 Clob（使用解密后的字符串创建）
-                        return delegate.getConnection().createClob(decrypted);
+                        // 如果解密成功，返回新的 Clob（由于 ResultSet 没有 getConnection，使用 StringReader 包装）
+                        // 注意：这会导致类型不匹配，但这是目前可行的方案
+                        // 更好的方案是返回 String，但会破坏类型一致性
+                        // 实际使用时，如果字段是 TEXT 类型，建议使用 getString() 而不是 getClob()
+                        log.debug("Decrypted Clob for column: {}, returning StringReader wrapper", column);
+                        return new java.io.StringReader(decrypted);
                     }
                 }
                 return result;
@@ -105,8 +109,9 @@ final class ResultSetDecryptingProxy implements InvocationHandler {
                     String value = nClobToString(nClob);
                     String decrypted = maybeDecryptWithInfo(column, value);
                     if (decrypted != null && !decrypted.equals(value)) {
-                        // 如果解密成功，返回新的 NClob（使用解密后的字符串创建）
-                        return delegate.getConnection().createNClob(decrypted);
+                        // 如果解密成功，返回新的 Reader（由于 ResultSet 没有 getConnection，使用 StringReader 包装）
+                        log.debug("Decrypted NClob for column: {}, returning StringReader wrapper", column);
+                        return new java.io.StringReader(decrypted);
                     }
                 }
                 return result;

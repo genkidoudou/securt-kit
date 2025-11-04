@@ -56,7 +56,7 @@ public class SimpleInterceptorCallableStatement implements CallableStatement {
             }
         } catch (Exception e) {
             log.warn("Failed to parse table names from SQL [sql={}, sqlLength={}], error: {}", 
-                    sql != null && sql.length() > 100 ? sql.substring(0, 100) + "..." : sql,
+                    sql != null ? sql : "null",
                     sql != null ? sql.length() : 0,
                     e.getMessage(), e);
         }
@@ -80,10 +80,9 @@ public class SimpleInterceptorCallableStatement implements CallableStatement {
             return resultSet;
         } catch (SQLException e) {
             long endTime = System.currentTimeMillis();
-            String sqlPreview = sql != null && sql.length() > 100 ? sql.substring(0, 100) + "..." : sql;
             log.error("[CALLABLE QUERY ERROR] Failed after {}ms [sql={}, sqlLength={}], error: {}", 
                     (endTime - startTime),
-                    sqlPreview,
+                    sql != null ? sql : "null",
                     sql != null ? sql.length() : 0,
                     e.getMessage(), e);
             throw e;
@@ -108,10 +107,9 @@ public class SimpleInterceptorCallableStatement implements CallableStatement {
             return result;
         } catch (SQLException e) {
             long endTime = System.currentTimeMillis();
-            String sqlPreview = sql != null && sql.length() > 100 ? sql.substring(0, 100) + "..." : sql;
             log.error("[CALLABLE UPDATE ERROR] Failed after {}ms [sql={}, sqlLength={}], error: {}", 
                     (endTime - startTime),
-                    sqlPreview,
+                    sql != null ? sql : "null",
                     sql != null ? sql.length() : 0,
                     e.getMessage(), e);
             throw e;
@@ -136,10 +134,9 @@ public class SimpleInterceptorCallableStatement implements CallableStatement {
             return result;
         } catch (SQLException e) {
             long endTime = System.currentTimeMillis();
-            String sqlPreview = sql != null && sql.length() > 100 ? sql.substring(0, 100) + "..." : sql;
             log.error("[CALLABLE EXECUTE ERROR] Failed after {}ms [sql={}, sqlLength={}], error: {}", 
                     (endTime - startTime),
-                    sqlPreview,
+                    sql != null ? sql : "null",
                     sql != null ? sql.length() : 0,
                     e.getMessage(), e);
             throw e;

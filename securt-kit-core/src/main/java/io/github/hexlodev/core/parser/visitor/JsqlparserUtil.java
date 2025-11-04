@@ -62,7 +62,8 @@ public class JsqlparserUtil {
         //2.有指定表名时，从当前层的这张表的所有字段里面这个字段的信息 （select 别名.字段）
         if (table != null) {
             String columnTableName = table.getName().toLowerCase();
-            List<FieldInfoDto> matchFields = Optional.ofNullable(CollectionUtils.getValueIgnoreFloat(layerFieldTableMap.get(String.valueOf(layer)), columnTableName)).orElse(new HashSet<>()).stream().filter(f -> StringUtils.equalIgnoreFieldSymbol(f.getColumnName(), columName)).collect(Collectors.toList());
+            List<FieldInfoDto> matchFields = Optional
+                    .ofNullable(CollectionUtils.getValueIgnoreFloat(layerFieldTableMap.get(String.valueOf(layer)), columnTableName)).orElse(new HashSet<>()).stream().filter(f -> StringUtils.equalIgnoreFieldSymbol(f.getColumnName(), columName)).collect(Collectors.toList());
             if (CollectionUtils.isNotEmpty(matchFields)) {
                 //当前层的所有字段里面叫这个的，正确sql语法中只会有一个，所以get(0)
                 FieldInfoDto matchField = matchFields.get(0);

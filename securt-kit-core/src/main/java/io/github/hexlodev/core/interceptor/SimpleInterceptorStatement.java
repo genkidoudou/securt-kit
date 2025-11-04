@@ -95,7 +95,7 @@ public class SimpleInterceptorStatement implements Statement {
             }
         } catch (Exception e) {
             log.warn("Failed to parse table names from SQL [sql={}, sqlLength={}], error: {}", 
-                    sql != null && sql.length() > 100 ? sql.substring(0, 100) + "..." : sql,
+                    sql != null ? sql : "null",
                     sql != null ? sql.length() : 0,
                     e.getMessage(), e);
         }
@@ -132,9 +132,8 @@ public class SimpleInterceptorStatement implements Statement {
             try {
                 mapListPair = SecurtkitUtils.parseSql(sql);
             } catch (JSQLParserException e) {
-                String sqlPreview = sql != null && sql.length() > 100 ? sql.substring(0, 100) + "..." : sql;
                 log.warn("Failed to parse SQL for decryption [sql={}, sqlLength={}], error: {}", 
-                        sqlPreview,
+                        sql != null ? sql : "null",
                         sql != null ? sql.length() : 0,
                         e.getMessage(), e);
             }
@@ -147,10 +146,9 @@ public class SimpleInterceptorStatement implements Statement {
             return ResultSetDecryptingProxy.wrap(resultSet, tables, mapListPair, sql);
         } catch (SQLException e) {
             long endTime = System.currentTimeMillis();
-            String sqlPreview = sql != null && sql.length() > 100 ? sql.substring(0, 100) + "..." : sql;
             log.error("[QUERY ERROR] Failed after {}ms [sql={}, sqlLength={}, tables={}], error: {}", 
                     (endTime - startTime),
-                    sqlPreview,
+                    sql != null ? sql : "null",
                     sql != null ? sql.length() : 0,
                     tables,
                     e.getMessage(), e);
@@ -189,10 +187,9 @@ public class SimpleInterceptorStatement implements Statement {
             return result;
         } catch (SQLException e) {
             long endTime = System.currentTimeMillis();
-            String sqlPreview = sql != null && sql.length() > 100 ? sql.substring(0, 100) + "..." : sql;
             log.error("[UPDATE ERROR] Failed after {}ms [sql={}, sqlLength={}, tables={}], error: {}", 
                     (endTime - startTime),
-                    sqlPreview,
+                    sql != null ? sql : "null",
                     sql != null ? sql.length() : 0,
                     tables,
                     e.getMessage(), e);
@@ -231,10 +228,9 @@ public class SimpleInterceptorStatement implements Statement {
             return result;
         } catch (SQLException e) {
             long endTime = System.currentTimeMillis();
-            String sqlPreview = sql != null && sql.length() > 100 ? sql.substring(0, 100) + "..." : sql;
             log.error("[EXECUTE ERROR] Failed after {}ms [sql={}, sqlLength={}, tables={}], error: {}", 
                     (endTime - startTime),
-                    sqlPreview,
+                    sql != null ? sql : "null",
                     sql != null ? sql.length() : 0,
                     tables,
                     e.getMessage(), e);

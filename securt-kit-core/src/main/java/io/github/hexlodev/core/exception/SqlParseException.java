@@ -31,7 +31,7 @@ public class SqlParseException extends SecurtKitException {
     @Override
     public String toString() {
         return String.format("SqlParseException{sql='%s', message='%s'}", 
-                sql != null && sql.length() > 50 ? sql.substring(0, 50) + "..." : sql, 
+                sql != null ? sql : "null", 
                 getMessage());
     }
 }

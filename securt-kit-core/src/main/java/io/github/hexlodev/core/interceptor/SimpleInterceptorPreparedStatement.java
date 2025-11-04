@@ -124,7 +124,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
             log.debug("Parsed tables from SQL: " + this.tables);
         } catch (Exception e) {
             log.warn("Failed to parse table names from SQL [sql={}, sqlLength={}], error: {}", 
-                    this.sql != null ? (this.sql.length() > 100 ? this.sql.substring(0, 100) + "..." : this.sql) : "null",
+                    this.sql != null ? this.sql : "null",
                     this.sql != null ? this.sql.length() : 0,
                     e.getMessage(), e);
             this.tables = new HashSet<>();
@@ -136,16 +136,13 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
                 this.pair = SecurtkitUtils.parseSql(this.sql);
                 if (log.isInfoEnabled()) {
                     log.info("SQL requires encryption [sql={}, tables={}, fieldsCount={}]", 
-                            this.sql != null && this.sql.length() > 100 ? this.sql.substring(0, 100) + "..." : this.sql,
+                            this.sql != null ? this.sql : "null",
                             this.tables,
                             this.pair != null ? this.pair.getValue().size() : 0);
                 }
             } catch (JSQLParserException e) {
-                String sqlPreview = this.sql != null && this.sql.length() > 100 
-                    ? this.sql.substring(0, 100) + "..." 
-                    : this.sql;
                 log.error("Failed to parse SQL for encryption [sql={}, sqlLength={}, tables={}], error: {}", 
-                        sqlPreview,
+                        this.sql != null ? this.sql : "null",
                         this.sql != null ? this.sql.length() : 0,
                         this.tables,
                         e.getMessage(), e);
@@ -225,7 +222,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
         String finalSql = buildFinalSql();
         if (log.isInfoEnabled()) {
             log.info("[PREPARED QUERY] [sql={}, sqlLength={}]", 
-                    sql != null && sql.length() > 100 ? sql.substring(0, 100) + "..." : sql,
+                    sql != null ? sql : "null",
                     sql != null ? sql.length() : 0);
         }
         if (!sql.equals(finalSql)) {
@@ -239,17 +236,16 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
             if (log.isInfoEnabled()) {
                 log.info("[PREPARED QUERY RESULT] Executed in {}ms [sql={}]", 
                         (endTime - startTime),
-                        sql != null && sql.length() > 100 ? sql.substring(0, 100) + "..." : sql);
+                        sql != null ? sql : "null");
             }
 
             // 包装结果集以实现自动解密
             return ResultSetDecryptingProxy.wrap(resultSet, this.tables, this.pair, this.sql);
         } catch (SQLException e) {
             long endTime = System.currentTimeMillis();
-            String sqlPreview = sql != null && sql.length() > 100 ? sql.substring(0, 100) + "..." : sql;
             log.error("[PREPARED QUERY ERROR] Failed after {}ms [sql={}, sqlLength={}, tables={}], error: {}", 
                     (endTime - startTime),
-                    sqlPreview,
+                    sql != null ? sql : "null",
                     sql != null ? sql.length() : 0,
                     tables,
                     e.getMessage(), e);
@@ -270,7 +266,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
         String finalSql = buildFinalSql();
         if (log.isInfoEnabled()) {
             log.info("[PREPARED UPDATE] [sql={}, sqlLength={}]", 
-                    sql != null && sql.length() > 100 ? sql.substring(0, 100) + "..." : sql,
+                    sql != null ? sql : "null",
                     sql != null ? sql.length() : 0);
         }
         if (!sql.equals(finalSql)) {
@@ -284,16 +280,15 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
             if (log.isInfoEnabled()) {
                 log.info("[PREPARED UPDATE RESULT] Executed in {}ms [sql={}, affectedRows={}]", 
                         (endTime - startTime),
-                        sql != null && sql.length() > 100 ? sql.substring(0, 100) + "..." : sql,
+                        sql != null ? sql : "null",
                         result);
             }
             return result;
         } catch (SQLException e) {
             long endTime = System.currentTimeMillis();
-            String sqlPreview = sql != null && sql.length() > 100 ? sql.substring(0, 100) + "..." : sql;
             log.error("[PREPARED UPDATE ERROR] Failed after {}ms [sql={}, sqlLength={}, tables={}, affectedRows=unknown], error: {}", 
                     (endTime - startTime),
-                    sqlPreview,
+                    sql != null ? sql : "null",
                     sql != null ? sql.length() : 0,
                     tables,
                     e.getMessage(), e);
@@ -314,7 +309,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
         String finalSql = buildFinalSql();
         if (log.isInfoEnabled()) {
             log.info("[PREPARED EXECUTE] [sql={}, sqlLength={}]", 
-                    sql != null && sql.length() > 100 ? sql.substring(0, 100) + "..." : sql,
+                    sql != null ? sql : "null",
                     sql != null ? sql.length() : 0);
         }
         if (!sql.equals(finalSql)) {
@@ -328,16 +323,15 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
             if (log.isInfoEnabled()) {
                 log.info("[PREPARED EXECUTE RESULT] Executed in {}ms [sql={}, result={}]", 
                         (endTime - startTime),
-                        sql != null && sql.length() > 100 ? sql.substring(0, 100) + "..." : sql,
+                        sql != null ? sql : "null",
                         result);
             }
             return result;
         } catch (SQLException e) {
             long endTime = System.currentTimeMillis();
-            String sqlPreview = sql != null && sql.length() > 100 ? sql.substring(0, 100) + "..." : sql;
             log.error("[PREPARED EXECUTE ERROR] Failed after {}ms [sql={}, sqlLength={}, tables={}], error: {}", 
                     (endTime - startTime),
-                    sqlPreview,
+                    sql != null ? sql : "null",
                     sql != null ? sql.length() : 0,
                     tables,
                     e.getMessage(), e);
@@ -574,18 +568,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
             }
         }
         delegate.setCharacterStream(parameterIndex, reader, length);
-        if (reader != null) {
-            // 尝试读取并缓存值（用于日志）
-            try {
-                // 创建新的 Reader，因为原来的可能已经被消费
-                String value = readerToString(new java.io.StringReader(readerToString(reader, length)), length);
-                if (value != null) {
-                    parameterValues.put(parameterIndex, value);
-                }
-            } catch (Exception ignored) {
-                // 读取失败不影响执行
-            }
-        }
+        // 注意：如果 Reader 在加密逻辑中已被读取，这里无法再次读取，所以不缓存值
     }
 
     @Override
@@ -609,7 +592,8 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
                     String encrypted = maybeEncryptValue(parameterIndex, value);
                     if (encrypted != null && !encrypted.equals(value)) {
                         // 如果加密成功，使用加密后的值创建新的 Clob
-                        Clob encryptedClob = delegate.getConnection().createClob(encrypted);
+                        Clob encryptedClob = delegate.getConnection().createClob();
+                        encryptedClob.setString(1, encrypted);
                         delegate.setClob(parameterIndex, encryptedClob);
                         parameterValues.put(parameterIndex, encrypted);
                         return;
@@ -704,17 +688,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
             }
         }
         delegate.setNCharacterStream(parameterIndex, value, length);
-        if (value != null) {
-            // 尝试读取并缓存值（用于日志）
-            try {
-                String strValue = readerToString(value, length);
-                if (strValue != null) {
-                    parameterValues.put(parameterIndex, strValue);
-                }
-            } catch (Exception ignored) {
-                // 读取失败不影响执行
-            }
-        }
+        // 注意：如果 Reader 在加密逻辑中已被读取，这里无法再次读取，所以不缓存值
     }
 
     @Override
@@ -728,7 +702,8 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
                     String encrypted = maybeEncryptValue(parameterIndex, strValue);
                     if (encrypted != null && !encrypted.equals(strValue)) {
                         // 如果加密成功，使用加密后的值创建新的 NClob
-                        NClob encryptedNClob = delegate.getConnection().createNClob(encrypted);
+                        NClob encryptedNClob = delegate.getConnection().createNClob();
+                        encryptedNClob.setString(1, encrypted);
                         delegate.setNClob(parameterIndex, encryptedNClob);
                         parameterValues.put(parameterIndex, encrypted);
                         return;
@@ -763,7 +738,8 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
                     String encrypted = maybeEncryptValue(parameterIndex, value);
                     if (encrypted != null && !encrypted.equals(value)) {
                         // 如果加密成功，使用加密后的值创建新的 Clob
-                        Clob encryptedClob = delegate.getConnection().createClob(encrypted);
+                        Clob encryptedClob = delegate.getConnection().createClob();
+                        encryptedClob.setString(1, encrypted);
                         delegate.setClob(parameterIndex, encryptedClob);
                         parameterValues.put(parameterIndex, encrypted);
                         return;
@@ -774,17 +750,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
             }
         }
         delegate.setClob(parameterIndex, reader, length);
-        if (reader != null) {
-            // 尝试读取并缓存值（用于日志）
-            try {
-                String value = readerToString(reader, length);
-                if (value != null) {
-                    parameterValues.put(parameterIndex, value);
-                }
-            } catch (Exception ignored) {
-                // 读取失败不影响执行
-            }
-        }
+        // 注意：如果 Reader 在加密逻辑中已被读取，这里无法再次读取，所以不缓存值
     }
 
     @Override
@@ -803,7 +769,8 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
                     String encrypted = maybeEncryptValue(parameterIndex, value);
                     if (encrypted != null && !encrypted.equals(value)) {
                         // 如果加密成功，使用加密后的值创建新的 NClob
-                        NClob encryptedNClob = delegate.getConnection().createNClob(encrypted);
+                        NClob encryptedNClob = delegate.getConnection().createNClob();
+                        encryptedNClob.setString(1, encrypted);
                         delegate.setNClob(parameterIndex, encryptedNClob);
                         parameterValues.put(parameterIndex, encrypted);
                         return;
@@ -814,17 +781,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
             }
         }
         delegate.setNClob(parameterIndex, reader, length);
-        if (reader != null) {
-            // 尝试读取并缓存值（用于日志）
-            try {
-                String value = readerToString(reader, length);
-                if (value != null) {
-                    parameterValues.put(parameterIndex, value);
-                }
-            } catch (Exception ignored) {
-                // 读取失败不影响执行
-            }
-        }
+        // 注意：如果 Reader 在加密逻辑中已被读取，这里无法再次读取，所以不缓存值
     }
 
     @Override
@@ -869,17 +826,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
             }
         }
         delegate.setCharacterStream(parameterIndex, reader, length);
-        if (reader != null) {
-            // 尝试读取并缓存值（用于日志）
-            try {
-                String value = readerToString(reader, length);
-                if (value != null) {
-                    parameterValues.put(parameterIndex, value);
-                }
-            } catch (Exception ignored) {
-                // 读取失败不影响执行
-            }
-        }
+        // 注意：如果 Reader 在加密逻辑中已被读取，这里无法再次读取，所以不缓存值
     }
 
     @Override
@@ -913,17 +860,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
             }
         }
         delegate.setCharacterStream(parameterIndex, reader);
-        if (reader != null) {
-            // 尝试读取并缓存值（用于日志）
-            try {
-                String value = readerToString(reader, Long.MAX_VALUE);
-                if (value != null) {
-                    parameterValues.put(parameterIndex, value);
-                }
-            } catch (Exception ignored) {
-                // 读取失败不影响执行
-            }
-        }
+        // 注意：如果 Reader 在加密逻辑中已被读取，这里无法再次读取，所以不缓存值
     }
 
     @Override
@@ -947,17 +884,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
             }
         }
         delegate.setNCharacterStream(parameterIndex, value);
-        if (value != null) {
-            // 尝试读取并缓存值（用于日志）
-            try {
-                String strValue = readerToString(value, Long.MAX_VALUE);
-                if (strValue != null) {
-                    parameterValues.put(parameterIndex, strValue);
-                }
-            } catch (Exception ignored) {
-                // 读取失败不影响执行
-            }
-        }
+        // 注意：如果 Reader 在加密逻辑中已被读取，这里无法再次读取，所以不缓存值
     }
 
     @Override
@@ -971,7 +898,8 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
                     String encrypted = maybeEncryptValue(parameterIndex, value);
                     if (encrypted != null && !encrypted.equals(value)) {
                         // 如果加密成功，使用加密后的值创建新的 Clob
-                        Clob encryptedClob = delegate.getConnection().createClob(encrypted);
+                        Clob encryptedClob = delegate.getConnection().createClob();
+                        encryptedClob.setString(1, encrypted);
                         delegate.setClob(parameterIndex, encryptedClob);
                         parameterValues.put(parameterIndex, encrypted);
                         return;
@@ -982,17 +910,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
             }
         }
         delegate.setClob(parameterIndex, reader);
-        if (reader != null) {
-            // 尝试读取并缓存值（用于日志）
-            try {
-                String value = readerToString(reader, Long.MAX_VALUE);
-                if (value != null) {
-                    parameterValues.put(parameterIndex, value);
-                }
-            } catch (Exception ignored) {
-                // 读取失败不影响执行
-            }
-        }
+        // 注意：如果 Reader 在加密逻辑中已被读取，这里无法再次读取，所以不缓存值
     }
 
     @Override
@@ -1011,7 +929,8 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
                     String encrypted = maybeEncryptValue(parameterIndex, value);
                     if (encrypted != null && !encrypted.equals(value)) {
                         // 如果加密成功，使用加密后的值创建新的 NClob
-                        NClob encryptedNClob = delegate.getConnection().createNClob(encrypted);
+                        NClob encryptedNClob = delegate.getConnection().createNClob();
+                        encryptedNClob.setString(1, encrypted);
                         delegate.setNClob(parameterIndex, encryptedNClob);
                         parameterValues.put(parameterIndex, encrypted);
                         return;
@@ -1022,17 +941,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
             }
         }
         delegate.setNClob(parameterIndex, reader);
-        if (reader != null) {
-            // 尝试读取并缓存值（用于日志）
-            try {
-                String value = readerToString(reader, Long.MAX_VALUE);
-                if (value != null) {
-                    parameterValues.put(parameterIndex, value);
-                }
-            } catch (Exception ignored) {
-                // 读取失败不影响执行
-            }
-        }
+        // 注意：如果 Reader 在加密逻辑中已被读取，这里无法再次读取，所以不缓存值
     }
 
     /**
@@ -1050,6 +959,136 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
             return sb.toString();
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException("MD5 algorithm not available", e);
+        }
+    }
+
+    /**
+     * 尝试对参数值进行加密
+     * <p>
+     * 该方法会根据参数索引查找对应的字段配置，如果字段需要加密则进行加密处理。
+     * </p>
+     *
+     * @param parameterIndex 参数索引（从1开始）
+     * @param value          原始值
+     * @return 加密后的值，如果不需要加密或加密失败则返回原值
+     */
+    private String maybeEncryptValue(int parameterIndex, String value) {
+        if (value == null || !SecurtkitUtils.needEncrypt(this.tables) || this.pair == null) {
+            return value;
+        }
+
+        try {
+            Optional<ColumnTableDto> columnDto = pair.getKey().values().stream()
+                    .filter(a -> a.getInsertFieldIndex() != null && a.getInsertFieldIndex() == parameterIndex)
+                    .findFirst();
+
+            if (columnDto.isPresent()) {
+                ColumnTableDto dto = columnDto.get();
+                String sourceColumn = dto.getSourceColumn();
+                if (StrUtil.isNotBlank(dto.getSourceTableName()) && StrUtil.isNotBlank(sourceColumn)) {
+                    Class<? extends FieldEncryptorStrategy> fieldEncryptorStrategy =
+                            TableCache.getTableFieldEncryptInfo(dto.getSourceTableName(), sourceColumn);
+
+                    if (fieldEncryptorStrategy != null) {
+                        // 使用策略缓存获取策略实例
+                        FieldEncryptorStrategy strategy = StrategyCache.getStrategy(fieldEncryptorStrategy);
+                        // 使用统一的异常处理器
+                        String encrypted = io.github.hexlodev.core.exception.EncryptionHandler.handleEncryption(
+                                value,
+                                dto.getSourceTableName(),
+                                sourceColumn,
+                                () -> {
+                                    String enc = strategy.encryption(value);
+                                    if (log.isDebugEnabled()) {
+                                        log.debug("Encrypted TEXT field: {} in table: {}",
+                                                sourceColumn, dto.getSourceTableName());
+                                    }
+                                    return enc;
+                                },
+                                null // 使用默认策略
+                        );
+                        return encrypted != null ? encrypted : value;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to encrypt value at parameter index {}", parameterIndex, e);
+        }
+
+        return value;
+    }
+
+    /**
+     * 将 Clob 转换为 String
+     *
+     * @param clob Clob 对象
+     * @return 字符串内容，如果转换失败返回 null
+     */
+    private String clobToString(Clob clob) {
+        try {
+            long length = clob.length();
+            if (length > Integer.MAX_VALUE) {
+                log.warn("Clob length {} exceeds Integer.MAX_VALUE, truncating", length);
+                length = Integer.MAX_VALUE;
+            }
+            return clob.getSubString(1, (int) length);
+        } catch (SQLException e) {
+            log.error("Failed to convert Clob to String", e);
+            return null;
+        }
+    }
+
+    /**
+     * 将 NClob 转换为 String
+     *
+     * @param nClob NClob 对象
+     * @return 字符串内容，如果转换失败返回 null
+     */
+    private String nClobToString(NClob nClob) {
+        try {
+            long length = nClob.length();
+            if (length > Integer.MAX_VALUE) {
+                log.warn("NClob length {} exceeds Integer.MAX_VALUE, truncating", length);
+                length = Integer.MAX_VALUE;
+            }
+            return nClob.getSubString(1, (int) length);
+        } catch (SQLException e) {
+            log.error("Failed to convert NClob to String", e);
+            return null;
+        }
+    }
+
+    /**
+     * 将 Reader 转换为 String
+     *
+     * @param reader Reader 对象
+     * @param length 最大读取长度（如果为 Long.MAX_VALUE 则读取全部）
+     * @return 字符串内容，如果转换失败返回 null
+     */
+    private String readerToString(java.io.Reader reader, long length) {
+        try {
+            StringBuilder sb = new StringBuilder();
+            char[] buffer = new char[8192];
+            long totalRead = 0;
+            int read;
+            while ((read = reader.read(buffer)) != -1) {
+                if (length != Long.MAX_VALUE && totalRead + read > length) {
+                    // 只读取指定长度的内容
+                    int remaining = (int) (length - totalRead);
+                    sb.append(buffer, 0, remaining);
+                    totalRead += remaining;
+                    break;
+                }
+                sb.append(buffer, 0, read);
+                totalRead += read;
+                if (length != Long.MAX_VALUE && totalRead >= length) {
+                    break;
+                }
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            log.error("Failed to convert Reader to String", e);
+            return null;
         }
     }
 
