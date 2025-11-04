@@ -178,15 +178,21 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
             return "NULL";
         }
         if (value instanceof String) {
-            // 转义单引号
+            // 转义单引号，使用 StringBuilder 优化字符串拼接
             String str = ((String) value).replace("'", "''");
-            return "'" + str + "'";
+            StringBuilder sb = new StringBuilder(str.length() + 2);
+            sb.append('\'').append(str).append('\'');
+            return sb.toString();
         }
         if (value instanceof Number || value instanceof Boolean) {
             return String.valueOf(value);
         }
         // 其他类型转为字符串并转义
-        return "'" + String.valueOf(value).replace("'", "''") + "'";
+        String str = String.valueOf(value);
+        String escaped = str.replace("'", "''");
+        StringBuilder sb = new StringBuilder(escaped.length() + 2);
+        sb.append('\'').append(escaped).append('\'');
+        return sb.toString();
     }
 
 
@@ -316,15 +322,23 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
                         TableCache.getTableFieldEncryptInfo(columnTableDto.getSourceTableName(), sourceColumn);
 
                 if (fieldEncryptorStrategy != null) {
-                    try {
-                        // 使用策略缓存获取策略实例
-                        FieldEncryptorStrategy strategy = StrategyCache.getStrategy(fieldEncryptorStrategy);
-                        newValue = strategy.encryption(x);
-                        log.debug("Encrypted field: " + sourceColumn + " in table: " + columnTableDto.getSourceTableName());
-                    } catch (Exception e) {
-                        log.warn("Failed to encrypt field " + sourceColumn + ": " + e.getMessage());
-                        // 加密失败时使用原始值，避免SQL执行失败
-                    }
+                    // 使用策略缓存获取策略实例
+                    FieldEncryptorStrategy strategy = StrategyCache.getStrategy(fieldEncryptorStrategy);
+                    // 使用统一的异常处理器
+                    newValue = io.github.hexlodev.core.exception.EncryptionHandler.handleEncryption(
+                            x,
+                            columnTableDto.getSourceTableName(),
+                            sourceColumn,
+                            () -> {
+                                String encrypted = strategy.encryption(x);
+                                if (log.isDebugEnabled()) {
+                                    log.debug("Encrypted field: {} in table: {}", 
+                                            sourceColumn, columnTableDto.getSourceTableName());
+                                }
+                                return encrypted;
+                            },
+                            null // 使用默认策略
+                    );
                 }
             }
         }

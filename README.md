@@ -434,6 +434,12 @@ mvn spring-boot:run
 securtkit:
   encryptor:
     enable: true
+    # 失败处理策略：FALLBACK（默认，推荐）、FAIL_FAST、RETRY、SKIP
+    failure-policy: FALLBACK
+    # SQL 解析缓存配置（可选）
+    sql-parse-cache:
+      enable: true
+      max-size: 1000
     tables:
       - table-name: user
         fields:

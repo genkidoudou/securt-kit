@@ -265,7 +265,7 @@ public class TableNameCache {
 
 ---
 
-### 6. ResultSet 元数据缓存 🟡 中优先级
+### 6. ResultSet 元数据缓存 ✅ 已完成 🟡 中优先级
 
 **问题描述**:
 - `ResultSetMetaData` 每次调用都获取
@@ -275,32 +275,57 @@ public class TableNameCache {
 
 ```java
 public class ResultSetDecryptingProxy {
-    private ResultSetMetaData cachedMetaData;
+    private volatile ResultSetMetaData cachedMetaData;
     
     private ResultSetMetaData getMetaData() throws SQLException {
         if (cachedMetaData == null) {
-            cachedMetaData = delegate.getMetaData();
+            synchronized (this) {
+                if (cachedMetaData == null) {
+                    cachedMetaData = delegate.getMetaData();
+                }
+            }
         }
         return cachedMetaData;
     }
 }
 ```
 
+**实施状态**: ✅ 已完成
+- 已在 `ResultSetDecryptingProxy` 类中实现元数据缓存
+- 使用 `volatile` 和双重检查锁定确保线程安全
+- 在 `resolveColumn()` 和 `maybeDecrypt()` 方法中使用缓存的元数据
+- 避免重复调用 `delegate.getMetaData()`，提升性能
+
+**预期收益**:
+- 减少元数据获取开销
+- 提升 ResultSet 操作性能
+
 ---
 
-### 7. 占位符计数器优化 🟢 低优先级
+### 7. 占位符计数器优化 ✅ 已完成 🟢 低优先级
 
 **问题描述**:
 - `PLACEHOLDER_COUNTER` 每次解析都重置为 1
 - 高并发下可能有问题
 
 **设计方案**:
-- 使用 ThreadLocal 或每次解析时独立计数器
+- 使用 ThreadLocal 保证每个线程有独立的计数器
 - 避免并发干扰
+- 每次解析时正确重置计数器
+
+**实施状态**: ✅ 已完成
+- 已使用 `ThreadLocal<AtomicInteger>` 实现线程安全的计数器
+- 在 `question2Placeholder` 方法中正确重置计数器
+- 优化了 StringBuffer 的初始容量，减少扩容开销
+- 使用 `substring` 替代 `replace` 操作，提升性能
+
+**预期收益**:
+- 线程安全保证
+- 减少字符串操作开销
 
 ---
 
-### 8. 字符串操作优化 🟢 低优先级
+### 8. 字符串操作优化 ✅ 已完成 🟢 低优先级
 
 **问题描述**:
 - 频繁的字符串拼接和替换
@@ -308,15 +333,36 @@ public class ResultSetDecryptingProxy {
 
 **影响**: 较小，但累积效应明显
 
+**设计方案**:
+- 使用 `StringBuilder` 替代字符串拼接
+- 使用 `substring` 替代 `replace` 操作
+- 优化日志输出，使用参数化日志
+
+**实施状态**: ✅ 已完成
+- 优化了 `SecurtkitUtils.doParseSql()` 中的字符串操作：
+  - 使用 `substring` 替代 `replace` 操作（第131行）
+  - 优化日志输出，使用参数化日志避免字符串拼接
+- 优化了 `SimpleInterceptorPreparedStatement.formatSqlValue()` 方法：
+  - 使用 `StringBuilder` 替代字符串拼接
+  - 预先估算容量，减少扩容开销
+- 优化了日志输出：
+  - 使用 SLF4J 参数化日志（`{}` 占位符）
+  - 添加 `log.isDebugEnabled()` 检查，避免不必要的字符串构建
+
+**预期收益**:
+- 减少临时字符串对象创建
+- 降低 GC 压力
+- 提升字符串操作性能 10-20%
+
 ---
 
 ## 🔒 线程安全优化
 
-### 1. TableCache.FIELD_ENCRYPT_TABLE 线程安全 🔴 高优先级
+### 1. TableCache.FIELD_ENCRYPT_TABLE 线程安全 ✅ 已完成 🔴 高优先级
 
 **问题描述**:
 ```java
-// 当前代码（线程不安全）
+// 原有问题（已修复）
 private static final Set<String> FIELD_ENCRYPT_TABLE = new HashSet<>();
 
 // 问题：HashSet 不是线程安全的
@@ -326,19 +372,31 @@ private static final Set<String> FIELD_ENCRYPT_TABLE = new HashSet<>();
 **设计方案**:
 
 ```java
-// 方案1：使用 ConcurrentHashMap.keySet()
+// 方案1：使用 ConcurrentHashMap.newKeySet()（已实施）
 private static final Set<String> FIELD_ENCRYPT_TABLE = 
     ConcurrentHashMap.newKeySet();
 
-// 方案2：使用 Collections.synchronizedSet()
+// 方案2：使用 Collections.synchronizedSet()（备选方案）
 private static final Set<String> FIELD_ENCRYPT_TABLE = 
     Collections.synchronizedSet(new HashSet<>());
 
 // 推荐方案1，性能更好
 ```
 
-**修改位置**:
-- `TableCache.java` 第 28 行
+**实施状态**: ✅ 已完成
+- 已使用 `ConcurrentHashMap.newKeySet()` 实现线程安全的 Set
+- 优化了 `getTables()` 方法，返回 `Collections.unmodifiableSet()` 不可变视图
+- 增强了封装性，防止外部代码意外修改内部状态
+- 底层集合使用 ConcurrentHashMap，保证线程安全和性能
+
+**代码位置**:
+- `TableCache.java` 第 31 行：使用 `ConcurrentHashMap.newKeySet()`
+- `TableCache.java` 第 169-172 行：返回不可变视图
+
+**预期收益**:
+- ✅ 解决线程安全问题，避免并发写入导致的数据不一致
+- ✅ 提升封装性，防止外部代码修改内部状态
+- ✅ 性能优于 `Collections.synchronizedSet()`（使用分段锁）
 
 ---
 
@@ -453,7 +511,7 @@ if (isUpdate || isDelete) {
 
 ---
 
-### 3. 统一异常处理策略 🟡 中优先级
+### 3. 统一异常处理策略 ✅ 已完成 🟡 中优先级
 
 **问题描述**:
 - 加密失败时处理方式不统一
@@ -520,6 +578,39 @@ securtkit:
   encryptor:
     failure-policy: FALLBACK  # FAIL_FAST | FALLBACK | RETRY | SKIP
 ```
+
+**实施状态**: ✅ 已完成
+- 创建了统一的异常体系：
+  - `SecurtKitException`: 基础异常类
+  - `EncryptionException`: 加密异常（包含表名、字段名、原始值）
+  - `DecryptionException`: 解密异常（包含表名、字段名、加密值）
+  - `ConfigurationException`: 配置异常
+  - `SqlParseException`: SQL 解析异常
+- 实现了 `EncryptionHandler` 异常处理器：
+  - 支持 4 种失败策略：FAIL_FAST、FALLBACK、RETRY、SKIP
+  - 提供统一的加密/解密异常处理接口
+  - 支持从配置初始化失败策略
+- 在配置类中添加了失败策略配置：
+  - `FieldEncryptorProperties.FailurePolicy` 枚举
+  - 支持通过配置文件设置失败策略
+  - 默认策略为 FALLBACK（降级处理）
+- 修改了代码使用统一异常处理：
+  - `SimpleInterceptorPreparedStatement`: 加密操作使用统一异常处理
+  - `ResultSetDecryptingProxy`: 解密操作使用统一异常处理
+  - `TableCache`: 初始化时从配置加载失败策略
+
+**代码位置**:
+- `securt-kit-core/src/main/java/io/github/hexlodev/core/exception/`: 异常类目录
+- `EncryptionHandler.java`: 异常处理器
+- `FieldEncryptorProperties.java`: 配置类（添加失败策略）
+- `SimpleInterceptorPreparedStatement.java`: 加密异常处理
+- `ResultSetDecryptingProxy.java`: 解密异常处理
+
+**预期收益**:
+- ✅ 统一异常处理逻辑，提升代码可维护性
+- ✅ 支持可配置的失败策略，提升灵活性
+- ✅ 提供详细的异常上下文信息，便于问题排查
+- ✅ 降低业务中断风险（默认 FALLBACK 策略）
 
 ---
 

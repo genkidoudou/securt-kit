@@ -112,7 +112,9 @@ public class SecurtkitUtils {
         try {
             // 1. 将SQL中的?占位符替换成自定义的特殊符号，以便SQL解析器识别
             String placeholderSql = question2Placeholder(sql);
-            log.debug("Replaced placeholders in SQL: " + placeholderSql);
+            if (log.isDebugEnabled()) {
+                log.debug("Replaced placeholders in SQL: {}", placeholderSql);
+            }
 
             // 2. 使用JSQLParser解析SQL语句
             Statement statement = CCJSqlParserUtil.parse(placeholderSql);
@@ -128,18 +130,22 @@ public class SecurtkitUtils {
                 ColumnTableDto value = entry.getValue();
 
                 if (key.startsWith(PLACEHOLDER)) {
-                    Integer index = Integer.parseInt(key.replace(PLACEHOLDER, ""));
+                    // 使用 substring 替代 replace，性能更好
+                    Integer index = Integer.parseInt(key.substring(PLACEHOLDER.length()));
                     value.setInsertFieldIndex(index);
                 }
             }
 
             List<FieldEncryptorInfoDto> fieldEncryptorInfos = visitor.getFieldEncryptorInfos();
-            log.debug("Parsed SQL: found " + placeholderColumnTableMap.size() + " placeholders, "
-                    + fieldEncryptorInfos.size() + " fields need encryption");
+            // 使用参数化日志，避免字符串拼接
+            if (log.isDebugEnabled()) {
+                log.debug("Parsed SQL: found {} placeholders, {} fields need encryption",
+                        placeholderColumnTableMap.size(), fieldEncryptorInfos.size());
+            }
 
             return Pair.of(placeholderColumnTableMap, fieldEncryptorInfos);
         } catch (JSQLParserException e) {
-            log.error("Failed to parse SQL: " + sql + ", error: " + e.getMessage());
+            log.error("Failed to parse SQL: {}, error: {}", sql, e.getMessage(), e);
             throw e;
         }
     }
@@ -173,8 +179,11 @@ public class SecurtkitUtils {
         Pattern pattern = Pattern.compile("\\?");
         Matcher matcher = pattern.matcher(sql);
 
-        StringBuffer sb = new StringBuffer();
+        // 使用 StringBuffer（Matcher.appendReplacement 要求使用 StringBuffer）
+        // 预估容量：原SQL长度 + 占位符长度 * 预估占位符数量（10个），减少扩容开销
+        StringBuffer sb = new StringBuffer(sql.length() + PLACEHOLDER.length() * 10);
         while (matcher.find()) {
+            // 构建替换字符串（Java 编译器会优化简单的字符串拼接）
             String replacement = PLACEHOLDER + counter.getAndIncrement();
             matcher.appendReplacement(sb, replacement);
         }
@@ -198,6 +207,7 @@ public class SecurtkitUtils {
             return false;
         }
         Set<String> configuredTables = TableCache.getTables();
+        // 使用 containsAny 检查交集，线程安全
         return CollectionUtil.containsAny(configuredTables, tables);
     }
 }

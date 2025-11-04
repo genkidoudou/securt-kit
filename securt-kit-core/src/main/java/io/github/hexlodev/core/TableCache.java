@@ -5,6 +5,7 @@ import cn.hutool.core.util.ClassUtil;
 import cn.hutool.core.util.StrUtil;
 import io.github.hexlodev.core.cache.StrategyCache;
 import io.github.hexlodev.core.config.FieldEncryptorProperties;
+import io.github.hexlodev.core.exception.EncryptionHandler;
 import io.github.hexlodev.core.strategy.FieldEncryptorStrategy;
 import lombok.extern.slf4j.Slf4j;
 
@@ -118,6 +119,9 @@ public class TableCache {
             // 初始化 SQL 解析缓存配置
             initSqlParseCache(fieldEncryptorProperties);
 
+            // 初始化异常处理策略
+            EncryptionHandler.initFromConfig(fieldEncryptorProperties);
+
             log.debug("【securt-kit】配置文件表缓存初始化完成，需处理的表为:{}", TABLE_FIELD_ENCRYPT_INFO);
         } catch (Exception e) {
             // 初始化失败，重置状态以便下次重试
@@ -157,13 +161,18 @@ public class TableCache {
 
 
     /**
-     * 获取加密的表名
+     * 获取加密的表名集合
+     * <p>
+     * 返回不可变视图，防止外部代码意外修改内部状态。
+     * 底层集合使用 ConcurrentHashMap.newKeySet() 实现，保证线程安全。
+     * </p>
      *
-     * @return
+     * @return 加密表名集合的不可变视图
      * @since 2025/10/9
      */
     public static Set<String> getTables() {
-        return FIELD_ENCRYPT_TABLE;
+        // 返回不可变视图，防止外部修改，同时保持线程安全
+        return Collections.unmodifiableSet(FIELD_ENCRYPT_TABLE);
     }
 
 

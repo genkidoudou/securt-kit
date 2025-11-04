@@ -1,5 +1,6 @@
 package io.github.hexlodev.core.config;
 
+import io.github.hexlodev.core.exception.EncryptionHandler;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -7,10 +8,44 @@ import javax.validation.constraints.NotBlank;
 import java.util.List;
 
 /**
- * 字段加密配置属性：
- * prefix: securtkit.encryptor
- * - enable：是否开启（预留）
- * - tables：按表配置需要加密的字段及策略，未指定策略则回落到默认策略
+ * 字段加密配置属性
+ * <p>
+ * 配置前缀：{@code securtkit.encryptor}
+ * </p>
+ * <p>
+ * 主要配置项：
+ * <ul>
+ *   <li>enable: 是否开启加密功能（预留）</li>
+ *   <li>tables: 按表配置需要加密的字段及策略</li>
+ *   <li>failure-policy: 加密/解密失败处理策略（FALLBACK/FAIL_FAST/RETRY/SKIP）</li>
+ *   <li>sql-parse-cache: SQL 解析缓存配置</li>
+ * </ul>
+ * </p>
+ * <p>
+ * 配置示例（YAML）：
+ * <pre>{@code
+ * securtkit:
+ *   encryptor:
+ *     enable: true
+ *     failure-policy: FALLBACK
+ *     sql-parse-cache:
+ *       enable: true
+ *       max-size: 1000
+ *     tables:
+ *       - table-name: user
+ *         fields:
+ *           - field-name: name
+ *           - field-name: phone
+ *             strategy: com.example.CustomStrategy
+ * }</pre>
+ * </p>
+ *
+ * @author hexlodev
+ * @since 1.0.0
+ * @see TableConfig
+ * @see FieldConfig
+ * @see SqlParseCacheConfig
+ * @see FailurePolicy
  */
 @ConfigurationProperties(prefix = FieldEncryptorProperties.PREFIX)
 @Data
@@ -28,6 +63,31 @@ public class FieldEncryptorProperties {
      * @since 1.0.0
      */
     private SqlParseCacheConfig sqlParseCache;
+
+    /**
+     * 加密/解密失败处理策略
+     * <p>
+     * 当加密或解密操作失败时，框架如何处理：
+     * <ul>
+     *   <li>FAIL_FAST: 快速失败，立即抛出异常，中断操作</li>
+     *   <li>FALLBACK: 降级处理，使用原始值继续执行（默认策略，推荐用于生产环境）</li>
+     *   <li>RETRY: 重试机制（当前实现为降级处理）</li>
+     *   <li>SKIP: 跳过该字段，返回 null</li>
+     * </ul>
+     * </p>
+     * <p>
+     * 配置示例：
+     * <pre>{@code
+     * securtkit:
+     *   encryptor:
+     *     failure-policy: FALLBACK
+     * }</pre>
+     * </p>
+     * 
+     * @see io.github.hexlodev.core.exception.EncryptionHandler
+     * @since 1.0.0
+     */
+    private FailurePolicy failurePolicy = FailurePolicy.FALLBACK;
 
     /**
      * 表配置
@@ -111,6 +171,45 @@ public class FieldEncryptorProperties {
          * 建议值：500-2000，根据应用实际 SQL 数量调整
          */
         private int maxSize = 1000;
+    }
+
+    /**
+     * 失败策略类型（用于配置）
+     * <p>
+     * 提供字符串到枚举的转换，便于配置文件使用
+     * </p>
+     */
+    public enum FailurePolicy {
+        FAIL_FAST,
+        FALLBACK,
+        RETRY,
+        SKIP;
+
+        /**
+         * 从字符串转换为枚举
+         *
+         * @param value 字符串值
+         * @return 枚举值，如果无法识别则返回 FALLBACK
+         */
+        public static FailurePolicy fromString(String value) {
+            if (value == null || value.trim().isEmpty()) {
+                return FALLBACK;
+            }
+            try {
+                return valueOf(value.toUpperCase().trim());
+            } catch (IllegalArgumentException e) {
+                return FALLBACK;
+            }
+        }
+
+        /**
+         * 转换为 EncryptionHandler.FailurePolicy
+         *
+         * @return 对应的处理器策略枚举
+         */
+        public EncryptionHandler.FailurePolicy toHandlerPolicy() {
+            return EncryptionHandler.FailurePolicy.valueOf(this.name());
+        }
     }
 
 }

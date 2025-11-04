@@ -3,6 +3,7 @@ package io.github.hexlodev.core.interceptor;
 import cn.hutool.core.lang.Pair;
 import io.github.hexlodev.core.TableCache;
 import io.github.hexlodev.core.cache.StrategyCache;
+import io.github.hexlodev.core.exception.EncryptionHandler;
 import io.github.hexlodev.core.parser.SecurtkitUtils;
 import io.github.hexlodev.core.parser.dto.ColumnTableDto;
 import io.github.hexlodev.core.parser.dto.FieldEncryptorInfoDto;
@@ -16,7 +17,6 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import lombok.extern.slf4j.Slf4j;
 
-import java.sql.Statement;
 import java.util.*;
 
 /**
@@ -30,6 +30,11 @@ final class ResultSetDecryptingProxy implements InvocationHandler {
     private final Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> pair;
 
     private final String sql;
+    
+    /**
+     * 缓存的 ResultSetMetaData，在 ResultSet 生命周期内不变，避免重复获取
+     */
+    private volatile ResultSetMetaData cachedMetaData;
 
     private ResultSetDecryptingProxy(ResultSet delegate, Set<String> tables, Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> pair, String sql) {
         this.delegate = delegate;
@@ -83,6 +88,23 @@ final class ResultSetDecryptingProxy implements InvocationHandler {
         return result;
     }
 
+    /**
+     * 获取 ResultSetMetaData，使用缓存避免重复获取
+     * ResultSetMetaData 在 ResultSet 生命周期内不变，可以安全缓存
+     * 
+     * @return ResultSetMetaData 元数据对象
+     * @throws SQLException 如果获取元数据失败
+     */
+    private ResultSetMetaData getMetaData() throws SQLException {
+        if (cachedMetaData == null) {
+            synchronized (this) {
+                if (cachedMetaData == null) {
+                    cachedMetaData = delegate.getMetaData();
+                }
+            }
+        }
+        return cachedMetaData;
+    }
 
     private String resolveColumn(Object[] args) throws SQLException {
         if (args == null || args.length == 0) {
@@ -90,7 +112,7 @@ final class ResultSetDecryptingProxy implements InvocationHandler {
         }
         if (args[0] instanceof Integer) {
             int idx = (Integer) args[0];
-            ResultSetMetaData meta = delegate.getMetaData();
+            ResultSetMetaData meta = getMetaData();
             String label = meta.getColumnLabel(idx);
             if (label == null || label.isEmpty()) {
                 label = meta.getColumnName(idx);
@@ -118,7 +140,16 @@ final class ResultSetDecryptingProxy implements InvocationHandler {
             Class<? extends FieldEncryptorStrategy> strategyClass = TableCache.getTableFieldEncryptInfo(fieldEncryptorInfoDto.getSourceTableName(), fieldEncryptorInfoDto.getSourceColumn());
             // 使用策略缓存获取策略实例
             FieldEncryptorStrategy strategy = StrategyCache.getStrategy(strategyClass);
-            return strategy.decryption(value);
+            // 使用统一的异常处理器
+            String decrypted = EncryptionHandler.handleDecryption(
+                    value,
+                    fieldEncryptorInfoDto.getSourceTableName(),
+                    fieldEncryptorInfoDto.getSourceColumn(),
+                    () -> strategy.decryption(value),
+                    null // 使用默认策略
+            );
+            // 如果解密失败且策略为 SKIP，返回 null；否则返回原值或解密后的值
+            return decrypted != null ? decrypted : value;
         }
         return value;
     }
@@ -132,7 +163,7 @@ final class ResultSetDecryptingProxy implements InvocationHandler {
         // 尝试使用列所属表名（如果驱动能提供）
         String tableName = null;
         try {
-            ResultSetMetaData meta = delegate.getMetaData();
+            ResultSetMetaData meta = getMetaData();
             for (int i = 1; i <= meta.getColumnCount(); i++) {
                 String label = meta.getColumnLabel(i);
                 if (label == null || label.isEmpty()) {
@@ -161,11 +192,16 @@ final class ResultSetDecryptingProxy implements InvocationHandler {
         }
         // 使用策略缓存获取策略实例
         FieldEncryptorStrategy strategy = StrategyCache.getStrategy(strategyClass);
-        try {
-            return strategy.decryption(value);
-        } catch (Throwable t) {
-            return value;
-        }
+        // 使用统一的异常处理器
+        String decrypted = EncryptionHandler.handleDecryption(
+                value,
+                tableName,
+                normalizedColumn,
+                () -> strategy.decryption(value),
+                null // 使用默认策略
+        );
+        // 如果解密失败且策略为 SKIP，返回 null；否则返回原值或解密后的值
+        return decrypted != null ? decrypted : value;
     }
 }
 

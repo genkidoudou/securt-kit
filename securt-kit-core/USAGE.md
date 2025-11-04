@@ -113,6 +113,10 @@ public class DataSourceConfig {
 public class FieldEncryptorProperties {
     private boolean enable = true;  // 是否启用加密
     
+    private FailurePolicy failurePolicy = FailurePolicy.FALLBACK;  // 失败处理策略
+    
+    private SqlParseCacheConfig sqlParseCache;  // SQL 解析缓存配置
+    
     private List<TableConfig> tables;  // 表配置列表
     
     public static class TableConfig {
@@ -122,7 +126,19 @@ public class FieldEncryptorProperties {
     
     public static class FieldConfig {
         private String fieldName;  // 字段名
-        private Class<? extends FieldEncryptorStrategy> encryptorStrategy;  // 加密策略类
+        private String strategy;  // 加密策略类名（全限定名）
+    }
+    
+    public static class SqlParseCacheConfig {
+        private boolean enable = true;  // 是否启用缓存
+        private int maxSize = 1000;  // 缓存最大容量
+    }
+    
+    public enum FailurePolicy {
+        FAIL_FAST,   // 快速失败
+        FALLBACK,    // 降级处理（默认）
+        RETRY,       // 重试
+        SKIP         // 跳过
     }
 }
 ```
@@ -132,19 +148,27 @@ public class FieldEncryptorProperties {
 创建 `application.yml`：
 
 ```yaml
-securt-kit:
-  enable: true
-  tables:
-    - table-name: user
-      fields:
-        - field-name: name
-          encryptor-strategy: com.example.MyFieldEncryptorStrategy
-        - field-name: phone
-          encryptor-strategy: com.example.MyFieldEncryptorStrategy
-    - table-name: order
-      fields:
-        - field-name: customer-name
-          encryptor-strategy: com.example.MyFieldEncryptorStrategy
+securtkit:
+  encryptor:
+    enable: true
+    # 失败处理策略：FALLBACK（默认，推荐）、FAIL_FAST、RETRY、SKIP
+    failure-policy: FALLBACK
+    # SQL 解析缓存配置
+    sql-parse-cache:
+      enable: true
+      max-size: 1000
+    # 表配置
+    tables:
+      - table-name: user
+        fields:
+          - field-name: name
+            strategy: com.example.MyFieldEncryptorStrategy  # 可选：自定义策略
+          - field-name: phone
+            strategy: com.example.MyFieldEncryptorStrategy
+      - table-name: order
+        fields:
+          - field-name: customer-name
+            strategy: com.example.MyFieldEncryptorStrategy
 ```
 
 ## 核心功能
@@ -293,20 +317,77 @@ public interface FieldEncryptorStrategy {
 
 ### 3. 错误处理
 
+框架提供了统一的异常处理机制，支持可配置的失败策略。当加密或解密操作失败时，可以根据配置的策略进行处理：
+
+#### 失败策略说明
+
+框架支持 4 种失败处理策略：
+
+1. **FALLBACK**（默认，推荐）：降级处理，使用原始值继续执行
+   - 适用于生产环境，保证业务连续性
+   - 记录警告日志，便于问题排查
+
+2. **FAIL_FAST**：快速失败，立即抛出异常
+   - 适用于对数据安全性要求极高的场景
+   - 确保加密失败时立即发现并处理
+
+3. **RETRY**：重试机制（当前实现为降级处理）
+   - 适用于临时性错误场景
+
+4. **SKIP**：跳过该字段，返回 null
+   - 适用于可选字段加密失败不影响业务的情况
+
+#### 配置失败策略
+
+在配置文件中设置：
+
+```yaml
+securtkit:
+  encryptor:
+    failure-policy: FALLBACK  # FAIL_FAST | FALLBACK | RETRY | SKIP
+```
+
+#### 异常处理示例
+
+框架会自动处理异常，无需在策略类中手动处理：
+
 ```java
 @Component
-public class SafeFieldEncryptorStrategy implements FieldEncryptorStrategy {
+public class MyFieldEncryptorStrategy implements FieldEncryptorStrategy {
     @Override
     public String encryption(String fieldValue) {
-        try {
-            return encrypt(fieldValue);
-        } catch (Exception e) {
-            logger.error("Encryption failed", e);
-            // 返回原始值，避免业务中断
-            return fieldValue;
-        }
+        // 框架会自动处理异常，根据配置的策略进行处理
+        // 如果使用 FAIL_FAST 策略，异常会向上抛出
+        // 如果使用 FALLBACK 策略，异常会被捕获并返回原值
+        return encrypt(fieldValue);
+    }
+    
+    @Override
+    public String decryption(String fieldValue) {
+        return decrypt(fieldValue);
     }
 }
+```
+
+#### 自定义异常处理
+
+如果需要自定义异常处理逻辑，可以：
+
+1. 在策略类中捕获异常并返回合适的值
+2. 使用 `EncryptionHandler` 手动处理异常
+3. 监听异常事件（如果框架支持）
+
+```java
+// 使用统一异常处理器
+import io.github.hexlodev.core.exception.EncryptionHandler;
+
+String result = EncryptionHandler.handleEncryption(
+    originalValue,
+    tableName,
+    fieldName,
+    () -> strategy.encryption(originalValue),
+    EncryptionHandler.FailurePolicy.FALLBACK
+);
 ```
 
 ### 4. 测试建议
@@ -382,4 +463,8 @@ java.util.logging.level.io.github.hexlodev.core = WARNING
 - ✅ SQL 解析与表字段识别
 - ✅ 支持自定义加密策略
 - ✅ Spring Boot 集成支持
+- ✅ 统一异常处理机制（支持 4 种失败策略）
+- ✅ SQL 解析缓存优化
+- ✅ 线程安全优化
+- ✅ 性能优化（字符串操作、元数据缓存等）
 
