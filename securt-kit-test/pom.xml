@@ -67,6 +67,13 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
         </dependency>
+
+        <!-- 添加 jsqlparser 依赖，用于编译时解析异常类型 -->
+        <dependency>
+            <groupId>com.github.jsqlparser</groupId>
+            <artifactId>jsqlparser</artifactId>
+            <version>4.9</version>
+        </dependency>
     </dependencies>
     <dependencyManagement>
         <dependencies>

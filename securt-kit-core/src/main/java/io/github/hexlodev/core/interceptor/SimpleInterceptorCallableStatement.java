@@ -55,7 +55,10 @@ public class SimpleInterceptorCallableStatement implements CallableStatement {
                 log.debug("[TABLES] " + String.join(", ", tables));
             }
         } catch (Exception e) {
-            log.warn("Failed to parse table names from SQL: " + e.getMessage());
+            log.warn("Failed to parse table names from SQL [sql={}, sqlLength={}], error: {}", 
+                    sql != null && sql.length() > 100 ? sql.substring(0, 100) + "..." : sql,
+                    sql != null ? sql.length() : 0,
+                    e.getMessage(), e);
         }
     }
     
@@ -77,7 +80,12 @@ public class SimpleInterceptorCallableStatement implements CallableStatement {
             return resultSet;
         } catch (SQLException e) {
             long endTime = System.currentTimeMillis();
-            log.error("[CALLABLE QUERY ERROR] Failed after " + (endTime - startTime) + "ms: " + e.getMessage());
+            String sqlPreview = sql != null && sql.length() > 100 ? sql.substring(0, 100) + "..." : sql;
+            log.error("[CALLABLE QUERY ERROR] Failed after {}ms [sql={}, sqlLength={}], error: {}", 
+                    (endTime - startTime),
+                    sqlPreview,
+                    sql != null ? sql.length() : 0,
+                    e.getMessage(), e);
             throw e;
         }
     }
@@ -100,7 +108,12 @@ public class SimpleInterceptorCallableStatement implements CallableStatement {
             return result;
         } catch (SQLException e) {
             long endTime = System.currentTimeMillis();
-            log.error("[CALLABLE UPDATE ERROR] Failed after " + (endTime - startTime) + "ms: " + e.getMessage());
+            String sqlPreview = sql != null && sql.length() > 100 ? sql.substring(0, 100) + "..." : sql;
+            log.error("[CALLABLE UPDATE ERROR] Failed after {}ms [sql={}, sqlLength={}], error: {}", 
+                    (endTime - startTime),
+                    sqlPreview,
+                    sql != null ? sql.length() : 0,
+                    e.getMessage(), e);
             throw e;
         }
     }
@@ -123,7 +136,12 @@ public class SimpleInterceptorCallableStatement implements CallableStatement {
             return result;
         } catch (SQLException e) {
             long endTime = System.currentTimeMillis();
-            log.error("[CALLABLE EXECUTE ERROR] Failed after " + (endTime - startTime) + "ms: " + e.getMessage());
+            String sqlPreview = sql != null && sql.length() > 100 ? sql.substring(0, 100) + "..." : sql;
+            log.error("[CALLABLE EXECUTE ERROR] Failed after {}ms [sql={}, sqlLength={}], error: {}", 
+                    (endTime - startTime),
+                    sqlPreview,
+                    sql != null ? sql.length() : 0,
+                    e.getMessage(), e);
             throw e;
         }
     }

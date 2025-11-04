@@ -94,7 +94,10 @@ public class SimpleInterceptorStatement implements Statement {
                 log.debug("[TABLES] " + String.join(", ", tables));
             }
         } catch (Exception e) {
-            log.warn("Failed to parse table names from SQL: " + e.getMessage());
+            log.warn("Failed to parse table names from SQL [sql={}, sqlLength={}], error: {}", 
+                    sql != null && sql.length() > 100 ? sql.substring(0, 100) + "..." : sql,
+                    sql != null ? sql.length() : 0,
+                    e.getMessage(), e);
         }
     }
 
@@ -129,7 +132,11 @@ public class SimpleInterceptorStatement implements Statement {
             try {
                 mapListPair = SecurtkitUtils.parseSql(sql);
             } catch (JSQLParserException e) {
-                log.warn("Failed to parse SQL for decryption: " + e.getMessage());
+                String sqlPreview = sql != null && sql.length() > 100 ? sql.substring(0, 100) + "..." : sql;
+                log.warn("Failed to parse SQL for decryption [sql={}, sqlLength={}], error: {}", 
+                        sqlPreview,
+                        sql != null ? sql.length() : 0,
+                        e.getMessage(), e);
             }
         }
         
@@ -140,7 +147,13 @@ public class SimpleInterceptorStatement implements Statement {
             return ResultSetDecryptingProxy.wrap(resultSet, tables, mapListPair, sql);
         } catch (SQLException e) {
             long endTime = System.currentTimeMillis();
-            log.error("[QUERY ERROR] Failed after " + (endTime - startTime) + "ms: " + e.getMessage());
+            String sqlPreview = sql != null && sql.length() > 100 ? sql.substring(0, 100) + "..." : sql;
+            log.error("[QUERY ERROR] Failed after {}ms [sql={}, sqlLength={}, tables={}], error: {}", 
+                    (endTime - startTime),
+                    sqlPreview,
+                    sql != null ? sql.length() : 0,
+                    tables,
+                    e.getMessage(), e);
             throw e;
         }
     }
@@ -160,6 +173,15 @@ public class SimpleInterceptorStatement implements Statement {
         log.info("[SQL UPDATE] " + sql);
         logTableNames(sql);
         long startTime = System.currentTimeMillis();
+        
+        // 解析表名用于日志
+        java.util.Set<String> tables = new java.util.HashSet<>();
+        try {
+            tables = io.github.hexlodev.core.parser.SqlParseCache.parseTableNames(sql);
+        } catch (Exception ignore) {
+            // 解析失败不影响执行
+        }
+        
         try {
             int result = delegate.executeUpdate(sql);
             long endTime = System.currentTimeMillis();
@@ -167,7 +189,13 @@ public class SimpleInterceptorStatement implements Statement {
             return result;
         } catch (SQLException e) {
             long endTime = System.currentTimeMillis();
-            log.error("[UPDATE ERROR] Failed after " + (endTime - startTime) + "ms: " + e.getMessage());
+            String sqlPreview = sql != null && sql.length() > 100 ? sql.substring(0, 100) + "..." : sql;
+            log.error("[UPDATE ERROR] Failed after {}ms [sql={}, sqlLength={}, tables={}], error: {}", 
+                    (endTime - startTime),
+                    sqlPreview,
+                    sql != null ? sql.length() : 0,
+                    tables,
+                    e.getMessage(), e);
             throw e;
         }
     }
@@ -187,6 +215,15 @@ public class SimpleInterceptorStatement implements Statement {
         log.info("[SQL EXECUTE] " + sql);
         logTableNames(sql);
         long startTime = System.currentTimeMillis();
+        
+        // 解析表名用于日志
+        java.util.Set<String> tables = new java.util.HashSet<>();
+        try {
+            tables = io.github.hexlodev.core.parser.SqlParseCache.parseTableNames(sql);
+        } catch (Exception ignore) {
+            // 解析失败不影响执行
+        }
+        
         try {
             boolean result = delegate.execute(sql);
             long endTime = System.currentTimeMillis();
@@ -194,7 +231,13 @@ public class SimpleInterceptorStatement implements Statement {
             return result;
         } catch (SQLException e) {
             long endTime = System.currentTimeMillis();
-            log.error("[EXECUTE ERROR] Failed after " + (endTime - startTime) + "ms: " + e.getMessage());
+            String sqlPreview = sql != null && sql.length() > 100 ? sql.substring(0, 100) + "..." : sql;
+            log.error("[EXECUTE ERROR] Failed after {}ms [sql={}, sqlLength={}, tables={}], error: {}", 
+                    (endTime - startTime),
+                    sqlPreview,
+                    sql != null ? sql.length() : 0,
+                    tables,
+                    e.getMessage(), e);
             throw e;
         }
     }

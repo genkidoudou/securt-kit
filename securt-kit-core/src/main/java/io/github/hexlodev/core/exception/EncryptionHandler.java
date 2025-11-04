@@ -87,17 +87,28 @@ public class EncryptionHandler {
     /**
      * 处理加密操作的异常
      *
-     * @param value          原始值
-     * @param tableName      表名
-     * @param fieldName      字段名
-     * @param encryptor      加密函数
+     * @param value          原始值，可以为 null
+     * @param tableName      表名，不能为 null 或空白
+     * @param fieldName      字段名，不能为 null 或空白
+     * @param encryptor      加密函数，不能为 null
      * @param policy         失败策略（如果为 null，使用默认策略）
      * @return 加密后的值，或根据策略返回原值/null
+     * @throws IllegalArgumentException 如果表名、字段名或加密函数为 null
      * @throws EncryptionException 如果策略为 FAIL_FAST 且加密失败
      */
     public static String handleEncryption(
             String value, String tableName, String fieldName,
             Supplier<String> encryptor, FailurePolicy policy) {
+        
+        if (cn.hutool.core.util.StrUtil.isBlank(tableName)) {
+            throw new IllegalArgumentException("Table name cannot be null or blank");
+        }
+        if (cn.hutool.core.util.StrUtil.isBlank(fieldName)) {
+            throw new IllegalArgumentException("Field name cannot be null or blank");
+        }
+        if (encryptor == null) {
+            throw new IllegalArgumentException("Encryptor function cannot be null");
+        }
         
         if (policy == null) {
             policy = defaultPolicy;
@@ -113,17 +124,28 @@ public class EncryptionHandler {
     /**
      * 处理解密操作的异常
      *
-     * @param encryptedValue 加密后的值
-     * @param tableName      表名
-     * @param fieldName      字段名
-     * @param decryptor      解密函数
+     * @param encryptedValue 加密后的值，可以为 null
+     * @param tableName      表名，不能为 null 或空白
+     * @param fieldName      字段名，不能为 null 或空白
+     * @param decryptor      解密函数，不能为 null
      * @param policy         失败策略（如果为 null，使用默认策略）
      * @return 解密后的值，或根据策略返回原值/null
+     * @throws IllegalArgumentException 如果表名、字段名或解密函数为 null
      * @throws DecryptionException 如果策略为 FAIL_FAST 且解密失败
      */
     public static String handleDecryption(
             String encryptedValue, String tableName, String fieldName,
             Supplier<String> decryptor, FailurePolicy policy) {
+        
+        if (cn.hutool.core.util.StrUtil.isBlank(tableName)) {
+            throw new IllegalArgumentException("Table name cannot be null or blank");
+        }
+        if (cn.hutool.core.util.StrUtil.isBlank(fieldName)) {
+            throw new IllegalArgumentException("Field name cannot be null or blank");
+        }
+        if (decryptor == null) {
+            throw new IllegalArgumentException("Decryptor function cannot be null");
+        }
         
         if (policy == null) {
             policy = defaultPolicy;
@@ -164,10 +186,13 @@ public class EncryptionHandler {
                 }
 
             case FALLBACK:
-                log.warn("{} failed for {}, using original value. Error: {}", 
-                        operation, context, e.getMessage());
+                log.warn("{} failed for {}, using original value [valueLength={}, errorClass={}]. Error: {}", 
+                        operation, context,
+                        value != null ? value.length() : 0,
+                        e.getClass().getSimpleName(),
+                        e.getMessage(), e);
                 if (log.isDebugEnabled()) {
-                    log.debug("Full exception stack:", e);
+                    log.debug("Full exception stack for {} failed on {}: {}", operation, context, e);
                 }
                 return value;
 
@@ -185,10 +210,13 @@ public class EncryptionHandler {
                 }
 
             case SKIP:
-                log.warn("{} failed for {}, skipping field. Error: {}", 
-                        operation, context, e.getMessage());
+                log.warn("{} failed for {}, skipping field [valueLength={}, errorClass={}]. Error: {}", 
+                        operation, context,
+                        value != null ? value.length() : 0,
+                        e.getClass().getSimpleName(),
+                        e.getMessage(), e);
                 if (log.isDebugEnabled()) {
-                    log.debug("Full exception stack:", e);
+                    log.debug("Full exception stack for {} failed on {}: {}", operation, context, e);
                 }
                 return null;
 

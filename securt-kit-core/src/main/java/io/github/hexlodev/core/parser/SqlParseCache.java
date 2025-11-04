@@ -163,11 +163,25 @@ public class SqlParseCache {
      * @return 解析结果 Pair
      * @throws JSQLParserException 如果 SQL 解析失败
      */
+    /**
+     * 解析 SQL 并缓存结果
+     * <p>
+     * 如果缓存命中，直接返回缓存结果；否则解析 SQL 并缓存。
+     * </p>
+     *
+     * @param sql 要解析的 SQL 语句，不能为 null 或空白
+     * @param parser 实际的解析函数，不能为 null
+     * @return 解析结果 Pair
+     * @throws IllegalArgumentException 如果 SQL 为 null 或空白，或 parser 为 null
+     * @throws JSQLParserException 如果 SQL 解析失败
+     */
     public static Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> parseSql(
             String sql, SqlParser parser) throws JSQLParserException {
         if (StrUtil.isBlank(sql)) {
-            log.warn("Attempted to parse empty SQL statement");
-            return Pair.of(Collections.emptyMap(), Collections.emptyList());
+            throw new IllegalArgumentException("SQL statement cannot be null or blank");
+        }
+        if (parser == null) {
+            throw new IllegalArgumentException("SQL parser cannot be null");
         }
 
         // 1. 规范化 SQL（去除多余空格，统一大小写）
@@ -301,7 +315,21 @@ public class SqlParseCache {
      * @param sql SQL 语句
      * @return 表名集合（小写）
      */
+    /**
+     * 解析 SQL 中的表名（轻量级方法，优先使用缓存）
+     * <p>
+     * 该方法优先从 SQL 解析缓存中提取表名，如果缓存未命中，
+     * 则使用轻量级的 TableNameParser 进行解析。
+     * </p>
+     *
+     * @param sql SQL 语句，不能为 null 或空白
+     * @return 表名集合（小写），如果 SQL 为 null 或空白则返回空集合
+     * @throws IllegalArgumentException 如果 SQL 为 null 或空白
+     */
     public static Set<String> parseTableNames(String sql) {
+        if (sql == null) {
+            throw new IllegalArgumentException("SQL statement cannot be null");
+        }
         if (StrUtil.isBlank(sql)) {
             return Collections.emptySet();
         }

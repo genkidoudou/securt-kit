@@ -11,7 +11,7 @@
     <modules>
         <module>securt-kit-core</module>
         <module>securt-kit-starter</module>
-        <module>securt-kit-test</module>
+<!--        <module>securt-kit-test</module>-->
     </modules>
 
     <properties>

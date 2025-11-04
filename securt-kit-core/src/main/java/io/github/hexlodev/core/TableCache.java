@@ -177,13 +177,17 @@ public class TableCache {
 
 
     /**
-     * 是否包含加密的表
+     * 检查表是否需要加密
      *
-     * @param tableName 表名
-     * @return
+     * @param tableName 表名，不能为 null 或空白
+     * @return 如果表需要加密返回 true，否则返回 false
+     * @throws IllegalArgumentException 如果表名为 null 或空白
      * @since 2025/10/10
      */
     public static boolean concatTable(String tableName) {
+        if (StrUtil.isBlank(tableName)) {
+            throw new IllegalArgumentException("Table name cannot be null or blank");
+        }
         return getTables().contains(tableName.toLowerCase());
     }
 
@@ -213,22 +217,31 @@ public class TableCache {
     /**
      * 获取表加密的字段
      *
-     * @param tableName 表名
-     * @return
+     * @param tableName 表名，不能为 null 或空白
+     * @return 字段加密策略映射，如果表不存在或参数无效则返回 null
+     * @throws IllegalArgumentException 如果表名为 null 或空白
      * @since 2025/10/10
      */
     public static Map<String, Class<? extends FieldEncryptorStrategy>> getTableFieldEncryptInfo(String tableName) {
+        if (StrUtil.isBlank(tableName)) {
+            throw new IllegalArgumentException("Table name cannot be null or blank");
+        }
         return TABLE_FIELD_ENCRYPT_INFO.get(tableName.toLowerCase());
     }
 
 
     /**
-     * 根据表名获取加密的字段
+     * 根据表名获取加密的字段名列表
+     *
+     * @param tableName 表名，不能为 null 或空白
+     * @return 加密字段名列表，如果表不存在或参数无效则返回 null
+     * @throws IllegalArgumentException 如果表名为 null 或空白
      * @since 2025/10/12
-     * @param tableName  表名
-     * @return
      */
     public static List<String> getTableFieldName(String tableName) {
+        if (StrUtil.isBlank(tableName)) {
+            throw new IllegalArgumentException("Table name cannot be null or blank");
+        }
         Map<String, Class<? extends FieldEncryptorStrategy>> stringClassMap =
                 TABLE_FIELD_ENCRYPT_INFO.get(tableName.toLowerCase());
         if (null == stringClassMap) {
@@ -239,22 +252,27 @@ public class TableCache {
 
 
     /**
-     * 获取表加密的字段
+     * 获取表字段的加密策略
      *
-     * @param tableName 表名
-     * @return
+     * @param tableName 表名，不能为 null 或空白
+     * @param fieldName 字段名，不能为 null 或空白
+     * @return 加密策略类，如果表或字段不存在或参数无效则返回 null
+     * @throws IllegalArgumentException 如果表名或字段名为 null 或空白
      * @since 2025/10/10
      */
     public static Class<? extends FieldEncryptorStrategy> getTableFieldEncryptInfo(String tableName, String fieldName) {
-        if (StrUtil.isBlank(tableName) || StrUtil.isBlank(fieldName)) {
-            return null;
+        if (StrUtil.isBlank(tableName)) {
+            throw new IllegalArgumentException("Table name cannot be null or blank");
+        }
+        if (StrUtil.isBlank(fieldName)) {
+            throw new IllegalArgumentException("Field name cannot be null or blank");
         }
         Map<String, Class<? extends FieldEncryptorStrategy>> stringClassMap =
                 TABLE_FIELD_ENCRYPT_INFO.get(tableName.toLowerCase());
         if (null == stringClassMap) {
             return null;
         }
-        return stringClassMap.get(fieldName);
+        return stringClassMap.get(fieldName.toLowerCase());
     }
 
 }

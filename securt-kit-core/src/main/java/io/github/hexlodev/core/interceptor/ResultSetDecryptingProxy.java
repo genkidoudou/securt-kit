@@ -12,6 +12,9 @@ import io.github.hexlodev.core.strategy.FieldEncryptorStrategy;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.io.Reader;
+import java.sql.Clob;
+import java.sql.NClob;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -78,6 +81,59 @@ final class ResultSetDecryptingProxy implements InvocationHandler {
                 if (result instanceof String) {
                     String value = (String) result;
                     return maybeDecryptWithInfo(column, value);
+                }
+                return result;
+            }
+            // 拦截 TEXT/CLOB 类型字段的读取方法
+            if ("getClob".equals(name)) {
+                Clob clob = (Clob) result;
+                if (clob != null) {
+                    String column = resolveColumn(args);
+                    String value = clobToString(clob);
+                    String decrypted = maybeDecryptWithInfo(column, value);
+                    if (decrypted != null && !decrypted.equals(value)) {
+                        // 如果解密成功，返回新的 Clob（使用解密后的字符串创建）
+                        return delegate.getConnection().createClob(decrypted);
+                    }
+                }
+                return result;
+            }
+            if ("getNClob".equals(name)) {
+                NClob nClob = (NClob) result;
+                if (nClob != null) {
+                    String column = resolveColumn(args);
+                    String value = nClobToString(nClob);
+                    String decrypted = maybeDecryptWithInfo(column, value);
+                    if (decrypted != null && !decrypted.equals(value)) {
+                        // 如果解密成功，返回新的 NClob（使用解密后的字符串创建）
+                        return delegate.getConnection().createNClob(decrypted);
+                    }
+                }
+                return result;
+            }
+            if ("getCharacterStream".equals(name)) {
+                Reader reader = (Reader) result;
+                if (reader != null) {
+                    String column = resolveColumn(args);
+                    String value = readerToString(reader);
+                    String decrypted = maybeDecryptWithInfo(column, value);
+                    if (decrypted != null && !decrypted.equals(value)) {
+                        // 如果解密成功，返回新的 Reader（使用解密后的字符串创建）
+                        return new java.io.StringReader(decrypted);
+                    }
+                }
+                return result;
+            }
+            if ("getNCharacterStream".equals(name)) {
+                Reader reader = (Reader) result;
+                if (reader != null) {
+                    String column = resolveColumn(args);
+                    String value = readerToString(reader);
+                    String decrypted = maybeDecryptWithInfo(column, value);
+                    if (decrypted != null && !decrypted.equals(value)) {
+                        // 如果解密成功，返回新的 Reader（使用解密后的字符串创建）
+                        return new java.io.StringReader(decrypted);
+                    }
                 }
                 return result;
             }
@@ -202,6 +258,67 @@ final class ResultSetDecryptingProxy implements InvocationHandler {
         );
         // 如果解密失败且策略为 SKIP，返回 null；否则返回原值或解密后的值
         return decrypted != null ? decrypted : value;
+    }
+
+    /**
+     * 将 Clob 转换为 String
+     *
+     * @param clob Clob 对象
+     * @return 字符串内容
+     */
+    private String clobToString(Clob clob) {
+        try {
+            long length = clob.length();
+            if (length > Integer.MAX_VALUE) {
+                log.warn("Clob length {} exceeds Integer.MAX_VALUE, truncating", length);
+                length = Integer.MAX_VALUE;
+            }
+            return clob.getSubString(1, (int) length);
+        } catch (SQLException e) {
+            log.error("Failed to convert Clob to String", e);
+            return null;
+        }
+    }
+
+    /**
+     * 将 NClob 转换为 String
+     *
+     * @param nClob NClob 对象
+     * @return 字符串内容
+     */
+    private String nClobToString(NClob nClob) {
+        try {
+            long length = nClob.length();
+            if (length > Integer.MAX_VALUE) {
+                log.warn("NClob length {} exceeds Integer.MAX_VALUE, truncating", length);
+                length = Integer.MAX_VALUE;
+            }
+            return nClob.getSubString(1, (int) length);
+        } catch (SQLException e) {
+            log.error("Failed to convert NClob to String", e);
+            return null;
+        }
+    }
+
+    /**
+     * 将 Reader 转换为 String
+     *
+     * @param reader Reader 对象
+     * @return 字符串内容
+     */
+    private String readerToString(Reader reader) {
+        try {
+            StringBuilder sb = new StringBuilder();
+            char[] buffer = new char[8192];
+            int read;
+            while ((read = reader.read(buffer)) != -1) {
+                sb.append(buffer, 0, read);
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            log.error("Failed to convert Reader to String", e);
+            return null;
+        }
     }
 }
 

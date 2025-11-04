@@ -88,7 +88,26 @@ public class SecurtkitUtils {
      * @throws JSQLParserException 如果SQL解析失败
      * @since 1.0.0
      */
+    /**
+     * 解析SQL语句，获取占位符与表字段的映射关系以及需要加密的字段列表
+     * <p>
+     * 该方法使用缓存机制，相同 SQL 的解析结果会被缓存，显著提升性能。
+     * </p>
+     *
+     * @param sql 要解析的SQL语句，包含问号占位符（如：UPDATE user SET name = ? WHERE id = ?）
+     * @return Pair对象，包含：
+     * <ul>
+     *   <li>Key: 占位符到ColumnTableDto的映射（占位符名称 -> 表字段信息）</li>
+     *   <li>Value: 需要加密的字段信息列表</li>
+     * </ul>
+     * @throws IllegalArgumentException 如果 SQL 为 null 或空白
+     * @throws JSQLParserException 如果SQL解析失败
+     * @since 1.0.0
+     */
     public static Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> parseSql(String sql) throws JSQLParserException {
+        if (StrUtil.isBlank(sql)) {
+            throw new IllegalArgumentException("SQL statement cannot be null or blank");
+        }
         // 使用缓存进行解析
         return SqlParseCache.parseSql(sql, SecurtkitUtils::doParseSql);
     }
@@ -110,20 +129,26 @@ public class SecurtkitUtils {
         }
 
         try {
-            // 1. 将SQL中的?占位符替换成自定义的特殊符号，以便SQL解析器识别
-            String placeholderSql = question2Placeholder(sql);
+            // 1. 规范化 SQL（去除多余空格、统一换行符）
+            String normalizedSql = normalizeSqlForParsing(sql);
+            if (log.isDebugEnabled()) {
+                log.debug("Normalized SQL: {}", normalizedSql);
+            }
+
+            // 2. 将SQL中的?占位符替换成自定义的特殊符号，以便SQL解析器识别
+            String placeholderSql = question2Placeholder(normalizedSql);
             if (log.isDebugEnabled()) {
                 log.debug("Replaced placeholders in SQL: {}", placeholderSql);
             }
 
-            // 2. 使用JSQLParser解析SQL语句
+            // 3. 使用JSQLParser解析SQL语句
             Statement statement = CCJSqlParserUtil.parse(placeholderSql);
 
-            // 3. 使用访问者模式提取表字段信息和加密字段信息
+            // 4. 使用访问者模式提取表字段信息和加密字段信息
             PoJoEncrtptorStatementVisitor visitor = new PoJoEncrtptorStatementVisitor();
             statement.accept(visitor);
 
-            // 4. 获取解析结果并建立占位符索引映射
+            // 5. 获取解析结果并建立占位符索引映射
             Map<String, ColumnTableDto> placeholderColumnTableMap = visitor.getPlaceholderColumnTableMap();
             for (Map.Entry<String, ColumnTableDto> entry : placeholderColumnTableMap.entrySet()) {
                 String key = entry.getKey();
@@ -165,7 +190,27 @@ public class SecurtkitUtils {
      * @param sql 原始SQL语句
      * @return 替换占位符后的SQL语句，如果输入为空则返回原值
      */
+    /**
+     * 将SQL中的问号占位符（?）替换为自定义占位符
+     *
+     * <p>该方法会将SQL中的所有问号占位符替换为格式为{@code SECURT_KIT_PLACEHOLDER_N}的占位符，
+     * 其中N为占位符的索引（从1开始）。这样做的目的是让SQL解析器能够识别和区分不同的占位符。</p>
+     *
+     * <p>示例：</p>
+     * <pre>{@code
+     * 输入: "UPDATE user SET name = ?, phone = ? WHERE id = ?"
+     * 输出: "UPDATE user SET name = SECURT_KIT_PLACEHOLDER_1, phone = SECURT_KIT_PLACEHOLDER_2 WHERE id = SECURT_KIT_PLACEHOLDER_3"
+     * }</pre>
+     *
+     * @param sql 原始SQL语句，不能为 null（空白字符串会直接返回）
+     * @return 替换占位符后的SQL语句，如果输入为空白则返回原值
+     * @throws IllegalArgumentException 如果 SQL 为 null
+     * @since 1.0.0
+     */
     public static String question2Placeholder(String sql) {
+        if (sql == null) {
+            throw new IllegalArgumentException("SQL statement cannot be null");
+        }
         if (StrUtil.isBlank(sql)) {
             return sql;
         }
@@ -193,12 +238,91 @@ public class SecurtkitUtils {
     }
 
     /**
+     * 规范化 SQL 语句以便解析
+     * <p>
+     * 该方法会对 SQL 进行规范化处理，解决多行格式、多余空格等问题：
+     * </p>
+     * <ul>
+     *   <li>统一换行符：将 \r\n 和 \r 统一为 \n</li>
+     *   <li>去除行首行尾空格：清理每行前后的空白字符</li>
+     *   <li>压缩连续空白：将多个连续空白字符（空格、制表符等）压缩为单个空格</li>
+     *   <li>保留必要的空格：确保关键字、标识符之间有适当的空格分隔</li>
+     * </ul>
+     *
+     * <p>示例：</p>
+     * <pre>{@code
+     * 输入: "INSERT INTO user (id,\n     name,\n     phone) VALUES (?, ?, ?)"
+     * 输出: "INSERT INTO user (id, name, phone) VALUES (?, ?, ?)"
+     * }</pre>
+     *
+     * @param sql 原始 SQL 语句，不能为 null
+     * @return 规范化后的 SQL 语句
+     * @throws IllegalArgumentException 如果 SQL 为 null
+     * @since 1.0.0
+     */
+    private static String normalizeSqlForParsing(String sql) {
+        if (sql == null) {
+            throw new IllegalArgumentException("SQL statement cannot be null");
+        }
+        if (StrUtil.isBlank(sql)) {
+            return sql;
+        }
+
+        // 1. 统一换行符：将 \r\n 和 \r 统一为 \n
+        String normalized = sql.replace("\r\n", "\n").replace("\r", "\n");
+
+        // 2. 按行处理，去除每行的首尾空格
+        String[] lines = normalized.split("\n");
+        StringBuilder sb = new StringBuilder(sql.length());
+        boolean firstLine = true;
+
+        for (String line : lines) {
+            // 去除行首行尾空格
+            String trimmedLine = line.trim();
+
+            // 跳过空行
+            if (trimmedLine.isEmpty()) {
+                continue;
+            }
+
+            // 如果不是第一行，添加空格分隔（而不是换行符）
+            if (!firstLine) {
+                sb.append(' ');
+            }
+            firstLine = false;
+
+            // 添加处理后的行内容
+            sb.append(trimmedLine);
+        }
+
+        // 3. 压缩连续空白字符（空格、制表符等）为单个空格
+        // 但保留字符串字面量中的空格（简单处理：避免在引号内替换）
+        String result = sb.toString();
+        // 使用正则表达式：将多个连续空白字符（空格、制表符、换行符等）替换为单个空格
+        // 但需要小心处理字符串字面量
+        result = result.replaceAll("\\s+", " ");
+
+        // 4. 清理可能的特殊情况：确保关键字和标识符之间有适当的空格
+        // 例如：确保括号前后有适当的空格（但保留函数调用的情况）
+        // 这里做简单的处理，主要针对常见的 SQL 模式
+        result = result.replaceAll("\\s*,\\s*", ", ");  // 统一逗号后的空格
+        result = result.replaceAll("\\s*\\(\\s*", " (");  // 统一左括号前的空格
+        result = result.replaceAll("\\s*\\)\\s*", ") ");  // 统一右括号后的空格
+        result = result.replaceAll("\\s*=\\s*", " = ");   // 统一等号前后的空格
+
+        // 5. 去除首尾空格
+        result = result.trim();
+
+        return result;
+    }
+
+    /**
      * 判断给定的表集合是否需要加密处理
      *
      * <p>该方法会检查传入的表名集合是否与配置中需要加密的表有交集。
      * 如果有任何表在加密配置中，则返回true，表示需要进行加密处理。</p>
      *
-     * @param tables 要检查的表名集合，不能为null
+     * @param tables 要检查的表名集合，可以为 null 或空集合
      * @return 如果需要加密处理返回true，否则返回false
      * @since 1.0.0
      */

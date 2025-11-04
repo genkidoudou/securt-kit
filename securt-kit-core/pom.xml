@@ -23,6 +23,7 @@
 
     <dependencies>
 
+        <!-- jsqlparser 会被 shade 插件打包到最终 jar 中并重命名包名 -->
         <dependency>
             <groupId>com.github.jsqlparser</groupId>
             <artifactId>jsqlparser</artifactId>
@@ -106,9 +107,33 @@
                                         <exclude>META-INF/*.RSA</exclude>
                                     </excludes>
                                 </filter>
+                                <!-- 明确包含 jsqlparser（即使是 provided scope），因为我们要将其打包到最终 jar 中 -->
+                                <filter>
+                                    <artifact>com.github.jsqlparser:jsqlparser</artifact>
+                                    <includes>
+                                        <include>**</include>
+                                    </includes>
+                                </filter>
                             </filters>
-                            <createDependencyReducedPom>false</createDependencyReducedPom>
+                            <!-- 启用 dependency reduced pom，自动移除已打包的依赖（如 jsqlparser） -->
+                            <createDependencyReducedPom>true</createDependencyReducedPom>
+                            <!-- 指定生成的 reduced pom 的文件名，这个 pom 会移除已打包的依赖 -->
+                            <dependencyReducedPomLocation>${project.build.directory}/dependency-reduced-pom.xml</dependencyReducedPomLocation>
                         </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- Maven Source Plugin - 生成源码 jar -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>3.2.1</version>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
                     </execution>
                 </executions>
             </plugin>

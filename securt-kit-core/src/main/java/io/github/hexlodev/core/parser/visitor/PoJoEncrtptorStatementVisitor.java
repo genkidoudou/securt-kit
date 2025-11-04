@@ -344,11 +344,13 @@ public class PoJoEncrtptorStatementVisitor implements StatementVisitor {
 
         //1.3.将每个字段从实体类上找到标注的@FieldEncryptor 注解
         List<FieldEncryptorInfoDto> fieldInfos = selectFiles.stream()
+                .filter(a -> StrUtil.isNotBlank(a.getSourceTableName()) && StrUtil.isNotBlank(a.getSourceColumn()))
                 .map(m -> FieldEncryptorInfoDto.builder()
                         .columnName(m.getColumnName())
                         .sourceColumn(m.getSourceColumn())
                         .sourceTableName(m.getSourceTableName())
-                        .fieldEncryptor(TableCache.getTableFieldEncryptInfo(m.getSourceTableName(), m.getSourceColumn()))
+                        .fieldEncryptor(TableCache.getTableFieldEncryptInfo(m.getSourceTableName(),
+                                m.getSourceColumn()))
                         .build()
                 ).collect(Collectors.toList());
 
