@@ -49,6 +49,19 @@ public class TableCache {
      * <p>
      * 使用原子操作保证线程安全，防止重复初始化
      * </p>
+     * 
+     * <p>初始化流程：</p>
+     * <ol>
+     *   <li>验证配置有效性（表名、字段名格式等）</li>
+     *   <li>验证加密策略类是否存在且可加载</li>
+     *   <li>初始化缓存数据</li>
+     *   <li>初始化 SQL 解析缓存</li>
+     *   <li>初始化异常处理策略</li>
+     * </ol>
+     *
+     * @param fieldEncryptorProperties 字段加密配置属性，不能为 null
+     * @throws IllegalArgumentException 如果配置无效
+     * @throws RuntimeException 如果初始化失败
      */
     public static void init(FieldEncryptorProperties fieldEncryptorProperties) {
         // 使用原子操作检查并设置初始化状态，防止并发重复初始化
@@ -65,6 +78,9 @@ public class TableCache {
                 INITIALIZED.set(false);
                 return;
             }
+            
+            // 验证配置
+            validateConfiguration(fieldEncryptorProperties);
             
             // 使用策略缓存获取默认策略实例
             FieldEncryptorStrategy defaultFieldEncryptorStrategy;
@@ -132,6 +148,110 @@ public class TableCache {
             FIELD_ENCRYPT_TABLE.clear();
             throw new RuntimeException("Failed to initialize TableCache", e);
         }
+    }
+
+    /**
+     * 验证配置的有效性
+     * 
+     * <p>验证内容包括：</p>
+     * <ul>
+     *   <li>表名不能为空或空白</li>
+     *   <li>表名格式验证（只允许字母、数字、下划线）</li>
+     *   <li>字段名不能为空或空白</li>
+     *   <li>字段名格式验证（只允许字母、数字、下划线）</li>
+     *   <li>策略类名验证（如果配置了策略类名，必须存在且可加载）</li>
+     * </ul>
+     *
+     * @param properties 配置属性
+     * @throws IllegalArgumentException 如果配置无效
+     */
+    private static void validateConfiguration(FieldEncryptorProperties properties) {
+        if (properties == null) {
+            throw new IllegalArgumentException("FieldEncryptorProperties cannot be null");
+        }
+
+        List<FieldEncryptorProperties.TableConfig> tables = properties.getTables();
+        if (CollectionUtil.isEmpty(tables)) {
+            log.warn("【securt-kit】警告：未配置任何表，字段加密功能将不会生效");
+            return;
+        }
+
+        // 表名格式验证：只允许字母、数字、下划线、点号（支持 schema.table 格式）
+        java.util.regex.Pattern tableNamePattern = java.util.regex.Pattern.compile("^[a-zA-Z_][a-zA-Z0-9_.]*$");
+        // 字段名格式验证：只允许字母、数字、下划线
+        java.util.regex.Pattern fieldNamePattern = java.util.regex.Pattern.compile("^[a-zA-Z_][a-zA-Z0-9_]*$");
+
+        List<String> errors = new ArrayList<>();
+        int tableIndex = 0;
+        
+        for (FieldEncryptorProperties.TableConfig table : tables) {
+            tableIndex++;
+            String tableName = table.getTableName();
+            
+            // 验证表名
+            if (StrUtil.isBlank(tableName)) {
+                errors.add(String.format("表配置[%d]: 表名不能为空", tableIndex));
+                continue;
+            }
+            
+            // 提取纯表名进行格式验证（去掉 schema 前缀）
+            String pureTableName = extractPureTableName(tableName);
+            if (!tableNamePattern.matcher(pureTableName).matches()) {
+                errors.add(String.format("表配置[%d]: 表名格式无效 '%s'，只允许字母、数字、下划线和点号", 
+                        tableIndex, tableName));
+            }
+            
+            // 验证字段配置
+            List<FieldEncryptorProperties.FieldConfig> fields = table.getFields();
+            if (CollectionUtil.isEmpty(fields)) {
+                errors.add(String.format("表配置[%d]: 表 '%s' 未配置任何字段", tableIndex, tableName));
+                continue;
+            }
+            
+            int fieldIndex = 0;
+            for (FieldEncryptorProperties.FieldConfig field : fields) {
+                fieldIndex++;
+                String fieldName = field.getFieldName();
+                
+                // 验证字段名
+                if (StrUtil.isBlank(fieldName)) {
+                    errors.add(String.format("表配置[%d].字段配置[%d]: 字段名不能为空", tableIndex, fieldIndex));
+                    continue;
+                }
+                
+                if (!fieldNamePattern.matcher(fieldName).matches()) {
+                    errors.add(String.format("表配置[%d].字段配置[%d]: 字段名格式无效 '%s'，只允许字母、数字和下划线", 
+                            tableIndex, fieldIndex, fieldName));
+                }
+                
+                // 验证策略类名（如果配置了）
+                String strategy = field.getStrategy();
+                if (StrUtil.isNotBlank(strategy)) {
+                    try {
+                        Class<?> strategyClass = ClassUtil.loadClass(strategy);
+                        if (!FieldEncryptorStrategy.class.isAssignableFrom(strategyClass)) {
+                            errors.add(String.format("表配置[%d].字段配置[%d]: 策略类 '%s' 未实现 FieldEncryptorStrategy 接口", 
+                                    tableIndex, fieldIndex, strategy));
+                        }
+                    } catch (Exception e) {
+                        errors.add(String.format("表配置[%d].字段配置[%d]: 无法加载策略类 '%s'，错误: %s", 
+                                tableIndex, fieldIndex, strategy, e.getMessage()));
+                    }
+                }
+            }
+        }
+        
+        // 如果有错误，抛出异常
+        if (!errors.isEmpty()) {
+            StringBuilder errorMsg = new StringBuilder("配置验证失败，发现以下错误：\n");
+            for (int i = 0; i < errors.size(); i++) {
+                errorMsg.append(String.format("  [%d] %s\n", i + 1, errors.get(i)));
+            }
+            errorMsg.append("\n请检查配置文件并修复上述错误。");
+            throw new IllegalArgumentException(errorMsg.toString());
+        }
+        
+        log.debug("【securt-kit】配置验证通过，共配置 {} 个表", tables.size());
     }
 
     /**

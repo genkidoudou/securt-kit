@@ -39,11 +39,52 @@ final class ResultSetDecryptingProxy implements InvocationHandler {
      */
     private volatile ResultSetMetaData cachedMetaData;
 
+    /**
+     * 列名到字段加密信息的映射（优化查找性能）
+     * key: 列名（小写）
+     * value: 字段加密信息DTO
+     * 
+     * <p>在构造函数中初始化，用于将 O(n) 的 Stream 查找优化为 O(1) 的 Map 查找</p>
+     * 
+     * @since 1.0.0
+     */
+    private Map<String, FieldEncryptorInfoDto> columnNameToFieldMap;
+
     private ResultSetDecryptingProxy(ResultSet delegate, Set<String> tables, Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> pair, String sql) {
         this.delegate = delegate;
-        this.tables = tables == null ? new HashSet<>() : new HashSet<>(tables);
+        this.tables = tables == null ? Collections.emptySet() : Collections.unmodifiableSet(new HashSet<>(tables));
         this.pair = pair;
         this.sql = sql;
+        
+        // 构建列名到字段信息的映射（优化性能：O(n) -> O(1)）
+        this.columnNameToFieldMap = buildColumnNameMap(pair);
+    }
+
+    /**
+     * 构建列名到字段加密信息的映射
+     * 
+     * <p>将 O(n) 的 Stream 查找优化为 O(1) 的 Map 查找，提升性能。
+     * 在构造函数中调用一次，后续所有解密调用都使用此映射。</p>
+     *
+     * @param pair SQL解析结果对
+     * @return 列名到字段加密信息的映射，如果不需要解密则返回空Map
+     */
+    private Map<String, FieldEncryptorInfoDto> buildColumnNameMap(Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> pair) {
+        if (pair == null || pair.getValue() == null) {
+            return Collections.emptyMap();
+        }
+        
+        Map<String, FieldEncryptorInfoDto> columnMap = new HashMap<>();
+        for (FieldEncryptorInfoDto dto : pair.getValue()) {
+            String columnName = dto.getColumnName();
+            if (columnName != null && !columnName.isEmpty()) {
+                // 使用小写作为 key，统一大小写处理
+                String normalizedKey = columnName.toLowerCase(Locale.ROOT);
+                // 如果同一个列名对应多个字段，保留第一个（通常不会发生）
+                columnMap.putIfAbsent(normalizedKey, dto);
+            }
+        }
+        return columnMap;
     }
 
     static ResultSet wrap(ResultSet rs, Set<String> tables, Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> pair, String sql) {
@@ -70,17 +111,19 @@ final class ResultSetDecryptingProxy implements InvocationHandler {
         if (!SecurtkitUtils.needEncrypt(this.tables) && null == this.pair) {
             return result;
         }
+        
+        String columnLabel = null;
         try {
             if ("getString".equals(name)) {
                 String value = (String) result;
-                String column = resolveColumn(args);
-                return maybeDecryptWithInfo(column, value);
+                columnLabel = resolveColumn(args);
+                return maybeDecryptWithInfo(columnLabel, value);
             }
             if ("getObject".equals(name)) {
-                String column = resolveColumn(args);
+                columnLabel = resolveColumn(args);
                 if (result instanceof String) {
                     String value = (String) result;
-                    return maybeDecryptWithInfo(column, value);
+                    return maybeDecryptWithInfo(columnLabel, value);
                 }
                 return result;
             }
@@ -88,15 +131,15 @@ final class ResultSetDecryptingProxy implements InvocationHandler {
             if ("getClob".equals(name)) {
                 Clob clob = (Clob) result;
                 if (clob != null) {
-                    String column = resolveColumn(args);
+                    columnLabel = resolveColumn(args);
                     String value = clobToString(clob);
-                    String decrypted = maybeDecryptWithInfo(column, value);
+                    String decrypted = maybeDecryptWithInfo(columnLabel, value);
                     if (decrypted != null && !decrypted.equals(value)) {
                         // 如果解密成功，返回新的 Clob（由于 ResultSet 没有 getConnection，使用 StringReader 包装）
                         // 注意：这会导致类型不匹配，但这是目前可行的方案
                         // 更好的方案是返回 String，但会破坏类型一致性
                         // 实际使用时，如果字段是 TEXT 类型，建议使用 getString() 而不是 getClob()
-                        log.debug("Decrypted Clob for column: {}, returning StringReader wrapper", column);
+                        log.debug("Decrypted Clob for column: {}, returning StringReader wrapper", columnLabel);
                         return new java.io.StringReader(decrypted);
                     }
                 }
@@ -105,12 +148,12 @@ final class ResultSetDecryptingProxy implements InvocationHandler {
             if ("getNClob".equals(name)) {
                 NClob nClob = (NClob) result;
                 if (nClob != null) {
-                    String column = resolveColumn(args);
+                    columnLabel = resolveColumn(args);
                     String value = nClobToString(nClob);
-                    String decrypted = maybeDecryptWithInfo(column, value);
+                    String decrypted = maybeDecryptWithInfo(columnLabel, value);
                     if (decrypted != null && !decrypted.equals(value)) {
                         // 如果解密成功，返回新的 Reader（由于 ResultSet 没有 getConnection，使用 StringReader 包装）
-                        log.debug("Decrypted NClob for column: {}, returning StringReader wrapper", column);
+                        log.debug("Decrypted NClob for column: {}, returning StringReader wrapper", columnLabel);
                         return new java.io.StringReader(decrypted);
                     }
                 }
@@ -119,9 +162,9 @@ final class ResultSetDecryptingProxy implements InvocationHandler {
             if ("getCharacterStream".equals(name)) {
                 Reader reader = (Reader) result;
                 if (reader != null) {
-                    String column = resolveColumn(args);
+                    columnLabel = resolveColumn(args);
                     String value = readerToString(reader);
-                    String decrypted = maybeDecryptWithInfo(column, value);
+                    String decrypted = maybeDecryptWithInfo(columnLabel, value);
                     if (decrypted != null && !decrypted.equals(value)) {
                         // 如果解密成功，返回新的 Reader（使用解密后的字符串创建）
                         return new java.io.StringReader(decrypted);
@@ -132,9 +175,9 @@ final class ResultSetDecryptingProxy implements InvocationHandler {
             if ("getNCharacterStream".equals(name)) {
                 Reader reader = (Reader) result;
                 if (reader != null) {
-                    String column = resolveColumn(args);
+                    columnLabel = resolveColumn(args);
                     String value = readerToString(reader);
-                    String decrypted = maybeDecryptWithInfo(column, value);
+                    String decrypted = maybeDecryptWithInfo(columnLabel, value);
                     if (decrypted != null && !decrypted.equals(value)) {
                         // 如果解密成功，返回新的 Reader（使用解密后的字符串创建）
                         return new java.io.StringReader(decrypted);
@@ -142,8 +185,14 @@ final class ResultSetDecryptingProxy implements InvocationHandler {
                 }
                 return result;
             }
-        } catch (Throwable ignore) {
-            // 解密失败不影响读取
+        } catch (Throwable e) {
+            // 解密失败不影响读取，但记录调试日志以便排查问题
+            if (log.isDebugEnabled()) {
+                log.debug("Failed to decrypt field value, using original value [column={}, errorClass={}]. Error: {}", 
+                        columnLabel != null ? columnLabel : "unknown",
+                        e.getClass().getSimpleName(),
+                        e.getMessage(), e);
+            }
         }
 
         return result;
@@ -186,31 +235,56 @@ final class ResultSetDecryptingProxy implements InvocationHandler {
     }
 
     /**
-     * 解密值并返回解密结果和表名信息
-     * @return String[0] 解密后的值, String[1] 表名（如果找到）
+     * 解密值并返回解密结果
+     * 
+     * <p>性能优化：使用预构建的列名映射（O(1)查找）替代 Stream 遍历（O(n)查找），
+     * 在高频调用场景下显著提升性能。</p>
+     *
+     * @param columnLabel 列名（标签或名称）
+     * @param value       加密后的值
+     * @return 解密后的值，如果不需要解密或解密失败则返回原值
+     * @throws SQLException 如果获取元数据失败
      */
     private String maybeDecryptWithInfo(String columnLabel, String value) throws SQLException {
         if (value == null || columnLabel == null) {
             return value;
         }
+        
         String normalizedColumn = columnLabel.toLowerCase(Locale.ROOT);
 
-        List<FieldEncryptorInfoDto> fieldEncryptorInfoDtos = this.pair.getValue();
-        FieldEncryptorInfoDto fieldEncryptorInfoDto = fieldEncryptorInfoDtos.stream().filter(a -> a.getColumnName().toLowerCase(Locale.ROOT).equals(normalizedColumn)).findFirst().orElse(null);
-        if (null != fieldEncryptorInfoDto) {
-            Class<? extends FieldEncryptorStrategy> strategyClass = TableCache.getTableFieldEncryptInfo(fieldEncryptorInfoDto.getSourceTableName(), fieldEncryptorInfoDto.getSourceColumn());
-            // 使用策略缓存获取策略实例
-            FieldEncryptorStrategy strategy = StrategyCache.getStrategy(strategyClass);
-            // 使用统一的异常处理器
-            String decrypted = EncryptionHandler.handleDecryption(
-                    value,
-                    fieldEncryptorInfoDto.getSourceTableName(),
-                    fieldEncryptorInfoDto.getSourceColumn(),
-                    () -> strategy.decryption(value),
-                    null // 使用默认策略
-            );
-            // 如果解密失败且策略为 SKIP，返回 null；否则返回原值或解密后的值
-            return decrypted != null ? decrypted : value;
+        // 使用预构建的映射进行 O(1) 查找，替代原来的 O(n) Stream 查找
+        FieldEncryptorInfoDto fieldEncryptorInfoDto = this.columnNameToFieldMap != null 
+                ? this.columnNameToFieldMap.get(normalizedColumn) 
+                : null;
+                
+        if (fieldEncryptorInfoDto != null) {
+            try {
+                Class<? extends FieldEncryptorStrategy> strategyClass = TableCache.getTableFieldEncryptInfo(
+                        fieldEncryptorInfoDto.getSourceTableName(), 
+                        fieldEncryptorInfoDto.getSourceColumn());
+                // 使用策略缓存获取策略实例
+                FieldEncryptorStrategy strategy = StrategyCache.getStrategy(strategyClass);
+                // 使用统一的异常处理器
+                String decrypted = EncryptionHandler.handleDecryption(
+                        value,
+                        fieldEncryptorInfoDto.getSourceTableName(),
+                        fieldEncryptorInfoDto.getSourceColumn(),
+                        () -> strategy.decryption(value),
+                        null // 使用默认策略
+                );
+                // 如果解密失败且策略为 SKIP，返回 null；否则返回原值或解密后的值
+                return decrypted != null ? decrypted : value;
+            } catch (Exception e) {
+                // 解密失败时记录调试日志，但不影响正常读取
+                if (log.isDebugEnabled()) {
+                    log.debug("Failed to decrypt field [column={}, table={}, field={}], using original value. Error: {}", 
+                            columnLabel,
+                            fieldEncryptorInfoDto.getSourceTableName(),
+                            fieldEncryptorInfoDto.getSourceColumn(),
+                            e.getMessage(), e);
+                }
+                return value;
+            }
         }
         return value;
     }
@@ -235,7 +309,14 @@ final class ResultSetDecryptingProxy implements InvocationHandler {
                     break;
                 }
             }
-        } catch (Throwable ignore) {
+        } catch (Throwable e) {
+            // 解密失败不影响读取，但记录调试日志以便排查问题
+            if (log.isDebugEnabled()) {
+                log.debug("Failed to get table name for column, using fallback [column={}, errorClass={}]. Error: {}", 
+                        columnLabel,
+                        e.getClass().getSimpleName(),
+                        e.getMessage(), e);
+            }
         }
 
         // fallback: 若只有一个表，则默认该表

@@ -87,6 +87,17 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
     private Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> pair;
 
     /**
+     * 参数索引到字段信息的映射（优化查找性能）
+     * key: 参数索引（从1开始，对应JDBC规范）
+     * value: 字段信息DTO
+     * 
+     * <p>在构造函数中初始化，用于将 O(n) 的 Stream 查找优化为 O(1) 的 Map 查找</p>
+     * 
+     * @since 1.0.0
+     */
+    private Map<Integer, ColumnTableDto> parameterIndexToFieldMap;
+
+    /**
      * 构造函数
      *
      * <p>创建PreparedStatement拦截器，初始化时：
@@ -134,11 +145,16 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
         if (SecurtkitUtils.needEncrypt(this.tables)) {
             try {
                 this.pair = SecurtkitUtils.parseSql(this.sql);
+                
+                // 构建参数索引到字段信息的映射（优化性能：O(n) -> O(1)）
+                this.parameterIndexToFieldMap = buildParameterIndexMap(this.pair);
+                
                 if (log.isInfoEnabled()) {
-                    log.info("SQL requires encryption [sql={}, tables={}, fieldsCount={}]", 
+                    log.info("SQL requires encryption [sql={}, tables={}, fieldsCount={}, parameterMappings={}]", 
                             this.sql != null ? this.sql : "null",
                             this.tables,
-                            this.pair != null ? this.pair.getValue().size() : 0);
+                            this.pair != null ? this.pair.getValue().size() : 0,
+                            this.parameterIndexToFieldMap != null ? this.parameterIndexToFieldMap.size() : 0);
                 }
             } catch (JSQLParserException e) {
                 log.error("Failed to parse SQL for encryption [sql={}, sqlLength={}, tables={}], error: {}", 
@@ -150,6 +166,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
             }
         } else {
             log.debug("Tables do not require encryption: " + this.tables);
+            this.parameterIndexToFieldMap = Collections.emptyMap();
         }
     }
 
@@ -340,10 +357,38 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
     }
 
     /**
+     * 构建参数索引到字段信息的映射
+     * 
+     * <p>将 O(n) 的 Stream 查找优化为 O(1) 的 Map 查找，提升性能。
+     * 在构造函数中调用一次，后续所有 setString 调用都使用此映射。</p>
+     *
+     * @param pair SQL解析结果对
+     * @return 参数索引到字段信息的映射，如果不需要加密则返回空Map
+     */
+    private Map<Integer, ColumnTableDto> buildParameterIndexMap(Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> pair) {
+        if (pair == null || pair.getKey() == null) {
+            return Collections.emptyMap();
+        }
+        
+        Map<Integer, ColumnTableDto> indexMap = new HashMap<>();
+        for (ColumnTableDto dto : pair.getKey().values()) {
+            Integer index = dto.getInsertFieldIndex();
+            if (index != null && index > 0) {
+                // 如果同一个索引对应多个字段，保留第一个（通常不会发生）
+                indexMap.putIfAbsent(index, dto);
+            }
+        }
+        return indexMap;
+    }
+
+    /**
      * 设置字符串参数 - 拦截方法
      *
      * <p>如果该参数对应需要加密的字段，则会在设置前进行加密处理。
      * 加密后的值会被缓存，用于后续的SQL日志输出。</p>
+     *
+     * <p>性能优化：使用预构建的参数索引映射（O(1)查找）替代 Stream 遍历（O(n)查找），
+     * 在高频调用场景下显著提升性能。</p>
      *
      * @param parameterIndex 参数索引，从1开始
      * @param x              参数值
@@ -353,26 +398,13 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
     public void setString(int parameterIndex, String x) throws SQLException {
         String newValue = x;
 
-        if (SecurtkitUtils.needEncrypt(this.tables) && null != this.pair) {
-
-            Optional<ColumnTableDto> first = null;
-            first = pair.getKey().values().stream()
-                    .filter(a -> a.getInsertFieldIndex() == parameterIndex)
-                    .findFirst();
-            // TODO 暂时注释
-              /*  if (isUpdate) {
-                    first = pair.getKey().values().stream()
-                            .filter(a -> a.getInsertFieldIndex() == parameterIndex)
-                            .findFirst();
-                } else {
-                    // 支持delete/where自动加密（根据表加密配置+参数名/列名/SQL实际解析，可拓展，否则条件参数直接跳过加密）
-                    first = Optional.empty();
-                }*/
-
-            if (first != null && first.isPresent()) {
-                ColumnTableDto columnTableDto = first.get();
+        // 使用预构建的映射进行 O(1) 查找，替代原来的 O(n) Stream 查找
+        if (SecurtkitUtils.needEncrypt(this.tables) && this.parameterIndexToFieldMap != null) {
+            ColumnTableDto columnTableDto = this.parameterIndexToFieldMap.get(parameterIndex);
+            
+            if (columnTableDto != null) {
                 String sourceColumn = columnTableDto.getSourceColumn();
-                if(StrUtil.isNotBlank(columnTableDto.getSourceTableName()) && StrUtil.isNotBlank(sourceColumn)){
+                if (StrUtil.isNotBlank(columnTableDto.getSourceTableName()) && StrUtil.isNotBlank(sourceColumn)) {
                     Class<? extends FieldEncryptorStrategy> fieldEncryptorStrategy =
                             TableCache.getTableFieldEncryptInfo(columnTableDto.getSourceTableName(), sourceColumn);
 
@@ -396,7 +428,6 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
                         );
                     }
                 }
-
             }
         }
 
@@ -964,26 +995,25 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     /**
      * 尝试对参数值进行加密
-     * <p>
-     * 该方法会根据参数索引查找对应的字段配置，如果字段需要加密则进行加密处理。
-     * </p>
+     * 
+     * <p>该方法会根据参数索引查找对应的字段配置，如果字段需要加密则进行加密处理。</p>
+     * 
+     * <p>性能优化：使用预构建的参数索引映射（O(1)查找）替代 Stream 遍历（O(n)查找）。</p>
      *
      * @param parameterIndex 参数索引（从1开始）
      * @param value          原始值
      * @return 加密后的值，如果不需要加密或加密失败则返回原值
      */
     private String maybeEncryptValue(int parameterIndex, String value) {
-        if (value == null || !SecurtkitUtils.needEncrypt(this.tables) || this.pair == null) {
+        if (value == null || !SecurtkitUtils.needEncrypt(this.tables) || this.parameterIndexToFieldMap == null) {
             return value;
         }
 
         try {
-            Optional<ColumnTableDto> columnDto = pair.getKey().values().stream()
-                    .filter(a -> a.getInsertFieldIndex() != null && a.getInsertFieldIndex() == parameterIndex)
-                    .findFirst();
-
-            if (columnDto.isPresent()) {
-                ColumnTableDto dto = columnDto.get();
+            // 使用预构建的映射进行 O(1) 查找
+            ColumnTableDto dto = this.parameterIndexToFieldMap.get(parameterIndex);
+            
+            if (dto != null) {
                 String sourceColumn = dto.getSourceColumn();
                 if (StrUtil.isNotBlank(dto.getSourceTableName()) && StrUtil.isNotBlank(sourceColumn)) {
                     Class<? extends FieldEncryptorStrategy> fieldEncryptorStrategy =
