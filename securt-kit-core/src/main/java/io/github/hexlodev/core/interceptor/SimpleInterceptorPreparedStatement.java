@@ -62,6 +62,11 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
     private final String sql;
 
     /**
+     * 数据源标识（多数据源场景）
+     */
+    private final String datasourceId;
+
+    /**
      * 是否为更新类操作（INSERT/UPDATE/DELETE）
      */
     private boolean isUpdate;
@@ -98,7 +103,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
     private Map<Integer, ColumnTableDto> parameterIndexToFieldMap;
 
     /**
-     * 构造函数
+     * 构造函数（向后兼容）
      *
      * <p>创建PreparedStatement拦截器，初始化时：
      * <ol>
@@ -113,6 +118,26 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
      * @throws RuntimeException         如果SQL解析失败
      */
     public SimpleInterceptorPreparedStatement(PreparedStatement delegate, String sql) {
+        this(delegate, sql, null);
+    }
+
+    /**
+     * 构造函数（支持多数据源）
+     *
+     * <p>创建PreparedStatement拦截器，初始化时：
+     * <ol>
+     *   <li>解析SQL语句中的表名</li>
+     *   <li>判断是否需要加密处理（根据数据源标识）</li>
+     *   <li>如果需要加密，则解析SQL获取字段映射关系</li>
+     * </ol>
+     *
+     * @param delegate 真实的PreparedStatement对象，不能为null
+     * @param sql      原始SQL语句，不能为null或空
+     * @param datasourceId 数据源标识，如果为null则使用默认数据源
+     * @throws IllegalArgumentException 如果delegate或sql为null
+     * @throws RuntimeException         如果SQL解析失败
+     */
+    public SimpleInterceptorPreparedStatement(PreparedStatement delegate, String sql, String datasourceId) {
         if (delegate == null) {
             throw new IllegalArgumentException("Delegate PreparedStatement cannot be null");
         }
@@ -122,6 +147,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
         this.delegate = delegate;
         this.sql = sql.trim();
+        this.datasourceId = StrUtil.isBlank(datasourceId) ? "default" : datasourceId;
 
         // 判断是否为更新类操作（INSERT/UPDATE/DELETE）
         String lowerSql = this.sql.toLowerCase();
@@ -132,7 +158,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
             // 使用 SqlParseCache 的表名解析方法，优先从缓存获取
             Set<String> parsedTables = io.github.hexlodev.core.parser.SqlParseCache.parseTableNames(this.sql);
             this.tables = parsedTables != null ? new HashSet<>(parsedTables) : new HashSet<>();
-            log.debug("Parsed tables from SQL: " + this.tables);
+            log.debug("Parsed tables from SQL: {} (datasource-id: {})", this.tables, this.datasourceId);
         } catch (Exception e) {
             log.warn("Failed to parse table names from SQL [sql={}, sqlLength={}], error: {}", 
                     this.sql != null ? this.sql : "null",
@@ -141,31 +167,33 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
             this.tables = new HashSet<>();
         }
 
-        // 如果表需要加密，则解析SQL获取字段映射关系
-        if (SecurtkitUtils.needEncrypt(this.tables)) {
+        // 如果表需要加密，则解析SQL获取字段映射关系（使用数据源标识）
+        if (SecurtkitUtils.needEncrypt(this.tables, this.datasourceId)) {
             try {
-                this.pair = SecurtkitUtils.parseSql(this.sql);
+                this.pair = SecurtkitUtils.parseSql(this.sql, this.datasourceId);
                 
                 // 构建参数索引到字段信息的映射（优化性能：O(n) -> O(1)）
                 this.parameterIndexToFieldMap = buildParameterIndexMap(this.pair);
                 
                 if (log.isInfoEnabled()) {
-                    log.info("SQL requires encryption [sql={}, tables={}, fieldsCount={}, parameterMappings={}]", 
+                    log.info("SQL requires encryption [sql={}, tables={}, datasource-id={}, fieldsCount={}, parameterMappings={}]", 
                             this.sql != null ? this.sql : "null",
                             this.tables,
+                            this.datasourceId,
                             this.pair != null ? this.pair.getValue().size() : 0,
                             this.parameterIndexToFieldMap != null ? this.parameterIndexToFieldMap.size() : 0);
                 }
             } catch (JSQLParserException e) {
-                log.error("Failed to parse SQL for encryption [sql={}, sqlLength={}, tables={}], error: {}", 
+                log.error("Failed to parse SQL for encryption [sql={}, sqlLength={}, tables={}, datasource-id={}], error: {}", 
                         this.sql != null ? this.sql : "null",
                         this.sql != null ? this.sql.length() : 0,
                         this.tables,
+                        this.datasourceId,
                         e.getMessage(), e);
                 throw new RuntimeException("SQL parsing failed for encryption", e);
             }
         } else {
-            log.debug("Tables do not require encryption: " + this.tables);
+            log.debug("Tables do not require encryption: {} (datasource-id: {})", this.tables, this.datasourceId);
             this.parameterIndexToFieldMap = Collections.emptyMap();
         }
     }
@@ -257,7 +285,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
             }
 
             // 包装结果集以实现自动解密
-            return ResultSetDecryptingProxy.wrap(resultSet, this.tables, this.pair, this.sql);
+            return ResultSetDecryptingProxy.wrap(resultSet, this.tables, this.pair, this.sql, this.datasourceId);
         } catch (SQLException e) {
             long endTime = System.currentTimeMillis();
             log.error("[PREPARED QUERY ERROR] Failed after {}ms [sql={}, sqlLength={}, tables={}], error: {}", 
@@ -406,7 +434,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
                 String sourceColumn = columnTableDto.getSourceColumn();
                 if (StrUtil.isNotBlank(columnTableDto.getSourceTableName()) && StrUtil.isNotBlank(sourceColumn)) {
                     Class<? extends FieldEncryptorStrategy> fieldEncryptorStrategy =
-                            TableCache.getTableFieldEncryptInfo(columnTableDto.getSourceTableName(), sourceColumn);
+                            TableCache.getTableFieldEncryptStrategy(columnTableDto.getSourceTableName(), sourceColumn, this.datasourceId);
 
                     if (fieldEncryptorStrategy != null) {
                         // 使用策略缓存获取策略实例
@@ -1017,7 +1045,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
                 String sourceColumn = dto.getSourceColumn();
                 if (StrUtil.isNotBlank(dto.getSourceTableName()) && StrUtil.isNotBlank(sourceColumn)) {
                     Class<? extends FieldEncryptorStrategy> fieldEncryptorStrategy =
-                            TableCache.getTableFieldEncryptInfo(dto.getSourceTableName(), sourceColumn);
+                            TableCache.getTableFieldEncryptStrategy(dto.getSourceTableName(), sourceColumn, this.datasourceId);
 
                     if (fieldEncryptorStrategy != null) {
                         // 使用策略缓存获取策略实例

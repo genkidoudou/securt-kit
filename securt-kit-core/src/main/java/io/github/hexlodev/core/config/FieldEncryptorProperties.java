@@ -90,14 +90,53 @@ public class FieldEncryptorProperties {
     private FailurePolicy failurePolicy = FailurePolicy.FALLBACK;
 
     /**
-     * 表配置
+     * 表配置（向后兼容，单数据源场景使用）
      * @since 2025/10/8
      */
     private List<TableConfig> tables;
 
+    /**
+     * 全局配置（多数据源场景，所有数据源共享，除非被覆盖）
+     * <p>
+     * 当配置了 datasources 时，global 配置作为默认配置，
+     * 数据源级别配置可以继承并覆盖全局配置。
+     * </p>
+     * @since 1.1.0
+     */
+    private GlobalConfig global;
 
     /**
-     * 表配置项：tableName + fields
+     * 数据源级别配置（多数据源场景）
+     * <p>
+     * Key: 数据源标识（从 URL 参数或连接属性中获取）
+     * Value: 数据源配置（可以覆盖全局配置）
+     * </p>
+     * <p>
+     * 配置示例：
+     * <pre>{@code
+     * securtkit:
+     *   encryptor:
+     *     global:
+     *       enable: true
+     *       tables:
+     *         - table-name: user
+     *     datasources:
+     *       primary:
+     *         tables:
+     *           - table-name: user
+     *             fields:
+     *               - field-name: phone
+     *       secondary:
+     *         enable: false
+     * }</pre>
+     * </p>
+     * @since 1.1.0
+     */
+    private java.util.Map<String, DataSourceConfig> datasources;
+
+
+    /**
+     * 表配置项：tableName + fields + datasourceId（可选）
      */
     /**
      * 表配置
@@ -116,6 +155,28 @@ public class FieldEncryptorProperties {
         @NotBlank(message = "表名不能为空")
         private String tableName;
 
+        /**
+         * 数据源标识（可选）
+         * <p>
+         * - 如果为空或 null，则应用到所有数据源（单数据源场景或全局配置）
+         * - 如果指定，则只应用到该数据源（多数据源场景）
+         * </p>
+         * <p>
+         * 配置示例：
+         * <pre>{@code
+         * # 单数据源场景（不指定 datasource-id）
+         * - table-name: user
+         *   fields: ...
+         * 
+         * # 多数据源场景（指定 datasource-id）
+         * - table-name: user
+         *   datasource-id: primary
+         *   fields: ...
+         * }</pre>
+         * </p>
+         * @since 1.2.0
+         */
+        private String datasourceId;
 
         /**
          * 字段配置列表：fieldName + strategy（可选）
@@ -210,6 +271,74 @@ public class FieldEncryptorProperties {
         public EncryptionHandler.FailurePolicy toHandlerPolicy() {
             return EncryptionHandler.FailurePolicy.valueOf(this.name());
         }
+    }
+
+    /**
+     * 全局配置（多数据源场景）
+     * <p>
+     * 当配置了 datasources 时，global 配置作为所有数据源的默认配置。
+     * 数据源级别配置可以继承并覆盖全局配置。
+     * </p>
+     * 
+     * @since 1.1.0
+     */
+    @Data
+    public static class GlobalConfig {
+        /**
+         * 是否启用加密
+         */
+        private Boolean enable;
+
+        /**
+         * 失败策略
+         */
+        private FailurePolicy failurePolicy;
+
+        /**
+         * SQL 解析缓存配置
+         */
+        private SqlParseCacheConfig sqlParseCache;
+
+        /**
+         * 表配置列表
+         */
+        private List<TableConfig> tables;
+    }
+
+    /**
+     * 数据源配置（多数据源场景）
+     * <p>
+     * 数据源配置可以继承全局配置，也可以覆盖全局配置。
+     * 如果某个配置项为 null，则使用全局配置的对应值。
+     * </p>
+     * 
+     * @since 1.1.0
+     */
+    @Data
+    public static class DataSourceConfig {
+        /**
+         * 是否启用（继承全局配置）
+         * 如果为 null，则使用全局配置的 enable 值
+         */
+        private Boolean enable;
+
+        /**
+         * 失败策略（继承全局配置）
+         * 如果为 null，则使用全局配置的 failurePolicy 值
+         */
+        private FailurePolicy failurePolicy;
+
+        /**
+         * SQL 解析缓存配置（继承全局配置）
+         * 如果为 null，则使用全局配置的 sqlParseCache 值
+         */
+        private SqlParseCacheConfig sqlParseCache;
+
+        /**
+         * 表配置（覆盖全局配置）
+         * 如果配置了表配置，则与全局配置合并（数据源配置优先）
+         */
+        private List<TableConfig> tables;
     }
 
 }

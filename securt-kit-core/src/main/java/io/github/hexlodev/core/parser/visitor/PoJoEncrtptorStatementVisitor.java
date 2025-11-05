@@ -349,7 +349,7 @@ public class PoJoEncrtptorStatementVisitor implements StatementVisitor {
                         .columnName(m.getColumnName())
                         .sourceColumn(m.getSourceColumn())
                         .sourceTableName(m.getSourceTableName())
-                        .fieldEncryptor(TableCache.getTableFieldEncryptInfo(m.getSourceTableName(),
+                        .fieldEncryptor(TableCache.getTableFieldEncryptStrategy(m.getSourceTableName(),
                                 m.getSourceColumn()))
                         .build()
                 ).collect(Collectors.toList());

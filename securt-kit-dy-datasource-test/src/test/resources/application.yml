@@ -1,0 +1,99 @@
+spring:
+  # 应用名称
+  application:
+    name: securt-kit-test-multi-datasource
+  
+  # MyBatis-Plus 多数据源配置（使用 dynamic-datasource）
+  datasource:
+    # 动态数据源配置
+    dynamic:
+      # 是否启用严格模式（默认 false，建议开启）
+      strict: true
+      # 主数据源（默认数据源）
+      primary: primary
+      # 数据源配置
+      datasource:
+        # 主数据源
+        primary:
+          driver-class-name: io.github.hexlodev.core.interceptor.SimpleInterceptorDriver
+          url: 'jdbc:interceptor:h2:mem:primary_db;DB_CLOSE_DELAY=-1;MODE=MySQL'
+          username: sa
+          password:
+          # 通过连接属性传递数据源标识（通用方式，适用于所有连接池）
+          connection-properties: datasource-id=primary
+          hikari:
+            maximum-pool-size: 5
+            minimum-idle: 1
+        # 从数据源
+        secondary:
+          driver-class-name: io.github.hexlodev.core.interceptor.SimpleInterceptorDriver
+          url: 'jdbc:interceptor:h2:mem:secondary_db;DB_CLOSE_DELAY=-1;MODE=MySQL'
+          username: sa
+          password:
+          # 通过连接属性传递数据源标识（通用方式，适用于所有连接池）
+          connection-properties: datasource-id=secondary
+          hikari:
+            maximum-pool-size: 5
+            minimum-idle: 1
+        # 第三方数据源
+        third:
+          driver-class-name: io.github.hexlodev.core.interceptor.SimpleInterceptorDriver
+          url: 'jdbc:interceptor:h2:mem:third_db;DB_CLOSE_DELAY=-1;MODE=MySQL'
+          username: sa
+          password:
+          # 通过连接属性传递数据源标识（通用方式，适用于所有连接池）
+          connection-properties: datasource-id=third
+          hikari:
+            maximum-pool-size: 5
+            minimum-idle: 1
+
+  # SQL 初始化配置
+  sql:
+    init:
+      mode: never  # 多数据源测试中手动初始化表结构
+
+# MyBatis 配置
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: io.github.test.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+# 日志配置
+logging:
+  level:
+    root: INFO
+    io.github.test: DEBUG
+    io.github.hexlodev.core: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# 服务器配置
+server:
+  port: 8081
+
+# 多数据源加密配置（新配置方式：在 tables 中直接指定 datasource-id）
+securtkit:
+  encryptor:
+    enable: true
+    failure-policy: FALLBACK
+    sql-parse-cache:
+      enable: true
+      max-size: 1000
+    tables:
+      # 主数据源配置（primary）：加密 name 和 phone
+      - table-name: user
+        datasource-id: primary
+        fields:
+          - field-name: name
+          - field-name: phone
+
+      # 从数据源配置（secondary）：只加密 name
+      - table-name: user
+        datasource-id: secondary
+        fields:
+          - field-name: name
+
+      # 第三方数据源不配置（等于关闭加密）
+

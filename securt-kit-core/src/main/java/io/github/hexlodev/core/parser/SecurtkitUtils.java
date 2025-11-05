@@ -7,6 +7,7 @@ import io.github.hexlodev.core.TableCache;
 import io.github.hexlodev.core.parser.dto.ColumnTableDto;
 import io.github.hexlodev.core.parser.dto.FieldEncryptorInfoDto;
 import io.github.hexlodev.core.parser.visitor.PoJoEncrtptorStatementVisitor;
+import io.github.hexlodev.core.strategy.FieldEncryptorStrategy;
 import lombok.extern.slf4j.Slf4j;
 import net.sf.jsqlparser.JSQLParserException;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
@@ -64,7 +65,19 @@ public class SecurtkitUtils {
         ThreadLocal.withInitial(() -> new AtomicInteger(0));
 
     /**
-     * 解析SQL语句，获取占位符与表字段的映射关系以及需要加密的字段列表
+     * 解析SQL语句，获取占位符与表字段的映射关系以及需要加密的字段列表（向后兼容）
+     * 
+     * @param sql 要解析的SQL语句
+     * @return 解析结果
+     * @throws JSQLParserException 如果SQL解析失败
+     * @since 1.0.0
+     */
+    public static Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> parseSql(String sql) throws JSQLParserException {
+        return parseSql(sql, null);
+    }
+
+    /**
+     * 解析SQL语句，获取占位符与表字段的映射关系以及需要加密的字段列表（支持多数据源）
      * 
      * <p>该方法使用缓存机制，相同 SQL 的解析结果会被缓存，显著提升性能。
      * 缓存使用 LRU 算法，自动淘汰最久未使用的条目。</p>
@@ -74,7 +87,7 @@ public class SecurtkitUtils {
      *   <li>检查缓存，如果命中则直接返回</li>
      *   <li>将SQL中的问号占位符替换为自定义占位符</li>
      *   <li>使用JSQLParser解析SQL语句</li>
-     *   <li>通过访问者模式提取表字段信息和加密字段信息</li>
+     *   <li>通过访问者模式提取表字段信息和加密字段信息（根据数据源标识）</li>
      *   <li>建立占位符索引与表字段的映射关系</li>
      *   <li>将解析结果存入缓存</li>
      * </ol>
@@ -87,6 +100,7 @@ public class SecurtkitUtils {
      * </ul>
      *
      * @param sql 要解析的SQL语句，包含问号占位符（如：UPDATE user SET name = ? WHERE id = ?），不能为 null 或空白
+     * @param datasourceId 数据源标识，如果为 null 则使用默认数据源
      * @return Pair对象，包含：
      * <ul>
      *   <li>Key: 占位符到ColumnTableDto的映射（占位符名称 -> 表字段信息）</li>
@@ -94,17 +108,35 @@ public class SecurtkitUtils {
      * </ul>
      * @throws IllegalArgumentException 如果 SQL 为 null 或空白
      * @throws JSQLParserException 如果SQL解析失败
-     * @since 1.0.0
+     * @since 1.1.0
      * @see SqlParseCache
      * @see ColumnTableDto
      * @see FieldEncryptorInfoDto
      */
-    public static Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> parseSql(String sql) throws JSQLParserException {
+    public static Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> parseSql(String sql, String datasourceId) throws JSQLParserException {
         if (StrUtil.isBlank(sql)) {
             throw new IllegalArgumentException("SQL statement cannot be null or blank");
         }
-        // 使用缓存进行解析
-        return SqlParseCache.parseSql(sql, SecurtkitUtils::doParseSql);
+        // 使用缓存进行解析（注意：缓存不考虑数据源标识，因为SQL本身是相同的）
+        // 但解析时需要根据数据源标识过滤加密字段
+        Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> result = SqlParseCache.parseSql(sql, SecurtkitUtils::doParseSql);
+        
+        // 根据数据源标识过滤加密字段信息
+        if (StrUtil.isNotBlank(datasourceId) && result != null && result.getValue() != null) {
+            List<FieldEncryptorInfoDto> filteredFields = new ArrayList<>();
+            for (FieldEncryptorInfoDto field : result.getValue()) {
+                // 检查该字段在该数据源中是否需要加密
+                Class<? extends FieldEncryptorStrategy> strategy = TableCache.getTableFieldEncryptStrategy(
+                    field.getSourceTableName(), field.getSourceColumn(), datasourceId);
+                if (strategy != null) {
+                    field.setFieldEncryptor(strategy);
+                    filteredFields.add(field);
+                }
+            }
+            return Pair.of(result.getKey(), filteredFields);
+        }
+        
+        return result;
     }
 
     /**
@@ -348,7 +380,18 @@ public class SecurtkitUtils {
      * @since 1.0.0
      */
     /**
-     * 判断表集合中是否有需要加密的表
+     * 判断表集合中是否有需要加密的表（向后兼容）
+     * 
+     * @param tables 表名集合
+     * @return 如果需要加密返回 true
+     * @since 1.0.0
+     */
+    public static boolean needEncrypt(Collection<String> tables) {
+        return needEncrypt(tables, null);
+    }
+
+    /**
+     * 判断表集合中是否有需要加密的表（支持多数据源）
      * 
      * <p>检查给定的表名集合中是否包含配置了加密的表。
      * 用于快速判断是否需要执行加密/解密操作，避免不必要的SQL解析。</p>
@@ -363,22 +406,22 @@ public class SecurtkitUtils {
      * <p>使用示例：</p>
      * <pre>{@code
      * Set<String> tables = Set.of("user", "orders");
-     * if (SecurtkitUtils.needEncrypt(tables)) {
+     * if (SecurtkitUtils.needEncrypt(tables, "primary")) {
      *     // 执行加密/解密逻辑
      * }
      * }</pre>
      *
      * @param tables 表名集合，可以为 null 或空集合
+     * @param datasourceId 数据源标识，如果为 null 则使用默认数据源
      * @return 如果表集合中包含需要加密的表则返回 true，否则返回 false
-     * @since 1.0.0
+     * @since 1.1.0
      * @see TableCache#getTables()
-     * @see TableCache#concatTable(String)
+     * @see TableCache#concatTable(String, String)
      */
-    public static boolean needEncrypt(Collection<String> tables) {
+    public static boolean needEncrypt(Collection<String> tables, String datasourceId) {
         if (CollectionUtil.isEmpty(tables)) {
             return false;
         }
-        Set<String> configuredTables = TableCache.getTables();
         
         // 提取纯表名集合（去掉数据库名和schema前缀）
         Set<String> pureTableNames = new HashSet<>();
@@ -389,7 +432,13 @@ public class SecurtkitUtils {
             }
         }
         
-        // 使用 containsAny 检查交集，线程安全
-        return CollectionUtil.containsAny(configuredTables, pureTableNames);
+        // 根据数据源标识检查表是否需要加密
+        for (String pureTableName : pureTableNames) {
+            if (TableCache.concatTable(pureTableName, datasourceId)) {
+                return true;
+            }
+        }
+        
+        return false;
     }
 }

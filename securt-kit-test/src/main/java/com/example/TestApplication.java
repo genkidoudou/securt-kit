@@ -13,10 +13,7 @@ import org.springframework.context.annotation.ComponentScan;
  */
 @SpringBootApplication
 @MapperScan(basePackages = {"com.example.mapper"})
-@ComponentScan(basePackages = {
-        "com.example",
-        "io.github.hexlodev"  // 扫描 securt-kit 相关包，包括 UI 模块
-})
+
 public class TestApplication {
 
     public static void main(String[] args) {

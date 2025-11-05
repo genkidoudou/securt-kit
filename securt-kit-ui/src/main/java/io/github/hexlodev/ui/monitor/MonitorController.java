@@ -295,7 +295,7 @@ public class MonitorController {
         // 优先级2: 通过表名和字段名获取策略
         else if (tableName != null && !tableName.trim().isEmpty() &&
                 fieldName != null && !fieldName.trim().isEmpty()) {
-            strategyClass = TableCache.getTableFieldEncryptInfo(tableName, fieldName);
+            strategyClass = TableCache.getTableFieldEncryptStrategy(tableName, fieldName);
         }
         // 优先级3: 使用默认策略
         else {
@@ -728,7 +728,7 @@ public class MonitorController {
         
         // 检查该字段是否需要加密
         Class<? extends FieldEncryptorStrategy> strategyClass = 
-            TableCache.getTableFieldEncryptInfo(tableName, fieldName);
+            TableCache.getTableFieldEncryptStrategy(tableName, fieldName);
         
         if (strategyClass != null) {
             log.debug("字段 {} 需要加密，策略: {}", fieldName, strategyClass.getName());
@@ -1088,7 +1088,7 @@ public class MonitorController {
                         
                         // 检查是否需要加密
                         Class<? extends FieldEncryptorStrategy> strategyClass = 
-                            TableCache.getTableFieldEncryptInfo(tableName, fieldName);
+                            TableCache.getTableFieldEncryptStrategy(tableName, fieldName);
                         
                         if (strategyClass != null) {
                             try {

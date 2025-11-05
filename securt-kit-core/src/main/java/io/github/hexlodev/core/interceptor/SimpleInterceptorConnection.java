@@ -51,7 +51,12 @@ public class SimpleInterceptorConnection implements Connection {
     private final Connection delegate;
     
     /**
-     * 构造函数
+     * 数据源标识（多数据源场景）
+     */
+    private final String datasourceId;
+    
+    /**
+     * 构造函数（向后兼容）
      * 
      * <p>创建一个新的连接包装器，包装真实的数据库连接。
      * 构造函数会记录连接被拦截的日志信息。</p>
@@ -60,11 +65,36 @@ public class SimpleInterceptorConnection implements Connection {
      * @throws IllegalArgumentException 如果delegate为null
      */
     public SimpleInterceptorConnection(Connection delegate) {
+        this(delegate, null);
+    }
+    
+    /**
+     * 构造函数（支持多数据源）
+     * 
+     * <p>创建一个新的连接包装器，包装真实的数据库连接。
+     * 构造函数会记录连接被拦截的日志信息。</p>
+     * 
+     * @param delegate 真实的数据库连接，不能为null
+     * @param datasourceId 数据源标识，如果为null则使用默认值"default"
+     * @throws IllegalArgumentException 如果delegate为null
+     */
+    public SimpleInterceptorConnection(Connection delegate, String datasourceId) {
         if (delegate == null) {
             throw new IllegalArgumentException("Delegate connection cannot be null");
         }
         this.delegate = delegate;
-        log.info("Connection intercepted: " + delegate.getClass().getSimpleName());
+        this.datasourceId = cn.hutool.core.util.StrUtil.isBlank(datasourceId) ? "default" : datasourceId;
+        log.info("Connection intercepted: {} (datasource-id: {})", 
+                delegate.getClass().getSimpleName(), this.datasourceId);
+    }
+    
+    /**
+     * 获取数据源标识
+     *
+     * @return 数据源标识
+     */
+    public String getDatasourceId() {
+        return datasourceId;
     }
     
     /**
@@ -98,8 +128,8 @@ public class SimpleInterceptorConnection implements Connection {
     @Override
     public PreparedStatement prepareStatement(String sql) throws SQLException {
         PreparedStatement statement = delegate.prepareStatement(sql);
-        log.info("PreparedStatement created for SQL: " + sql);
-        return new SimpleInterceptorPreparedStatement(statement, sql);
+        log.info("PreparedStatement created for SQL: {} (datasource-id: {})", sql, datasourceId);
+        return new SimpleInterceptorPreparedStatement(statement, sql, datasourceId);
     }
     
     /**

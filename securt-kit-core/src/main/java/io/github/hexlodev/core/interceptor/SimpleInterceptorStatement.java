@@ -2,6 +2,7 @@ package io.github.hexlodev.core.interceptor;
 
 import cn.hutool.core.lang.Pair;
 import io.github.hexlodev.core.parser.SecurtkitUtils;
+import io.github.hexlodev.core.parser.SqlParseCache;
 import io.github.hexlodev.core.parser.dto.ColumnTableDto;
 import io.github.hexlodev.core.parser.dto.FieldEncryptorInfoDto;
 import lombok.extern.slf4j.Slf4j;

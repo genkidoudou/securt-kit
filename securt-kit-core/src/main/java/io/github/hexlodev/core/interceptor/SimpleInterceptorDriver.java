@@ -1,5 +1,6 @@
 package io.github.hexlodev.core.interceptor;
 
+import cn.hutool.core.util.StrUtil;
 import cn.hutool.extra.spring.SpringUtil;
 import io.github.hexlodev.core.TableCache;
 import io.github.hexlodev.core.config.FieldEncryptorProperties;
@@ -101,9 +102,12 @@ public class SimpleInterceptorDriver implements Driver {
             return null;
         }
 
-        // 提取真实的JDBC URL（去掉interceptor前缀）
-        String realUrl = "jdbc:" + url.substring(JDBC_INTERCEPTOR_PREFIX.length());
-        log.info("Intercepting connection to: " + realUrl);
+        // 提取数据源标识（优先从 URL 参数，其次从连接属性）
+        String datasourceId = extractDatasourceId(url, info);
+
+        // 提取真实的JDBC URL（去掉interceptor前缀和datasource-id参数）
+        String realUrl = extractRealUrl(url);
+        log.info("Intercepting connection to: {} (datasource-id: {})", realUrl, datasourceId);
 
         // 查找底层的JDBC驱动
         Driver underlyingDriver = findUnderlyingDriver(realUrl);
@@ -117,8 +121,167 @@ public class SimpleInterceptorDriver implements Driver {
             return null;
         }
 
+        // 创建包装连接，传递数据源标识
+        return new SimpleInterceptorConnection(realConnection, datasourceId);
+    }
 
-        return new SimpleInterceptorConnection(realConnection);
+    /**
+     * 提取数据源标识
+     * <p>
+     * 支持多种方式：
+     * 1. 从连接属性中获取（适用于 HikariCP 的 dataSourceProperty）
+     * 2. 从 URL 参数中获取（通用方式，适用于所有连接池）
+     * 3. 如果都未指定，则返回默认值 "default"
+     * </p>
+     *
+     * @param url 连接URL
+     * @param info 连接属性
+     * @return 数据源标识
+     */
+    private String extractDatasourceId(String url, Properties info) {
+        // 1. 优先从连接属性中获取（适用于 HikariCP 的 addDataSourceProperty）
+        if (info != null) {
+            String datasourceId = info.getProperty("datasource-id");
+            if (StrUtil.isNotBlank(datasourceId)) {
+                log.debug("Extracted datasource-id from connection properties: {}", datasourceId);
+                return datasourceId;
+            }
+        }
+
+        // 2. 从 URL 参数中获取（通用方式，适用于所有连接池）
+        String datasourceId = extractDatasourceIdFromUrl(url);
+        if (StrUtil.isNotBlank(datasourceId)) {
+            log.debug("Extracted datasource-id from URL: {}", datasourceId);
+            return datasourceId;
+        }
+
+        // 3. 返回默认值
+        log.debug("No datasource-id found, using default");
+        return "default";
+    }
+
+    /**
+     * 从 URL 中提取数据源标识
+     * 支持格式：jdbc:interceptor:xxx?datasource-id=xxx 或 jdbc:interceptor:xxx;datasource-id=xxx
+     *
+     * @param url 连接URL
+     * @return 数据源标识，如果未找到则返回 null
+     */
+    private String extractDatasourceIdFromUrl(String url) {
+        if (StrUtil.isBlank(url)) {
+            return null;
+        }
+
+        // 查找 datasource-id 参数（支持 ? 和 ; 两种分隔符）
+        String[] patterns = {"?datasource-id=", "&datasource-id=", ";datasource-id="};
+        for (String pattern : patterns) {
+            int index = url.indexOf(pattern);
+            if (index >= 0) {
+                int start = index + pattern.length();
+                // 查找参数结束位置（& 或 ; 或 字符串结尾）
+                int end = url.length();
+                for (int i = start; i < url.length(); i++) {
+                    char c = url.charAt(i);
+                    if (c == '&' || c == ';' || c == '?' || c == ' ') {
+                        end = i;
+                        break;
+                    }
+                }
+                String value = url.substring(start, end);
+                if (StrUtil.isNotBlank(value)) {
+                    return value;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 提取真实的 JDBC URL（去掉 interceptor 前缀和 datasource-id 参数）
+     *
+     * @param url 原始URL
+     * @return 真实URL（已移除 datasource-id 参数）
+     */
+    private String extractRealUrl(String url) {
+        // 去掉 interceptor 前缀
+        String realUrl = "jdbc:" + url.substring(JDBC_INTERCEPTOR_PREFIX.length());
+        
+        // 移除 datasource-id 参数（如果存在）
+        realUrl = removeDatasourceIdFromUrl(realUrl);
+        
+        return realUrl;
+    }
+
+    /**
+     * 从 URL 中移除 datasource-id 参数
+     *
+     * @param url 原始URL
+     * @return 移除参数后的URL
+     */
+    private String removeDatasourceIdFromUrl(String url) {
+        if (StrUtil.isBlank(url)) {
+            return url;
+        }
+
+        // 查找并移除 datasource-id 参数（支持 ? 和 ; 两种分隔符）
+        String[] patterns = {"?datasource-id=", "&datasource-id=", ";datasource-id="};
+        for (String pattern : patterns) {
+            int index = url.indexOf(pattern);
+            if (index >= 0) {
+                int start = index + pattern.length();
+                // 查找参数结束位置
+                int end = url.length();
+                for (int i = start; i < url.length(); i++) {
+                    char c = url.charAt(i);
+                    if (c == '&' || c == ';' || c == '?' || c == ' ') {
+                        end = i;
+                        break;
+                    }
+                }
+                
+                // 移除参数
+                String before = url.substring(0, index);
+                String after = url.substring(end);
+                
+                // 如果移除的是第一个参数（?），需要确保后续参数使用正确的分隔符
+                if (pattern.startsWith("?") && !after.isEmpty() && !after.startsWith("&") && !after.startsWith(";")) {
+                    // 如果后面还有参数，需要添加分隔符
+                    if (!after.isEmpty() && !after.startsWith("&") && !after.startsWith(";")) {
+                        // 检查 after 是否包含其他参数
+                        if (after.contains("=")) {
+                            after = (after.startsWith("?") ? "" : "&") + after;
+                        }
+                    }
+                }
+                
+                // 如果移除的是中间参数（&），需要确保前面有参数
+                if (pattern.startsWith("&")) {
+                    // 移除 & 分隔符
+                    url = before + after;
+                } else if (pattern.startsWith("?")) {
+                    // 移除 ? 分隔符，如果后面还有参数，用 & 或 ; 替换
+                    if (!after.isEmpty() && !after.startsWith("&") && !after.startsWith(";")) {
+                        // 检查是否需要添加分隔符
+                        if (after.contains("=")) {
+                            url = before + "?" + after;
+                        } else {
+                            url = before + after;
+                        }
+                    } else {
+                        url = before + after;
+                    }
+                } else if (pattern.startsWith(";")) {
+                    // 移除 ; 分隔符
+                    url = before + after;
+                }
+                
+                // 递归处理，确保移除所有 datasource-id 参数
+                return removeDatasourceIdFromUrl(url);
+            }
+        }
+
+        return url;
     }
 
     /**

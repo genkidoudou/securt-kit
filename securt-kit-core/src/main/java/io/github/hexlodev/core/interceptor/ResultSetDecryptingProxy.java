@@ -50,11 +50,17 @@ final class ResultSetDecryptingProxy implements InvocationHandler {
      */
     private Map<String, FieldEncryptorInfoDto> columnNameToFieldMap;
 
-    private ResultSetDecryptingProxy(ResultSet delegate, Set<String> tables, Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> pair, String sql) {
+    /**
+     * 数据源标识（多数据源场景）
+     */
+    private final String datasourceId;
+
+    private ResultSetDecryptingProxy(ResultSet delegate, Set<String> tables, Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> pair, String sql, String datasourceId) {
         this.delegate = delegate;
         this.tables = tables == null ? Collections.emptySet() : Collections.unmodifiableSet(new HashSet<>(tables));
         this.pair = pair;
         this.sql = sql;
+        this.datasourceId = cn.hutool.core.util.StrUtil.isBlank(datasourceId) ? "default" : datasourceId;
         
         // 构建列名到字段信息的映射（优化性能：O(n) -> O(1)）
         this.columnNameToFieldMap = buildColumnNameMap(pair);
@@ -88,13 +94,17 @@ final class ResultSetDecryptingProxy implements InvocationHandler {
     }
 
     static ResultSet wrap(ResultSet rs, Set<String> tables, Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> pair, String sql) {
+        return wrap(rs, tables, pair, sql, null);
+    }
+
+    static ResultSet wrap(ResultSet rs, Set<String> tables, Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> pair, String sql, String datasourceId) {
         if (rs == null) {
             return null;
         }
         return (ResultSet) Proxy.newProxyInstance(
                 rs.getClass().getClassLoader(),
                 new Class[]{ResultSet.class},
-                new ResultSetDecryptingProxy(rs, tables, pair, sql)
+                new ResultSetDecryptingProxy(rs, tables, pair, sql, datasourceId)
         );
     }
 
@@ -259,9 +269,10 @@ final class ResultSetDecryptingProxy implements InvocationHandler {
                 
         if (fieldEncryptorInfoDto != null) {
             try {
-                Class<? extends FieldEncryptorStrategy> strategyClass = TableCache.getTableFieldEncryptInfo(
+                Class<? extends FieldEncryptorStrategy> strategyClass = TableCache.getTableFieldEncryptStrategy(
                         fieldEncryptorInfoDto.getSourceTableName(), 
-                        fieldEncryptorInfoDto.getSourceColumn());
+                        fieldEncryptorInfoDto.getSourceColumn(),
+                        datasourceId);
                 // 使用策略缓存获取策略实例
                 FieldEncryptorStrategy strategy = StrategyCache.getStrategy(strategyClass);
                 // 使用统一的异常处理器
@@ -328,7 +339,7 @@ final class ResultSetDecryptingProxy implements InvocationHandler {
             return value;
         }
 
-        Class<? extends FieldEncryptorStrategy> strategyClass = TableCache.getTableFieldEncryptInfo(tableName, normalizedColumn);
+        Class<? extends FieldEncryptorStrategy> strategyClass = TableCache.getTableFieldEncryptStrategy(tableName, normalizedColumn, datasourceId);
         if (strategyClass == null) {
             return value;
         }

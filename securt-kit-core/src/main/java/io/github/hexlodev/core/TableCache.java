@@ -4,6 +4,7 @@ import cn.hutool.core.collection.CollectionUtil;
 import cn.hutool.core.util.ClassUtil;
 import cn.hutool.core.util.StrUtil;
 import io.github.hexlodev.core.cache.StrategyCache;
+import io.github.hexlodev.core.config.DataSourceConfigManager;
 import io.github.hexlodev.core.config.FieldEncryptorProperties;
 import io.github.hexlodev.core.exception.EncryptionHandler;
 import io.github.hexlodev.core.strategy.FieldEncryptorStrategy;
@@ -16,20 +17,39 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Slf4j
 public class TableCache {
     /**
-     * 表字段加密信息缓存
+     * 数据源配置管理器
+     */
+    private static DataSourceConfigManager configManager;
+
+    /**
+     * 表字段加密信息缓存（向后兼容，单数据源场景）
      * key: 表名（小写）
      * value: Map<字段名（小写）, FieldEncryptor注解>
      */
     private static final Map<String, Map<String, Class<? extends FieldEncryptorStrategy>>> TABLE_FIELD_ENCRYPT_INFO = new ConcurrentHashMap<>();
 
-
     /**
-     * 需要加密的表名集合（小写）
+     * 需要加密的表名集合（向后兼容，单数据源场景）
      * <p>
      * 使用 ConcurrentHashMap.newKeySet() 保证线程安全，性能优于 Collections.synchronizedSet()
      * </p>
      */
     private static final Set<String> FIELD_ENCRYPT_TABLE = ConcurrentHashMap.newKeySet();
+
+    /**
+     * 数据源级别的表字段加密信息缓存（多数据源场景）
+     * Key: 数据源标识
+     * Value: Map<表名（小写）, Map<字段名（小写）, 策略类>>
+     */
+    private static final Map<String, Map<String, Map<String, Class<? extends FieldEncryptorStrategy>>>> 
+        DATASOURCE_TABLE_FIELD_ENCRYPT_INFO = new ConcurrentHashMap<>();
+
+    /**
+     * 数据源级别的加密表集合（多数据源场景）
+     * Key: 数据源标识
+     * Value: Set<表名（小写）>
+     */
+    private static final Map<String, Set<String>> DATASOURCE_FIELD_ENCRYPT_TABLE = new ConcurrentHashMap<>();
 
 
     /**
@@ -79,66 +99,93 @@ public class TableCache {
                 return;
             }
             
-            // 验证配置
-            validateConfiguration(fieldEncryptorProperties);
+            // 初始化配置管理器（支持多数据源）
+            configManager = new DataSourceConfigManager(fieldEncryptorProperties);
             
-            // 使用策略缓存获取默认策略实例
-            FieldEncryptorStrategy defaultFieldEncryptorStrategy;
-            try {
-                // 尝试获取默认策略（通过接口类型）
-                defaultFieldEncryptorStrategy = StrategyCache.getStrategy(FieldEncryptorStrategy.class);
-            } catch (Exception e) {
-                log.warn("Failed to get default strategy, will use strategy class name instead: {}", e.getMessage());
-                // 如果无法获取默认策略，将在后续逻辑中使用策略类名
-                defaultFieldEncryptorStrategy = null;
-            }
-            Map<String, Map<String, Class<? extends FieldEncryptorStrategy>>> parserEntityClass = new HashMap<>();
+            // 判断是否使用多数据源配置
+            // 新配置方式：tables 中指定了 datasource-id
+            // 旧配置方式：使用了 global + datasources 结构
+            boolean isMultiDatasource = isMultiDatasourceConfig(fieldEncryptorProperties);
 
-            // 跟配置文件中的进行合并
-            List<FieldEncryptorProperties.TableConfig> tables = fieldEncryptorProperties.getTables();
-            if (CollectionUtil.isNotEmpty(tables)) {
-                for (FieldEncryptorProperties.TableConfig table : tables) {
-                    Map<String, Class<? extends FieldEncryptorStrategy>> fieldEncryptorMap = new HashMap<>();
-                    String tableName = table.getTableName().toLowerCase(Locale.ROOT);
-                    List<FieldEncryptorProperties.FieldConfig> fields = table.getFields();
-                    if (CollectionUtil.isNotEmpty(fields)) {
-                        for (FieldEncryptorProperties.FieldConfig field : fields) {
-                            String fieldName = field.getFieldName();
-                            String strategy = field.getStrategy();
-                            if (StrUtil.isBlank(strategy)) {
-                                // 如果没有配置策略，使用默认策略的类名
-                                if (defaultFieldEncryptorStrategy != null) {
-                                    strategy = defaultFieldEncryptorStrategy.getClass().getName();
-                                } else {
-                                    log.warn("No default strategy available and no strategy configured for field: {}.{}", tableName, fieldName);
-                                    continue; // 跳过该字段
+            if (isMultiDatasource) {
+                // 多数据源场景：为每个数据源初始化配置
+                log.debug("【securt-kit】检测到多数据源配置，开始初始化各数据源配置");
+                
+                // 初始化所有数据源的配置
+                Set<String> datasourceIds = configManager.getDatasourceIds();
+                for (String datasourceId : datasourceIds) {
+                    initForDatasource(datasourceId);
+                }
+                
+                // 确保默认数据源也被初始化
+                if (!datasourceIds.contains(DataSourceConfigManager.DEFAULT_DATASOURCE_ID)) {
+                    initForDatasource(DataSourceConfigManager.DEFAULT_DATASOURCE_ID);
+                }
+            } else {
+                // 单数据源场景：向后兼容原有逻辑
+                log.debug("【securt-kit】单数据源配置，使用向后兼容模式");
+                
+                // 验证配置
+                validateConfiguration(fieldEncryptorProperties);
+                
+                // 使用策略缓存获取默认策略实例
+                FieldEncryptorStrategy defaultFieldEncryptorStrategy;
+                try {
+                    defaultFieldEncryptorStrategy = StrategyCache.getStrategy(FieldEncryptorStrategy.class);
+                } catch (Exception e) {
+                    log.warn("Failed to get default strategy, will use strategy class name instead: {}", e.getMessage());
+                    defaultFieldEncryptorStrategy = null;
+                }
+                
+                Map<String, Map<String, Class<? extends FieldEncryptorStrategy>>> parserEntityClass = new HashMap<>();
+
+                // 跟配置文件中的进行合并
+                List<FieldEncryptorProperties.TableConfig> tables = fieldEncryptorProperties.getTables();
+                if (CollectionUtil.isNotEmpty(tables)) {
+                    for (FieldEncryptorProperties.TableConfig table : tables) {
+                        Map<String, Class<? extends FieldEncryptorStrategy>> fieldEncryptorMap = new HashMap<>();
+                        String tableName = table.getTableName().toLowerCase(Locale.ROOT);
+                        List<FieldEncryptorProperties.FieldConfig> fields = table.getFields();
+                        if (CollectionUtil.isNotEmpty(fields)) {
+                            for (FieldEncryptorProperties.FieldConfig field : fields) {
+                                String fieldName = field.getFieldName();
+                                String strategy = field.getStrategy();
+                                if (StrUtil.isBlank(strategy)) {
+                                    if (defaultFieldEncryptorStrategy != null) {
+                                        strategy = defaultFieldEncryptorStrategy.getClass().getName();
+                                    } else {
+                                        log.warn("No default strategy available and no strategy configured for field: {}.{}", tableName, fieldName);
+                                        continue;
+                                    }
                                 }
+                                fieldEncryptorMap.put(fieldName, ClassUtil.loadClass(strategy));
                             }
-                            fieldEncryptorMap.put(fieldName, ClassUtil.loadClass(strategy));
+                            if (CollectionUtil.isNotEmpty(fieldEncryptorMap)) {
+                                parserEntityClass.put(tableName, fieldEncryptorMap);
+                            }
                         }
-                        if (CollectionUtil.isNotEmpty(fieldEncryptorMap)) {
-                            parserEntityClass.put(tableName, fieldEncryptorMap);
-                        }
+                    }
+                }
+
+                if (CollectionUtil.isNotEmpty(parserEntityClass)) {
+                    for (Map.Entry<String, Map<String, Class<? extends FieldEncryptorStrategy>>> stringMapEntry : parserEntityClass.entrySet()) {
+                        String tableName = stringMapEntry.getKey();
+                        Map<String, Class<? extends FieldEncryptorStrategy>> value = stringMapEntry.getValue();
+                        TABLE_FIELD_ENCRYPT_INFO.put(tableName, value);
+                        FIELD_ENCRYPT_TABLE.add(tableName);
                     }
                 }
             }
 
-            if (CollectionUtil.isNotEmpty(parserEntityClass)) {
-                for (Map.Entry<String, Map<String, Class<? extends FieldEncryptorStrategy>>> stringMapEntry : parserEntityClass.entrySet()) {
-                    String tableName = stringMapEntry.getKey();
-                    Map<String, Class<? extends FieldEncryptorStrategy>> value = stringMapEntry.getValue();
-                    TABLE_FIELD_ENCRYPT_INFO.put(tableName, value);
-                    FIELD_ENCRYPT_TABLE.add(tableName);
-                }
-            }
+            // 初始化 SQL 解析缓存配置（使用全局配置）
+            DataSourceConfigManager.MergedConfig globalConfig = configManager.getConfig(DataSourceConfigManager.DEFAULT_DATASOURCE_ID);
+            initSqlParseCacheFromMergedConfig(globalConfig);
 
-            // 初始化 SQL 解析缓存配置
-            initSqlParseCache(fieldEncryptorProperties);
-
-            // 初始化异常处理策略
+            // 初始化异常处理策略（使用全局配置）
             EncryptionHandler.initFromConfig(fieldEncryptorProperties);
 
             log.debug("【securt-kit】配置文件表缓存初始化完成，需处理的表为:{}", TABLE_FIELD_ENCRYPT_INFO);
+            log.debug("【securt-kit】多数据源配置缓存: {}", DATASOURCE_TABLE_FIELD_ENCRYPT_INFO.keySet());
         } catch (Exception e) {
             // 初始化失败，重置状态以便下次重试
             log.error("【securt-kit】TableCache initialization failed", e);
@@ -148,6 +195,32 @@ public class TableCache {
             FIELD_ENCRYPT_TABLE.clear();
             throw new RuntimeException("Failed to initialize TableCache", e);
         }
+    }
+
+    /**
+     * 判断是否使用多数据源配置
+     */
+    private static boolean isMultiDatasourceConfig(FieldEncryptorProperties properties) {
+        if (properties == null) {
+            return false;
+        }
+        
+        // 新配置方式：tables 中指定了 datasource-id
+        if (CollectionUtil.isNotEmpty(properties.getTables())) {
+            for (FieldEncryptorProperties.TableConfig table : properties.getTables()) {
+                if (StrUtil.isNotBlank(table.getDatasourceId())) {
+                    return true;
+                }
+            }
+        }
+        
+        // 旧配置方式：使用了 global + datasources 结构
+        if (properties.getGlobal() != null || 
+            (properties.getDatasources() != null && !properties.getDatasources().isEmpty())) {
+            return true;
+        }
+        
+        return false;
     }
 
     /**
@@ -279,6 +352,103 @@ public class TableCache {
         }
     }
 
+    /**
+     * 从合并配置初始化 SQL 解析缓存配置
+     *
+     * @param mergedConfig 合并后的配置
+     */
+    private static void initSqlParseCacheFromMergedConfig(DataSourceConfigManager.MergedConfig mergedConfig) {
+        if (mergedConfig == null) {
+            io.github.hexlodev.core.parser.SqlParseCache.init(true, 1000);
+            return;
+        }
+
+        FieldEncryptorProperties.SqlParseCacheConfig cacheConfig = mergedConfig.getSqlParseCache();
+        if (cacheConfig == null) {
+            io.github.hexlodev.core.parser.SqlParseCache.init(true, 1000);
+            log.debug("【securt-kit】SQL 解析缓存使用默认配置: enable=true, maxSize=1000");
+        } else {
+            io.github.hexlodev.core.parser.SqlParseCache.init(
+                    cacheConfig.isEnable(),
+                    cacheConfig.getMaxSize()
+            );
+            log.debug("【securt-kit】SQL 解析缓存配置: enable={}, maxSize={}",
+                    cacheConfig.isEnable(), cacheConfig.getMaxSize());
+        }
+    }
+
+    /**
+     * 为指定数据源初始化配置（多数据源场景）
+     *
+     * @param datasourceId 数据源标识
+     */
+    private static void initForDatasource(String datasourceId) {
+        if (configManager == null) {
+            log.warn("ConfigManager not initialized, cannot init datasource config for: {}", datasourceId);
+            return;
+        }
+
+        DataSourceConfigManager.MergedConfig config = configManager.getConfig(datasourceId);
+        if (config == null || (config.getEnable() != null && !config.getEnable())) {
+            log.debug("Datasource '{}' encryption is disabled or config not found", datasourceId);
+            return;
+        }
+
+        // 获取默认策略
+        FieldEncryptorStrategy defaultFieldEncryptorStrategy;
+        try {
+            defaultFieldEncryptorStrategy = StrategyCache.getStrategy(FieldEncryptorStrategy.class);
+        } catch (Exception e) {
+            log.warn("Failed to get default strategy: {}", e.getMessage());
+            defaultFieldEncryptorStrategy = null;
+        }
+
+        // 解析表配置
+        Map<String, Map<String, Class<? extends FieldEncryptorStrategy>>> tableFieldMap = new HashMap<>();
+        Set<String> encryptTables = new HashSet<>();
+
+        if (CollectionUtil.isNotEmpty(config.getTables())) {
+            for (FieldEncryptorProperties.TableConfig table : config.getTables()) {
+                String tableName = table.getTableName().toLowerCase(Locale.ROOT);
+                Map<String, Class<? extends FieldEncryptorStrategy>> fieldMap = new HashMap<>();
+
+                if (CollectionUtil.isNotEmpty(table.getFields())) {
+                    for (FieldEncryptorProperties.FieldConfig field : table.getFields()) {
+                        String fieldName = field.getFieldName().toLowerCase(Locale.ROOT);
+                        String strategy = field.getStrategy();
+                        if (StrUtil.isBlank(strategy)) {
+                            if (defaultFieldEncryptorStrategy != null) {
+                                strategy = defaultFieldEncryptorStrategy.getClass().getName();
+                            } else {
+                                log.warn("No default strategy available for field: {}.{}", tableName, fieldName);
+                                continue;
+                            }
+                        }
+                        try {
+                            fieldMap.put(fieldName, ClassUtil.loadClass(strategy));
+                        } catch (Exception e) {
+                            log.error("Failed to load strategy class '{}' for field {}.{}: {}", 
+                                    strategy, tableName, fieldName, e.getMessage());
+                        }
+                    }
+                }
+
+                if (!fieldMap.isEmpty()) {
+                    tableFieldMap.put(tableName, fieldMap);
+                    encryptTables.add(tableName);
+                }
+            }
+        }
+
+        if (!tableFieldMap.isEmpty()) {
+            DATASOURCE_TABLE_FIELD_ENCRYPT_INFO.put(datasourceId, tableFieldMap);
+            DATASOURCE_FIELD_ENCRYPT_TABLE.put(datasourceId, encryptTables);
+            log.debug("Initialized datasource '{}' config: {} tables, {} fields", 
+                    datasourceId, encryptTables.size(), 
+                    tableFieldMap.values().stream().mapToInt(Map::size).sum());
+        }
+    }
+
 
     /**
      * 获取加密的表名集合
@@ -329,7 +499,7 @@ public class TableCache {
     }
 
     /**
-     * 检查表是否需要加密
+     * 检查表是否需要加密（向后兼容，使用默认数据源）
      * 
      * <p>支持带数据库名的表名格式（如 testdb.user），会自动提取纯表名进行匹配。</p>
      *
@@ -339,11 +509,35 @@ public class TableCache {
      * @since 2025/10/10
      */
     public static boolean concatTable(String tableName) {
+        return concatTable(tableName, null);
+    }
+
+    /**
+     * 检查表是否需要加密（支持数据源标识）
+     * 
+     * <p>支持带数据库名的表名格式（如 testdb.user），会自动提取纯表名进行匹配。</p>
+     *
+     * @param tableName 表名，不能为 null 或空白，可能包含数据库名和schema前缀
+     * @param datasourceId 数据源标识，如果为 null 则使用默认数据源
+     * @return 如果表需要加密返回 true，否则返回 false
+     * @throws IllegalArgumentException 如果表名为 null 或空白
+     * @since 1.1.0
+     */
+    public static boolean concatTable(String tableName, String datasourceId) {
         if (StrUtil.isBlank(tableName)) {
             throw new IllegalArgumentException("Table name cannot be null or blank");
         }
-        // 提取纯表名进行匹配
+        
         String pureTableName = extractPureTableName(tableName);
+        String dsId = StrUtil.isBlank(datasourceId) ? DataSourceConfigManager.DEFAULT_DATASOURCE_ID : datasourceId;
+        
+        // 优先使用多数据源缓存
+        Set<String> encryptTables = DATASOURCE_FIELD_ENCRYPT_TABLE.get(dsId);
+        if (encryptTables != null) {
+            return encryptTables.contains(pureTableName);
+        }
+        
+        // 向后兼容：使用单数据源缓存
         return getTables().contains(pureTableName);
     }
 
@@ -367,11 +561,14 @@ public class TableCache {
         INITIALIZED.set(false);
         TABLE_FIELD_ENCRYPT_INFO.clear();
         FIELD_ENCRYPT_TABLE.clear();
+        DATASOURCE_TABLE_FIELD_ENCRYPT_INFO.clear();
+        DATASOURCE_FIELD_ENCRYPT_TABLE.clear();
+        configManager = null;
         log.info("【securt-kit】TableCache reset completed");
     }
 
     /**
-     * 获取表加密的字段
+     * 获取表加密的字段（向后兼容，使用默认数据源）
      * 
      * <p>支持带数据库名的表名格式（如 testdb.user），会自动提取纯表名进行查找。</p>
      *
@@ -381,11 +578,37 @@ public class TableCache {
      * @since 2025/10/10
      */
     public static Map<String, Class<? extends FieldEncryptorStrategy>> getTableFieldEncryptInfo(String tableName) {
+        return getTableFieldEncryptInfo(tableName, null);
+    }
+
+    /**
+     * 获取表加密的字段（支持数据源标识）
+     * 
+     * <p>支持带数据库名的表名格式（如 testdb.user），会自动提取纯表名进行查找。</p>
+     *
+     * @param tableName 表名，不能为 null 或空白，可能包含数据库名和schema前缀
+     * @param datasourceId 数据源标识，如果为 null 则使用默认数据源
+     * @return 字段加密策略映射，如果表不存在或参数无效则返回 null
+     * @throws IllegalArgumentException 如果表名为 null 或空白
+     * @since 1.1.0
+     */
+    public static Map<String, Class<? extends FieldEncryptorStrategy>> getTableFieldEncryptInfo(
+            String tableName, String datasourceId) {
         if (StrUtil.isBlank(tableName)) {
             throw new IllegalArgumentException("Table name cannot be null or blank");
         }
-        // 提取纯表名进行查找
+        
         String pureTableName = extractPureTableName(tableName);
+        String dsId = StrUtil.isBlank(datasourceId) ? DataSourceConfigManager.DEFAULT_DATASOURCE_ID : datasourceId;
+        
+        // 优先使用多数据源缓存
+        Map<String, Map<String, Class<? extends FieldEncryptorStrategy>>> datasourceConfig = 
+            DATASOURCE_TABLE_FIELD_ENCRYPT_INFO.get(dsId);
+        if (datasourceConfig != null) {
+            return datasourceConfig.get(pureTableName);
+        }
+        
+        // 向后兼容：使用单数据源缓存
         return TABLE_FIELD_ENCRYPT_INFO.get(pureTableName);
     }
 
@@ -416,7 +639,7 @@ public class TableCache {
 
 
     /**
-     * 获取表字段的加密策略
+     * 获取表字段的加密策略（向后兼容，使用默认数据源）
      * 
      * <p>支持带数据库名的表名格式（如 testdb.user），会自动提取纯表名进行查找。</p>
      *
@@ -426,17 +649,47 @@ public class TableCache {
      * @throws IllegalArgumentException 如果表名或字段名为 null 或空白
      * @since 2025/10/10
      */
-    public static Class<? extends FieldEncryptorStrategy> getTableFieldEncryptInfo(String tableName, String fieldName) {
+    public static Class<? extends FieldEncryptorStrategy> getTableFieldEncryptStrategy(String tableName, String fieldName) {
+        return getTableFieldEncryptStrategy(tableName, fieldName, null);
+    }
+
+    /**
+     * 获取表字段的加密策略（支持数据源标识）
+     * 
+     * <p>支持带数据库名的表名格式（如 testdb.user），会自动提取纯表名进行查找。</p>
+     *
+     * @param tableName 表名，不能为 null 或空白，可能包含数据库名和schema前缀
+     * @param fieldName 字段名，不能为 null 或空白
+     * @param datasourceId 数据源标识，如果为 null 则使用默认数据源
+     * @return 加密策略类，如果表或字段不存在或参数无效则返回 null
+     * @throws IllegalArgumentException 如果表名或字段名为 null 或空白
+     * @since 1.1.0
+     */
+    public static Class<? extends FieldEncryptorStrategy> getTableFieldEncryptStrategy(
+            String tableName, String fieldName, String datasourceId) {
         if (StrUtil.isBlank(tableName)) {
             throw new IllegalArgumentException("Table name cannot be null or blank");
         }
         if (StrUtil.isBlank(fieldName)) {
             throw new IllegalArgumentException("Field name cannot be null or blank");
         }
-        // 提取纯表名进行查找
+        
         String pureTableName = extractPureTableName(tableName);
-        Map<String, Class<? extends FieldEncryptorStrategy>> stringClassMap =
-                TABLE_FIELD_ENCRYPT_INFO.get(pureTableName);
+        String dsId = StrUtil.isBlank(datasourceId) ? DataSourceConfigManager.DEFAULT_DATASOURCE_ID : datasourceId;
+        
+        // 优先使用多数据源缓存
+        Map<String, Map<String, Class<? extends FieldEncryptorStrategy>>> datasourceConfig = 
+            DATASOURCE_TABLE_FIELD_ENCRYPT_INFO.get(dsId);
+        if (datasourceConfig != null) {
+            Map<String, Class<? extends FieldEncryptorStrategy>> tableConfig = datasourceConfig.get(pureTableName);
+            if (tableConfig != null) {
+                return tableConfig.get(fieldName.toLowerCase());
+            }
+        }
+        
+        // 向后兼容：使用单数据源缓存
+        Map<String, Class<? extends FieldEncryptorStrategy>> stringClassMap = 
+            TABLE_FIELD_ENCRYPT_INFO.get(pureTableName);
         if (null == stringClassMap) {
             return null;
         }
