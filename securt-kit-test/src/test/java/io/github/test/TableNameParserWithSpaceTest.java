@@ -4,6 +4,7 @@ import io.github.hexlodev.core.utils.TableNameParser;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -17,7 +18,7 @@ class TableNameParserWithSpaceTest {
         // 测试点号后有空格的情况：business_platform_sy. sys_user
         String sql = "SELECT * FROM business_platform_sy. sys_user WHERE id = 1";
         TableNameParser parser = new TableNameParser(sql);
-        HashSet<String> tables = parser.tables();
+        Set<String> tables = parser.tables();
         
         assertNotNull(tables);
         assertFalse(tables.isEmpty());
@@ -34,7 +35,7 @@ class TableNameParserWithSpaceTest {
                      "LEFT JOIN business_platform_sy. sys_user_role ur ON u.user_id = ur.user_id " +
                      "LEFT JOIN business_platform_sy. sys_role r ON r.role_id = ur.role_id";
         TableNameParser parser = new TableNameParser(sql);
-        HashSet<String> tables = parser.tables();
+        Set<String> tables = parser.tables();
         
         assertNotNull(tables);
         assertFalse(tables.isEmpty());
@@ -68,7 +69,7 @@ class TableNameParserWithSpaceTest {
                      "WHERE u.user_id = 1985684407922077696";
         
         TableNameParser parser = new TableNameParser(sql);
-        HashSet<String> tables = parser.tables();
+        Set<String> tables = parser.tables();
         
         assertNotNull(tables);
         assertFalse(tables.isEmpty());
@@ -90,7 +91,7 @@ class TableNameParserWithSpaceTest {
         // 测试正常情况：点号后没有空格
         String sql = "SELECT * FROM business_platform_sy.sys_user WHERE id = 1";
         TableNameParser parser = new TableNameParser(sql);
-        HashSet<String> tables = parser.tables();
+        Set<String> tables = parser.tables();
         
         assertNotNull(tables);
         assertFalse(tables.isEmpty());
@@ -103,7 +104,7 @@ class TableNameParserWithSpaceTest {
         // 测试没有数据库名的情况
         String sql = "SELECT * FROM sys_user WHERE id = 1";
         TableNameParser parser = new TableNameParser(sql);
-        HashSet<String> tables = parser.tables();
+        Set<String> tables = parser.tables();
         
         assertNotNull(tables);
         assertFalse(tables.isEmpty());
