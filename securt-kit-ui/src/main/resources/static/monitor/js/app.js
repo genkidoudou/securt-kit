@@ -621,6 +621,175 @@ const sqlEncrypt = {
     }
 };
 
+// SQL 查询功能
+const sqlQuery = {
+    /**
+     * 处理 SQL 查询
+     */
+    async handleQuery() {
+        try {
+            const sqlInput = document.getElementById('sqlQueryInput');
+            const pageSizeInput = document.getElementById('sqlQueryPageSize');
+            const pageNumInput = document.getElementById('sqlQueryPageNum');
+
+            if (!sqlInput) {
+                throw new Error('SQL 输入框未找到');
+            }
+
+            const sql = sqlInput.value.trim();
+            if (!sql) {
+                utils.showNotification('请输入要查询的 SQL 语句', 'error');
+                return;
+            }
+
+            // 验证是否为 SELECT 语句
+            if (!sql.toUpperCase().startsWith('SELECT')) {
+                utils.showNotification('只支持 SELECT 查询语句', 'error');
+                return;
+            }
+
+            const pageSize = pageSizeInput ? parseInt(pageSizeInput.value) || 10 : 10;
+            const pageNum = pageNumInput ? parseInt(pageNumInput.value) || 1 : 1;
+
+            const response = await utils.request(`${CONFIG.apiPath}/query-sql.json`, {
+                method: 'POST',
+                body: JSON.stringify({ 
+                    sql: sql,
+                    pageSize: pageSize,
+                    pageNum: pageNum
+                })
+            });
+
+            if (response.success) {
+                this.displayResult(response.data);
+            } else {
+                utils.showNotification(response.message || 'SQL 查询失败', 'error');
+            }
+        } catch (error) {
+            console.error('SQL 查询失败:', error);
+            utils.showNotification('SQL 查询失败: ' + (error.message || '请稍后重试'), 'error');
+        }
+    },
+
+    /**
+     * 显示查询结果
+     */
+    displayResult(data) {
+        const resultDiv = document.getElementById('sqlQueryResult');
+        const executedTextarea = document.getElementById('sqlQueryExecuted');
+        const statsDiv = document.getElementById('sqlQueryStats');
+        const tableContainer = document.getElementById('sqlQueryTable');
+
+        if (!resultDiv || !executedTextarea || !statsDiv || !tableContainer) return;
+
+        resultDiv.style.display = 'block';
+
+        // 显示执行的 SQL
+        executedTextarea.value = data.executedSql || '';
+
+        // 显示统计信息
+        const count = data.data ? data.data.length : 0;
+        const totalCount = data.totalCount || count;
+        statsDiv.textContent = `共查询到 ${count} 条记录（第 ${data.pageNum || 1} 页，每页 ${data.pageSize || 10} 条）`;
+
+        // 渲染表格
+        this.renderTable(data.columns || [], data.data || [], tableContainer);
+    },
+
+    /**
+     * 渲染查询结果表格
+     */
+    renderTable(columns, data, container) {
+        if (columns.length === 0 || data.length === 0) {
+            container.innerHTML = '<div class="empty-message">无查询结果</div>';
+            return;
+        }
+
+        let html = '<table><thead><tr>';
+        
+        // 表头
+        for (const column of columns) {
+            html += `<th>${this.escapeHtml(column)}</th>`;
+        }
+        html += '</tr></thead><tbody>';
+
+        // 数据行
+        for (const row of data) {
+            html += '<tr>';
+            for (const column of columns) {
+                const value = row[column];
+                html += `<td>${this.formatCellValue(value)}</td>`;
+            }
+            html += '</tr>';
+        }
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+    },
+
+    /**
+     * 格式化单元格值
+     */
+    formatCellValue(value) {
+        if (value == null) {
+            return '<span style="color: #999;">NULL</span>';
+        }
+        if (typeof value === 'boolean') {
+            return value ? 'true' : 'false';
+        }
+        if (typeof value === 'number') {
+            return String(value);
+        }
+        // 字符串值进行 HTML 转义
+        return this.escapeHtml(String(value));
+    },
+
+    /**
+     * HTML 转义
+     */
+    escapeHtml(text) {
+        if (text == null) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    },
+
+    /**
+     * 清空查询输入和结果
+     */
+    clear() {
+        const sqlInput = document.getElementById('sqlQueryInput');
+        const pageSizeInput = document.getElementById('sqlQueryPageSize');
+        const pageNumInput = document.getElementById('sqlQueryPageNum');
+        const resultDiv = document.getElementById('sqlQueryResult');
+        const executedTextarea = document.getElementById('sqlQueryExecuted');
+        const statsDiv = document.getElementById('sqlQueryStats');
+        const tableContainer = document.getElementById('sqlQueryTable');
+
+        if (sqlInput) {
+            sqlInput.value = '';
+        }
+        if (pageSizeInput) {
+            pageSizeInput.value = '10';
+        }
+        if (pageNumInput) {
+            pageNumInput.value = '1';
+        }
+        if (resultDiv) {
+            resultDiv.style.display = 'none';
+        }
+        if (executedTextarea) {
+            executedTextarea.value = '';
+        }
+        if (statsDiv) {
+            statsDiv.textContent = '';
+        }
+        if (tableContainer) {
+            tableContainer.innerHTML = '';
+        }
+    }
+};
+
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
     // 绑定登录事件
@@ -704,6 +873,26 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (copySqlEncryptBtn) {
         copySqlEncryptBtn.addEventListener('click', () => sqlEncrypt.copyResult());
+    }
+
+    // 绑定 SQL 查询事件
+    const querySqlBtn = document.getElementById('querySqlBtn');
+    const clearSqlQueryBtn = document.getElementById('clearSqlQueryBtn');
+    const sqlQueryInput = document.getElementById('sqlQueryInput');
+
+    if (querySqlBtn) {
+        querySqlBtn.addEventListener('click', () => sqlQuery.handleQuery());
+    }
+    if (clearSqlQueryBtn) {
+        clearSqlQueryBtn.addEventListener('click', () => sqlQuery.clear());
+    }
+    if (sqlQueryInput) {
+        // 支持 Ctrl+Enter 快捷键
+        sqlQueryInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && e.ctrlKey) {
+                sqlQuery.handleQuery();
+            }
+        });
     }
 
     // 初始化标签页

@@ -15,6 +15,9 @@ import net.sf.jsqlparser.expression.operators.relational.ExpressionList;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.statement.Statement;
+import net.sf.jsqlparser.statement.select.Select;
+import net.sf.jsqlparser.statement.select.PlainSelect;
+import net.sf.jsqlparser.statement.select.Limit;
 import net.sf.jsqlparser.statement.update.Update;
 import net.sf.jsqlparser.statement.update.UpdateSet;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,8 +27,14 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
+import javax.sql.DataSource;
 import java.io.IOException;
 import java.lang.reflect.Method;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -47,6 +56,9 @@ public class MonitorController {
 
     @Autowired
     private MonitorProperties properties;
+
+    @Autowired(required = false)
+    private DataSource dataSource;
 
     /**
      * 检查登录状态
@@ -390,8 +402,8 @@ public class MonitorController {
     }
 
     /**
-     * SQL 加密接口
-     * 将 SQL 中需要加密的字段值进行加密
+     * SQL参数加密接口
+     * 将 SQL 中需要加密的字段值进行加密，支持 INSERT、UPDATE、DELETE、SELECT 等所有 SQL 类型
      */
     @PostMapping("/api/encrypt-sql.json")
     public ApiResponse<EncryptSqlResponse> encryptSql(@RequestBody EncryptSqlRequest request,
@@ -424,30 +436,103 @@ public class MonitorController {
             log.error("SQL 解析失败", e);
             return ApiResponse.error("SQL 解析失败: " + e.getMessage());
         } catch (Exception e) {
-            log.error("SQL 加密失败", e);
-            return ApiResponse.error("SQL 加密失败: " + e.getMessage());
+            log.error("SQL参数加密失败", e);
+            return ApiResponse.error("SQL参数加密失败: " + e.getMessage());
         }
     }
 
     /**
      * 加密 SQL 中的字段值
+     * 支持 INSERT、UPDATE、DELETE、SELECT 等所有 SQL 类型
      */
     private String encryptSqlValues(String sql) throws JSQLParserException {
         // 解析 SQL
         Statement statement = CCJSqlParserUtil.parse(sql);
         
-        if (!(statement instanceof Update)) {
-            throw new IllegalArgumentException("当前仅支持 UPDATE 语句");
-        }
-
-        Update update = (Update) statement;
-        String tableName = update.getTable().getName().toLowerCase();
-        
         // 存储需要替换的值：原值 -> 加密后的值
         Map<String, String> valueReplacements = new LinkedHashMap<>();
+        String tableName = null;
         
-        // 遍历 UPDATE SET 子句
+        // 根据不同的 SQL 类型进行处理
+        if (statement instanceof Update) {
+            // UPDATE 语句
+            Update update = (Update) statement;
+            tableName = update.getTable().getName();
+            log.debug("解析 UPDATE SQL，表名: {}", tableName);
+            
+            encryptUpdateValues(update, tableName, valueReplacements);
+            
+        } else if (statement instanceof net.sf.jsqlparser.statement.insert.Insert) {
+            // INSERT 语句
+            net.sf.jsqlparser.statement.insert.Insert insert = (net.sf.jsqlparser.statement.insert.Insert) statement;
+            tableName = insert.getTable().getName();
+            log.debug("解析 INSERT SQL，表名: {}", tableName);
+            
+            encryptInsertValues(insert, tableName, valueReplacements);
+            
+        } else if (statement instanceof net.sf.jsqlparser.statement.delete.Delete) {
+            // DELETE 语句（WHERE 条件中的值）
+            net.sf.jsqlparser.statement.delete.Delete delete = (net.sf.jsqlparser.statement.delete.Delete) statement;
+            tableName = delete.getTable().getName();
+            log.debug("解析 DELETE SQL，表名: {}", tableName);
+            
+            encryptDeleteValues(delete, tableName, valueReplacements);
+            
+        } else if (statement instanceof Select) {
+            // SELECT 语句（WHERE 条件中的值）
+            Select select = (Select) statement;
+            log.debug("解析 SELECT SQL");
+            
+            encryptSelectValues(select, valueReplacements);
+            
+        } else {
+            throw new IllegalArgumentException("不支持的 SQL 类型: " + statement.getClass().getSimpleName());
+        }
+        
+        log.debug("共找到 {} 个需要加密的字段", valueReplacements.size());
+        
+        if (valueReplacements.isEmpty()) {
+            log.warn("未找到需要加密的字段，请检查配置。表名: {}, 可用表: {}", tableName, TableCache.getTables());
+            return sql;
+        }
+        
+        // 替换 SQL 中的值
+        String result = sql;
+        for (Map.Entry<String, String> entry : valueReplacements.entrySet()) {
+            String originalExpr = entry.getKey();
+            String encryptedValue = entry.getValue();
+            
+            log.debug("尝试替换: {} -> {}", originalExpr, encryptedValue);
+            
+            // 处理不同的引号格式
+            String originalWithSingleQuote = originalExpr;
+            String originalWithDoubleQuote = originalExpr.replace("'", "\"");
+            
+            // 匹配并替换单引号版本
+            String quotedOriginal = Pattern.quote(originalWithSingleQuote);
+            result = result.replaceAll(quotedOriginal, Matcher.quoteReplacement(encryptedValue));
+            
+            // 如果原始 SQL 中使用的是双引号，也需要替换
+            if (sql.contains("\"")) {
+                String quotedOriginalDouble = Pattern.quote(originalWithDoubleQuote);
+                String encryptedWithDoubleQuote = encryptedValue.replace("'", "\"");
+                result = result.replaceAll(quotedOriginalDouble, Matcher.quoteReplacement(encryptedWithDoubleQuote));
+            }
+        }
+        
+        log.debug("加密完成，原始 SQL: {}", sql);
+        log.debug("加密完成，结果 SQL: {}", result);
+        
+        return result;
+    }
+
+    /**
+     * 加密 UPDATE 语句中的字段值
+     */
+    private void encryptUpdateValues(Update update, String tableName, Map<String, String> valueReplacements) {
         List<UpdateSet> updateSets = update.getUpdateSets();
+        log.debug("UPDATE SET 数量: {}", updateSets.size());
+        
         for (UpdateSet updateSet : updateSets) {
             List<Column> columns = updateSet.getColumns();
             ExpressionList<Expression> expressions = (ExpressionList<Expression>) updateSet.getValues();
@@ -457,39 +542,198 @@ public class MonitorController {
                 Expression expression = expressions.get(i);
                 
                 String fieldName = column.getColumnName().toLowerCase();
-                
-                // 检查该字段是否需要加密
-                Class<? extends FieldEncryptorStrategy> strategyClass = 
-                    TableCache.getTableFieldEncryptInfo(tableName, fieldName);
-                
-                if (strategyClass != null) {
-                    // 提取表达式的值
-                    String originalValue = extractValueFromExpression(expression);
-                    if (originalValue != null) {
-                        // 加密值
-                        FieldEncryptorStrategy strategy = StrategyCache.getStrategy(strategyClass);
-                        String encryptedValue = strategy.encryption(originalValue);
+                encryptFieldValue(tableName, fieldName, expression, valueReplacements);
+            }
+        }
+    }
+
+    /**
+     * 加密 INSERT 语句中的字段值
+     */
+    private void encryptInsertValues(net.sf.jsqlparser.statement.insert.Insert insert, String tableName, 
+                                     Map<String, String> valueReplacements) {
+        List<Column> columns = insert.getColumns();
+        
+        // INSERT INTO table VALUES (...) 的情况
+        net.sf.jsqlparser.statement.select.Values values = insert.getValues();
+        if (values != null) {
+            ExpressionList<Expression> expressions = (ExpressionList<Expression>) values.getExpressions();
+            
+            // 如果是批量插入，expressions 的每个元素都是一个 ExpressionList
+            if (!expressions.isEmpty() && expressions.get(0) instanceof ExpressionList) {
+                // 批量插入：INSERT INTO table VALUES (v1, v2), (v3, v4), ...
+                for (Object exprObj : expressions) {
+                    if (exprObj instanceof ExpressionList) {
+                        ExpressionList<?> exprList = (ExpressionList<?>) exprObj;
+                        List<?> exprs = exprList.getExpressions();
                         
-                        // 记录替换关系（使用原始SQL中的格式，包括引号）
-                        String originalSqlValue = expression.toString();
-                        String encryptedSqlValue = formatSqlValue(encryptedValue);
-                        
-                        valueReplacements.put(originalSqlValue, encryptedSqlValue);
+                        for (int i = 0; i < exprs.size() && (columns == null || i < columns.size()); i++) {
+                            Expression expression = (Expression) exprs.get(i);
+                            String fieldName = columns != null ? columns.get(i).getColumnName().toLowerCase() : null;
+                            
+                            if (fieldName != null) {
+                                encryptFieldValue(tableName, fieldName, expression, valueReplacements);
+                            }
+                        }
+                    }
+                }
+            } else {
+                // 单条插入：INSERT INTO table VALUES (v1, v2, ...)
+                for (int i = 0; i < expressions.size() && (columns == null || i < columns.size()); i++) {
+                    Expression expression = expressions.get(i);
+                    String fieldName = columns != null ? columns.get(i).getColumnName().toLowerCase() : null;
+                    
+                    if (fieldName != null) {
+                        encryptFieldValue(tableName, fieldName, expression, valueReplacements);
                     }
                 }
             }
         }
         
-        // 替换 SQL 中的值
-        String result = sql;
-        for (Map.Entry<String, String> entry : valueReplacements.entrySet()) {
-            // 使用正则表达式精确匹配，避免替换部分匹配
-            String original = Pattern.quote(entry.getKey());
-            String replacement = Matcher.quoteReplacement(entry.getValue());
-            result = result.replaceAll(original, replacement);
+        // INSERT INTO table SELECT ... 的情况（子查询插入）
+        // 这种情况比较复杂，暂时不处理，因为需要解析 SELECT 的结果
+    }
+
+    /**
+     * 加密 DELETE 语句 WHERE 条件中的字段值
+     */
+    private void encryptDeleteValues(net.sf.jsqlparser.statement.delete.Delete delete, String tableName,
+                                     Map<String, String> valueReplacements) {
+        net.sf.jsqlparser.expression.Expression whereExpr = delete.getWhere();
+        if (whereExpr != null) {
+            encryptWhereExpressionValues(whereExpr, tableName, valueReplacements);
+        }
+    }
+
+    /**
+     * 加密 SELECT 语句 WHERE 条件中的字段值
+     */
+    private void encryptSelectValues(Select select, Map<String, String> valueReplacements) {
+        try {
+            java.lang.reflect.Method getSelectBodyMethod = select.getClass().getMethod("getSelectBody");
+            Object selectBody = getSelectBodyMethod.invoke(select);
+            
+            if (selectBody instanceof PlainSelect) {
+                PlainSelect plainSelect = (PlainSelect) selectBody;
+                net.sf.jsqlparser.statement.select.FromItem fromItem = plainSelect.getFromItem();
+                
+                String tableName = null;
+                if (fromItem instanceof net.sf.jsqlparser.schema.Table) {
+                    tableName = ((net.sf.jsqlparser.schema.Table) fromItem).getName();
+                }
+                
+                if (tableName != null) {
+                    net.sf.jsqlparser.expression.Expression whereExpr = plainSelect.getWhere();
+                    if (whereExpr != null) {
+                        encryptWhereExpressionValues(whereExpr, tableName, valueReplacements);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("无法解析 SELECT 语句的 WHERE 条件: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 加密 WHERE 表达式中的字段值
+     */
+    private void encryptWhereExpressionValues(net.sf.jsqlparser.expression.Expression expr, String tableName,
+                                            Map<String, String> valueReplacements) {
+        if (expr == null) {
+            return;
         }
         
-        return result;
+        // 处理二元表达式（如 name = '张三'）
+        if (expr instanceof net.sf.jsqlparser.expression.BinaryExpression) {
+            net.sf.jsqlparser.expression.BinaryExpression binaryExpr = 
+                (net.sf.jsqlparser.expression.BinaryExpression) expr;
+            
+            net.sf.jsqlparser.expression.Expression leftExpr = binaryExpr.getLeftExpression();
+            net.sf.jsqlparser.expression.Expression rightExpr = binaryExpr.getRightExpression();
+            
+            // 检查是否是需要加密的字段条件：左边是列，右边是值
+            Column column = null;
+            Expression valueExpr = null;
+            
+            if (leftExpr instanceof Column && rightExpr instanceof Expression) {
+                column = (Column) leftExpr;
+                valueExpr = rightExpr;
+            } else if (rightExpr instanceof Column && leftExpr instanceof Expression) {
+                // 处理位置互换的情况（如 '张三' = name）
+                column = (Column) rightExpr;
+                valueExpr = leftExpr;
+            }
+            
+            if (column != null && valueExpr != null) {
+                String fieldName = column.getColumnName().toLowerCase();
+                encryptFieldValue(tableName, fieldName, valueExpr, valueReplacements);
+                return; // 处理完这个二元表达式后返回，不再递归处理左右表达式
+            }
+            
+            // 如果没有处理当前表达式，递归处理左右表达式（用于处理 AND、OR 等复杂表达式）
+            encryptWhereExpressionValues(leftExpr, tableName, valueReplacements);
+            encryptWhereExpressionValues(rightExpr, tableName, valueReplacements);
+        }
+        // 处理括号表达式
+        else if (expr instanceof net.sf.jsqlparser.expression.Parenthesis) {
+            net.sf.jsqlparser.expression.Parenthesis paren = 
+                (net.sf.jsqlparser.expression.Parenthesis) expr;
+            encryptWhereExpressionValues(paren.getExpression(), tableName, valueReplacements);
+        }
+        // 处理 IN 表达式
+        else if (expr instanceof net.sf.jsqlparser.expression.operators.relational.InExpression) {
+            net.sf.jsqlparser.expression.operators.relational.InExpression inExpr = 
+                (net.sf.jsqlparser.expression.operators.relational.InExpression) expr;
+            
+            net.sf.jsqlparser.expression.Expression leftExpr = inExpr.getLeftExpression();
+            net.sf.jsqlparser.expression.Expression rightExpr = inExpr.getRightExpression();
+            
+            if (leftExpr instanceof Column && rightExpr instanceof ExpressionList) {
+                Column column = (Column) leftExpr;
+                String fieldName = column.getColumnName().toLowerCase();
+                ExpressionList<?> exprList = (ExpressionList<?>) rightExpr;
+                
+                for (net.sf.jsqlparser.expression.Expression e : exprList.getExpressions()) {
+                    encryptFieldValue(tableName, fieldName, e, valueReplacements);
+                }
+            }
+        }
+    }
+
+    /**
+     * 加密单个字段的值
+     */
+    private void encryptFieldValue(String tableName, String fieldName, Expression expression,
+                                   Map<String, String> valueReplacements) {
+        log.debug("检查字段: {} (表: {})", fieldName, tableName);
+        
+        // 检查该字段是否需要加密
+        Class<? extends FieldEncryptorStrategy> strategyClass = 
+            TableCache.getTableFieldEncryptInfo(tableName, fieldName);
+        
+        if (strategyClass != null) {
+            log.debug("字段 {} 需要加密，策略: {}", fieldName, strategyClass.getName());
+            
+            // 提取表达式的值
+            String originalValue = extractValueFromExpression(expression);
+            log.debug("字段 {} 的原始值: {}", fieldName, originalValue);
+            
+            if (originalValue != null) {
+                // 加密值
+                FieldEncryptorStrategy strategy = StrategyCache.getStrategy(strategyClass);
+                String encryptedValue = strategy.encryption(originalValue);
+                log.debug("字段 {} 的加密值: {}", fieldName, encryptedValue);
+                
+                // 记录替换关系（使用原始SQL中的格式，包括引号）
+                String originalSqlValue = expression.toString();
+                String encryptedSqlValue = formatSqlValue(encryptedValue);
+                
+                log.debug("替换: {} -> {}", originalSqlValue, encryptedSqlValue);
+                valueReplacements.put(originalSqlValue, encryptedSqlValue);
+            }
+        } else {
+            log.debug("字段 {} 不需要加密", fieldName);
+        }
     }
 
     /**
@@ -517,9 +761,17 @@ public class MonitorController {
         // 对于其他类型的表达式，尝试通过 toString() 获取
         // 但需要去掉引号（如果是字符串值）
         String exprStr = expression.toString();
+        log.debug("表达式类型: {}, toString(): {}", expression.getClass().getName(), exprStr);
+        
+        // 处理单引号字符串
         if (exprStr.startsWith("'") && exprStr.endsWith("'")) {
             // 去掉引号并处理转义
             return exprStr.substring(1, exprStr.length() - 1).replace("''", "'");
+        }
+        // 处理双引号字符串（某些数据库支持）
+        if (exprStr.startsWith("\"") && exprStr.endsWith("\"")) {
+            // 去掉引号并处理转义
+            return exprStr.substring(1, exprStr.length() - 1).replace("\"\"", "\"");
         }
         return exprStr;
     }
@@ -583,6 +835,412 @@ public class MonitorController {
         
         // 降级方案：粗略统计
         return 1; // 至少有一个字段被加密
+    }
+
+    /**
+     * SQL 查询接口
+     * 执行 SELECT 查询并返回结果（默认分页 10 条）
+     */
+    @PostMapping("/api/query-sql.json")
+    public ApiResponse<QuerySqlResponse> querySql(@RequestBody QuerySqlRequest request,
+                                                    HttpSession session) {
+        // 检查登录
+        if (!checkLogin(session)) {
+            return ApiResponse.error(401, "未登录");
+        }
+
+        try {
+            // 验证参数
+            if (request.getSql() == null || request.getSql().trim().isEmpty()) {
+                return ApiResponse.error("SQL 语句不能为空");
+            }
+
+            // 检查 DataSource 是否可用
+            if (dataSource == null) {
+                return ApiResponse.error("数据源不可用，无法执行查询");
+            }
+
+            String sql = request.getSql().trim();
+            
+            // 验证是否为 SELECT 语句
+            if (!sql.trim().toUpperCase().startsWith("SELECT")) {
+                return ApiResponse.error("只支持 SELECT 查询语句");
+            }
+
+            // 解析 SQL 并添加分页
+            int pageSize = request.getPageSize() != null && request.getPageSize() > 0 
+                    ? request.getPageSize() : 10;
+            int pageNum = request.getPageNum() != null && request.getPageNum() > 0 
+                    ? request.getPageNum() : 1;
+            int offset = (pageNum - 1) * pageSize;
+
+            String pagedSql = addPaginationToSql(sql, pageSize, offset);
+            log.debug("原始 SQL: {}", sql);
+            log.debug("分页 SQL: {}", pagedSql);
+
+            // 对 WHERE 条件中的加密字段值进行加密
+            String encryptedSql = encryptWhereClauseValues(pagedSql);
+            log.debug("加密后的 SQL: {}", encryptedSql);
+
+            // 执行查询
+            QuerySqlResponse response = executeQuery(encryptedSql, sql, pageNum, pageSize);
+            
+            return ApiResponse.success(response);
+
+        } catch (JSQLParserException e) {
+            log.error("SQL 解析失败", e);
+            return ApiResponse.error("SQL 解析失败: " + e.getMessage());
+        } catch (SQLException e) {
+            log.error("SQL 查询失败", e);
+            return ApiResponse.error("SQL 查询失败: " + e.getMessage());
+        } catch (Exception e) {
+            log.error("SQL 查询失败", e);
+            return ApiResponse.error("SQL 查询失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 为 SQL 添加分页
+     */
+    private String addPaginationToSql(String sql, int limit, int offset) throws JSQLParserException {
+        Statement statement = CCJSqlParserUtil.parse(sql);
+        
+        if (!(statement instanceof Select)) {
+            throw new IllegalArgumentException("只支持 SELECT 语句");
+        }
+
+        Select select = (Select) statement;
+        
+        // 使用反射或访问者模式来访问 SelectBody
+        // 尝试直接访问 SelectBody（不同版本的 JSQLParser API 可能不同）
+        try {
+            // 尝试通过反射访问 getSelectBody 方法
+            java.lang.reflect.Method getSelectBodyMethod = select.getClass().getMethod("getSelectBody");
+            Object selectBody = getSelectBodyMethod.invoke(select);
+            
+            if (selectBody instanceof PlainSelect) {
+                PlainSelect plainSelect = (PlainSelect) selectBody;
+                
+                // 检查是否已有 LIMIT 子句
+                Limit existingLimit = plainSelect.getLimit();
+                if (existingLimit == null) {
+                    // 添加 LIMIT 和 OFFSET
+                    Limit limitObj = new Limit();
+                    limitObj.setRowCount(new LongValue(limit));
+                    if (offset > 0) {
+                        limitObj.setOffset(new LongValue(offset));
+                    }
+                    plainSelect.setLimit(limitObj);
+                }
+                // 如果已有 LIMIT，不修改（使用用户指定的分页）
+            }
+        } catch (Exception e) {
+            log.warn("无法通过反射访问 SelectBody，尝试直接解析: {}", e.getMessage());
+            // 如果反射失败，尝试简单的字符串追加方式
+            // 这种方式不够优雅，但可以作为后备方案
+            String upperSql = sql.trim().toUpperCase();
+            if (!upperSql.contains("LIMIT")) {
+                sql = sql.trim();
+                if (sql.endsWith(";")) {
+                    sql = sql.substring(0, sql.length() - 1);
+                }
+                if (offset > 0) {
+                    sql += " LIMIT " + limit + " OFFSET " + offset;
+                } else {
+                    sql += " LIMIT " + limit;
+                }
+                return sql;
+            }
+        }
+        
+        return select.toString();
+    }
+
+    /**
+     * 执行查询并返回结果
+     */
+    private QuerySqlResponse executeQuery(String sql, String originalSql, 
+                                          int pageNum, int pageSize) throws SQLException {
+        QuerySqlResponse response = new QuerySqlResponse();
+        response.setExecutedSql(sql);
+        response.setPageNum(pageNum);
+        response.setPageSize(pageSize);
+
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql);
+             ResultSet rs = stmt.executeQuery()) {
+
+            // 获取列信息
+            ResultSetMetaData metaData = rs.getMetaData();
+            int columnCount = metaData.getColumnCount();
+            List<String> columns = new ArrayList<>();
+            for (int i = 1; i <= columnCount; i++) {
+                columns.add(metaData.getColumnLabel(i));
+            }
+            response.setColumns(columns);
+
+            // 提取数据
+            List<Map<String, Object>> data = new ArrayList<>();
+            while (rs.next()) {
+                Map<String, Object> row = new LinkedHashMap<>();
+                for (String column : columns) {
+                    Object value = rs.getObject(column);
+                    row.put(column, value);
+                }
+                data.add(row);
+            }
+            response.setData(data);
+
+            // 注意：由于已经分页，这里无法准确获取总记录数
+            // 如果需要总记录数，需要执行 COUNT 查询
+            response.setTotalCount((long) data.size());
+
+            log.debug("查询完成，返回 {} 条记录", data.size());
+        }
+
+        return response;
+    }
+
+    /**
+     * 加密 SELECT 查询中 WHERE 条件里的字段值
+     * 使用占位符方式，复用 core 项目的逻辑
+     */
+    private String encryptWhereClauseValues(String sql) throws JSQLParserException {
+        Statement statement = CCJSqlParserUtil.parse(sql);
+        
+        if (!(statement instanceof Select)) {
+            return sql; // 不是 SELECT 语句，直接返回
+        }
+
+        Select select = (Select) statement;
+        
+        try {
+            // 使用反射访问 getSelectBody 方法
+            java.lang.reflect.Method getSelectBodyMethod = select.getClass().getMethod("getSelectBody");
+            Object selectBody = getSelectBodyMethod.invoke(select);
+            
+            if (selectBody instanceof PlainSelect) {
+                PlainSelect plainSelect = (PlainSelect) selectBody;
+                
+                // 获取 WHERE 条件
+                net.sf.jsqlparser.expression.Expression whereExpr = plainSelect.getWhere();
+                if (whereExpr == null) {
+                    return sql; // 没有 WHERE 条件，直接返回
+                }
+                
+                // 步骤1: 提取 WHERE 条件中的值，替换为占位符
+                // 存储：原始值 -> 占位符索引
+                Map<String, Integer> valueToPlaceholderMap = new LinkedHashMap<>();
+                List<String> values = new ArrayList<>();
+                int placeholderIndex = 1;
+                
+                String placeholderSql = replaceWhereValuesWithPlaceholders(
+                    sql, whereExpr, valueToPlaceholderMap, values, placeholderIndex);
+                
+                log.debug("转换为占位符 SQL: {}", placeholderSql);
+                log.debug("提取的值: {}", values);
+                
+                // 步骤2: 使用 core 项目的逻辑解析占位符映射
+                Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> parseResult = 
+                    SecurtkitUtils.parseSql(placeholderSql);
+                
+                Map<String, ColumnTableDto> placeholderColumnMap = parseResult.getKey();
+                log.debug("占位符映射数量: {}", placeholderColumnMap.size());
+                
+                // 步骤3: 加密每个占位符对应的值
+                Map<String, String> encryptedValues = new LinkedHashMap<>();
+                for (Map.Entry<String, Integer> entry : valueToPlaceholderMap.entrySet()) {
+                    String originalValue = entry.getKey();
+                    Integer index = entry.getValue();
+                    
+                    // 查找占位符对应的字段信息
+                    String placeholderKey = SecurtkitUtils.PLACEHOLDER + index;
+                    ColumnTableDto columnDto = placeholderColumnMap.get(placeholderKey);
+                    
+                    if (columnDto != null) {
+                        String tableName = columnDto.getSourceTableName();
+                        String fieldName = columnDto.getSourceColumn();
+                        
+                        // 检查是否需要加密
+                        Class<? extends FieldEncryptorStrategy> strategyClass = 
+                            TableCache.getTableFieldEncryptInfo(tableName, fieldName);
+                        
+                        if (strategyClass != null) {
+                            try {
+                                FieldEncryptorStrategy strategy = StrategyCache.getStrategy(strategyClass);
+                                String encryptedValue = strategy.encryption(originalValue);
+                                encryptedValues.put(originalValue, encryptedValue);
+                                log.debug("字段 {} 的值 {} 加密为 {}", fieldName, originalValue, encryptedValue);
+                            } catch (Exception e) {
+                                log.warn("加密字段 {} 的值失败: {}", fieldName, e.getMessage());
+                            }
+                        }
+                    }
+                }
+                
+                // 步骤4: 替换 SQL 中的原始值为加密后的值
+                String result = sql;
+                for (Map.Entry<String, String> entry : encryptedValues.entrySet()) {
+                    // 查找原始值在 SQL 中的位置（需要匹配引号）
+                    String originalValue = entry.getKey();
+                    String encryptedValue = entry.getValue();
+                    
+                    // 尝试匹配单引号和双引号
+                    String originalWithSingleQuote = "'" + originalValue.replace("'", "''") + "'";
+                    String originalWithDoubleQuote = "\"" + originalValue.replace("\"", "\"\"") + "\"";
+                    String encryptedWithSingleQuote = formatSqlValue(encryptedValue);
+                    
+                    result = result.replace(originalWithSingleQuote, encryptedWithSingleQuote);
+                    result = result.replace(originalWithDoubleQuote, encryptedWithSingleQuote);
+                }
+                
+                return result;
+            }
+        } catch (Exception e) {
+            log.warn("无法加密 WHERE 条件值，返回原 SQL: {}", e.getMessage(), e);
+        }
+        
+        return sql;
+    }
+
+    /**
+     * 将 WHERE 条件中的值替换为占位符
+     * 使用更简单的方法：直接解析表达式，提取值并在 SQL 中替换
+     */
+    private String replaceWhereValuesWithPlaceholders(
+            String sql,
+            net.sf.jsqlparser.expression.Expression whereExpr,
+            Map<String, Integer> valueToPlaceholderMap,
+            List<String> values,
+            int startIndex) {
+        
+        // 使用递归方式提取表达式中的所有值
+        List<ValueInfo> valueInfos = new ArrayList<>();
+        extractValuesFromExpression(whereExpr, valueInfos);
+        
+        if (valueInfos.isEmpty()) {
+            return sql;
+        }
+        
+        // 找到 WHERE 关键字的位置
+        int whereIndex = sql.toUpperCase().indexOf("WHERE");
+        if (whereIndex < 0) {
+            return sql;
+        }
+        
+        String result = sql;
+        int placeholderIndex = startIndex;
+        
+        // 按 SQL 表示长度从长到短排序，避免部分匹配问题
+        valueInfos.sort((a, b) -> Integer.compare(b.sqlRepr.length(), a.sqlRepr.length()));
+        
+        // 从后往前替换值（避免索引偏移）
+        for (int i = valueInfos.size() - 1; i >= 0; i--) {
+            ValueInfo info = valueInfos.get(i);
+            
+            // 在 WHERE 之后查找该值的 SQL 表示
+            int pos = result.indexOf(info.sqlRepr, whereIndex);
+            if (pos > whereIndex) {
+                String placeholder = "?";
+                result = result.substring(0, pos) + placeholder + result.substring(pos + info.sqlRepr.length());
+                
+                valueToPlaceholderMap.put(info.value, placeholderIndex);
+                values.add(info.value);
+                placeholderIndex++;
+            }
+        }
+        
+        return result;
+    }
+
+    /**
+     * 递归提取表达式中的所有值
+     */
+    private void extractValuesFromExpression(net.sf.jsqlparser.expression.Expression expr, List<ValueInfo> values) {
+        if (expr == null) {
+            return;
+        }
+        
+        // 字符串值
+        if (expr instanceof StringValue) {
+            StringValue sv = (StringValue) expr;
+            values.add(new ValueInfo(sv.getValue(), sv.toString()));
+            return;
+        }
+        
+        // 数字值
+        if (expr instanceof LongValue) {
+            LongValue lv = (LongValue) expr;
+            values.add(new ValueInfo(String.valueOf(lv.getValue()), lv.toString()));
+            return;
+        }
+        
+        if (expr instanceof DoubleValue) {
+            DoubleValue dv = (DoubleValue) expr;
+            values.add(new ValueInfo(String.valueOf(dv.getValue()), dv.toString()));
+            return;
+        }
+        
+        // 二元表达式（递归处理左右两边）
+        if (expr instanceof net.sf.jsqlparser.expression.BinaryExpression) {
+            net.sf.jsqlparser.expression.BinaryExpression binaryExpr = 
+                (net.sf.jsqlparser.expression.BinaryExpression) expr;
+            extractValuesFromExpression(binaryExpr.getLeftExpression(), values);
+            extractValuesFromExpression(binaryExpr.getRightExpression(), values);
+        }
+        
+        // 括号表达式
+        if (expr instanceof net.sf.jsqlparser.expression.Parenthesis) {
+            net.sf.jsqlparser.expression.Parenthesis paren = 
+                (net.sf.jsqlparser.expression.Parenthesis) expr;
+            extractValuesFromExpression(paren.getExpression(), values);
+        }
+        
+        // IN 表达式
+        if (expr instanceof net.sf.jsqlparser.expression.operators.relational.InExpression) {
+            net.sf.jsqlparser.expression.operators.relational.InExpression inExpr = 
+                (net.sf.jsqlparser.expression.operators.relational.InExpression) expr;
+            net.sf.jsqlparser.expression.Expression rightExpr = inExpr.getRightExpression();
+            
+            // 处理 IN (value1, value2, ...) 的情况
+            if (rightExpr instanceof net.sf.jsqlparser.expression.operators.relational.ExpressionList) {
+                net.sf.jsqlparser.expression.operators.relational.ExpressionList<?> exprList = 
+                    (net.sf.jsqlparser.expression.operators.relational.ExpressionList<?>) rightExpr;
+                for (net.sf.jsqlparser.expression.Expression e : exprList.getExpressions()) {
+                    extractValuesFromExpression(e, values);
+                }
+            }
+            // 处理 IN (SELECT ...) 的情况（子查询）
+            else if (rightExpr != null) {
+                extractValuesFromExpression(rightExpr, values);
+            }
+        }
+        
+        // NOT 表达式
+        if (expr instanceof net.sf.jsqlparser.expression.NotExpression) {
+            net.sf.jsqlparser.expression.NotExpression notExpr = 
+                (net.sf.jsqlparser.expression.NotExpression) expr;
+            extractValuesFromExpression(notExpr.getExpression(), values);
+        }
+        
+        // 有符号表达式
+        if (expr instanceof SignedExpression) {
+            SignedExpression signedExpr = (SignedExpression) expr;
+            extractValuesFromExpression(signedExpr.getExpression(), values);
+        }
+    }
+
+    /**
+     * 值信息
+     */
+    private static class ValueInfo {
+        String value;      // 实际值（去掉引号）
+        String sqlRepr;    // SQL 中的表示（如 '值'）
+        
+        ValueInfo(String value, String sqlRepr) {
+            this.value = value;
+            this.sqlRepr = sqlRepr;
+        }
     }
 }
 

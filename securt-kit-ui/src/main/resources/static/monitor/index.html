@@ -38,7 +38,8 @@
             <div class="tabs">
                 <button class="tab-btn active" data-tab="crypto">加密解密</button>
                 <button class="tab-btn" data-tab="sqlParse">SQL 解析</button>
-                <button class="tab-btn" data-tab="sqlEncrypt">SQL 加密</button>
+                <button class="tab-btn" data-tab="sqlEncrypt">SQL参数加密</button>
+                <button class="tab-btn" data-tab="sqlQuery">SQL 查询</button>
             </div>
 
             <!-- 加密解密标签页 -->
@@ -101,12 +102,12 @@
                 </div>
             </div>
 
-            <!-- SQL 加密标签页 -->
+            <!-- SQL参数加密标签页 -->
             <div id="sqlEncryptTab" class="tab-content">
                 <div class="card">
-                    <h2>SQL 加密</h2>
+                    <h2>SQL参数加密</h2>
                     <div class="form-group">
-                        <label>输入 SQL（包含实际值）:</label>
+                        <label>输入 SQL（包含实际值，支持 INSERT、UPDATE、DELETE、SELECT）:</label>
                         <textarea id="sqlEncryptInput" rows="6" placeholder="请输入要加密的 SQL 语句，例如: UPDATE user SET name = '张三', phone = '13800138000' WHERE id = 1"></textarea>
                     </div>
                     <div class="button-group">
@@ -124,6 +125,42 @@
                         </div>
                         <div id="sqlEncryptStats" style="margin-top: 10px; color: #666; font-size: 14px;"></div>
                         <button id="copySqlEncryptBtn" class="btn btn-secondary" style="display: none;">复制加密后的 SQL</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SQL 查询标签页 -->
+            <div id="sqlQueryTab" class="tab-content">
+                <div class="card">
+                    <h2>SQL 查询</h2>
+                    <div class="form-group">
+                        <label>输入查询 SQL（只支持 SELECT）:</label>
+                        <textarea id="sqlQueryInput" rows="6" placeholder="请输入 SELECT 查询语句，例如: SELECT * FROM user WHERE id = 1"></textarea>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>每页大小:</label>
+                            <input type="number" id="sqlQueryPageSize" value="10" min="1" max="100">
+                        </div>
+                        <div class="form-group">
+                            <label>页码:</label>
+                            <input type="number" id="sqlQueryPageNum" value="1" min="1">
+                        </div>
+                    </div>
+                    <div class="button-group">
+                        <button id="querySqlBtn" class="btn btn-primary">查询</button>
+                        <button id="clearSqlQueryBtn" class="btn btn-secondary">清空</button>
+                    </div>
+                    <div id="sqlQueryResult" style="display: none;">
+                        <div class="form-group">
+                            <label>执行的 SQL:</label>
+                            <textarea id="sqlQueryExecuted" rows="2" readonly style="background-color: #f5f5f5; font-size: 12px;"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>查询结果:</label>
+                            <div id="sqlQueryStats" style="margin-bottom: 10px; color: #666; font-size: 14px;"></div>
+                            <div id="sqlQueryTable" class="result-table"></div>
+                        </div>
                     </div>
                 </div>
             </div>
