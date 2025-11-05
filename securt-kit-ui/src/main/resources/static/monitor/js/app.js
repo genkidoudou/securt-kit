@@ -11,12 +11,47 @@ const CONFIG = {
 // 工具函数
 const utils = {
     /**
-     * 显示错误消息
+     * 转义 HTML 特殊字符，防止 XSS 攻击
+     */
+    escapeHtml(text) {
+        if (text == null) {
+            return '';
+        }
+        const map = {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        };
+        return String(text).replace(/[&<>"']/g, m => map[m]);
+    },
+
+    /**
+     * 安全地设置文本内容（自动转义 HTML）
+     */
+    setTextContent(element, text) {
+        if (element) {
+            element.textContent = text; // textContent 自动转义，比 innerHTML 安全
+        }
+    },
+
+    /**
+     * 安全地设置 HTML 内容（需要先转义）
+     */
+    setHtmlContent(element, html) {
+        if (element) {
+            element.innerHTML = this.escapeHtml(html);
+        }
+    },
+
+    /**
+     * 显示错误消息（安全输出）
      */
     showError(elementId, message) {
         const element = document.getElementById(elementId);
         if (element) {
-            element.textContent = message;
+            this.setTextContent(element, message);
             element.classList.add('show');
         }
     },
@@ -399,7 +434,7 @@ const sqlParser = {
 
         const entries = Object.entries(placeholderMap);
         if (entries.length === 0) {
-            container.innerHTML = '<div class="empty-message">无占位符映射</div>';
+            utils.setHtmlContent(container, '<div class="empty-message">无占位符映射</div>');
             return;
         }
 
@@ -425,19 +460,19 @@ const sqlParser = {
         for (const [key, info] of entries) {
             html += '<tr>';
             html += `<td>${info.index !== null && info.index !== undefined ? info.index : '-'}</td>`;
-            html += `<td>${this.escapeHtml(key)}</td>`;
-            html += `<td>${this.escapeHtml(info.tableAliasName || '-')}</td>`;
-            html += `<td>${this.escapeHtml(info.sourceTableName || '-')}</td>`;
-            html += `<td>${this.escapeHtml(info.sourceColumn || '-')}</td>`;
+            html += `<td>${utils.escapeHtml(key)}</td>`;
+            html += `<td>${utils.escapeHtml(info.tableAliasName || '-')}</td>`;
+            html += `<td>${utils.escapeHtml(info.sourceTableName || '-')}</td>`;
+            html += `<td>${utils.escapeHtml(info.sourceColumn || '-')}</td>`;
             html += `<td>${info.fromSourceTable ? '是' : '否'}</td>`;
             html += `<td>${info.insertFieldIndex !== null && info.insertFieldIndex !== undefined ? info.insertFieldIndex : '-'}</td>`;
-            html += `<td>${this.escapeHtml(info.parameterProperty || '-')}</td>`;
-            html += `<td>${this.escapeHtml(info.parameterType || '-')}</td>`;
+            html += `<td>${utils.escapeHtml(info.parameterProperty || '-')}</td>`;
+            html += `<td>${utils.escapeHtml(info.parameterType || '-')}</td>`;
             html += '</tr>';
         }
 
         html += '</tbody></table>';
-        container.innerHTML = html;
+        container.innerHTML = html; // HTML 结构已转义，安全
     },
 
     /**
@@ -448,7 +483,7 @@ const sqlParser = {
         if (!container) return;
 
         if (encryptFields.length === 0) {
-            container.innerHTML = '<div class="empty-message">无需要加密的字段</div>';
+            utils.setHtmlContent(container, '<div class="empty-message">无需要加密的字段</div>');
             return;
         }
 
@@ -461,25 +496,15 @@ const sqlParser = {
 
         for (const field of encryptFields) {
             html += '<tr>';
-            html += `<td>${this.escapeHtml(field.columnName || '-')}</td>`;
-            html += `<td>${this.escapeHtml(field.sourceTableName || '-')}</td>`;
-            html += `<td>${this.escapeHtml(field.sourceColumn || '-')}</td>`;
-            html += `<td>${this.escapeHtml(field.fieldEncryptor || '-')}</td>`;
+            html += `<td>${utils.escapeHtml(field.columnName || '-')}</td>`;
+            html += `<td>${utils.escapeHtml(field.sourceTableName || '-')}</td>`;
+            html += `<td>${utils.escapeHtml(field.sourceColumn || '-')}</td>`;
+            html += `<td>${utils.escapeHtml(field.fieldEncryptor || '-')}</td>`;
             html += '</tr>';
         }
 
         html += '</tbody></table>';
-        container.innerHTML = html;
-    },
-
-    /**
-     * HTML 转义
-     */
-    escapeHtml(text) {
-        if (text == null) return '-';
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+        container.innerHTML = html; // HTML 结构已转义，安全
     },
 
     /**
@@ -701,7 +726,7 @@ const sqlQuery = {
      */
     renderTable(columns, data, container) {
         if (columns.length === 0 || data.length === 0) {
-            container.innerHTML = '<div class="empty-message">无查询结果</div>';
+            utils.setHtmlContent(container, '<div class="empty-message">无查询结果</div>');
             return;
         }
 
@@ -709,7 +734,7 @@ const sqlQuery = {
         
         // 表头
         for (const column of columns) {
-            html += `<th>${this.escapeHtml(column)}</th>`;
+            html += `<th>${utils.escapeHtml(column)}</th>`;
         }
         html += '</tr></thead><tbody>';
 
@@ -724,7 +749,7 @@ const sqlQuery = {
         }
 
         html += '</tbody></table>';
-        container.innerHTML = html;
+        container.innerHTML = html; // HTML 结构已转义，安全
     },
 
     /**
@@ -741,17 +766,7 @@ const sqlQuery = {
             return String(value);
         }
         // 字符串值进行 HTML 转义
-        return this.escapeHtml(String(value));
-    },
-
-    /**
-     * HTML 转义
-     */
-    escapeHtml(text) {
-        if (text == null) return '';
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+        return utils.escapeHtml(String(value));
     },
 
     /**
@@ -785,7 +800,7 @@ const sqlQuery = {
             statsDiv.textContent = '';
         }
         if (tableContainer) {
-            tableContainer.innerHTML = '';
+            tableContainer.textContent = ''; // 使用 textContent 清空更安全
         }
     }
 };

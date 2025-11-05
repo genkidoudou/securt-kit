@@ -8,6 +8,8 @@ import io.github.hexlodev.core.parser.dto.ColumnTableDto;
 import io.github.hexlodev.core.parser.dto.FieldEncryptorInfoDto;
 import io.github.hexlodev.core.strategy.FieldEncryptorStrategy;
 import io.github.hexlodev.ui.monitor.dto.*;
+import io.github.hexlodev.ui.monitor.security.SqlValidator;
+import io.github.hexlodev.ui.monitor.security.SafeInput;
 import lombok.extern.slf4j.Slf4j;
 import net.sf.jsqlparser.JSQLParserException;
 import net.sf.jsqlparser.expression.*;
@@ -24,6 +26,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.web.bind.annotation.*;
+
+import javax.validation.Valid;
 
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
@@ -135,8 +139,8 @@ public class MonitorController {
      * 加密接口
      */
     @PostMapping("/api/encrypt.json")
-    public ApiResponse<EncryptResponse> encrypt(@RequestBody EncryptRequest request,
-                                                 HttpSession session) {
+    public ApiResponse<EncryptResponse> encrypt(@Valid @RequestBody EncryptRequest request,
+                                                HttpSession session) {
         // 检查登录
         if (!checkLogin(session)) {
             return ApiResponse.error(401, "未登录");
@@ -174,8 +178,8 @@ public class MonitorController {
      * 解密接口
      */
     @PostMapping("/api/decrypt.json")
-    public ApiResponse<DecryptResponse> decrypt(@RequestBody DecryptRequest request,
-                                                 HttpSession session) {
+    public ApiResponse<DecryptResponse> decrypt(@Valid @RequestBody DecryptRequest request,
+                                                HttpSession session) {
         // 检查登录
         if (!checkLogin(session)) {
             return ApiResponse.error(401, "未登录");
@@ -318,7 +322,7 @@ public class MonitorController {
      * 调用 SecurtkitUtils.doParseSql 方法解析 SQL
      */
     @PostMapping("/api/parse-sql.json")
-    public ApiResponse<ParseSqlResponse> parseSql(@RequestBody ParseSqlRequest request,
+    public ApiResponse<ParseSqlResponse> parseSql(@Valid @RequestBody ParseSqlRequest request,
                                                    HttpSession session) {
         // 检查登录
         if (!checkLogin(session)) {
@@ -329,6 +333,14 @@ public class MonitorController {
             // 验证参数
             if (request.getSql() == null || request.getSql().trim().isEmpty()) {
                 return ApiResponse.error("SQL 语句不能为空");
+            }
+
+            String sql = request.getSql().trim();
+            
+            // SQL 验证
+            SqlValidator.ValidationResult validation = SqlValidator.validateDmlSql(sql);
+            if (!validation.isValid()) {
+                return ApiResponse.error(validation.getErrorMessage());
             }
 
             // 使用反射调用私有的 doParseSql 方法
@@ -406,7 +418,7 @@ public class MonitorController {
      * 将 SQL 中需要加密的字段值进行加密，支持 INSERT、UPDATE、DELETE、SELECT 等所有 SQL 类型
      */
     @PostMapping("/api/encrypt-sql.json")
-    public ApiResponse<EncryptSqlResponse> encryptSql(@RequestBody EncryptSqlRequest request,
+    public ApiResponse<EncryptSqlResponse> encryptSql(@Valid @RequestBody EncryptSqlRequest request,
                                                       HttpSession session) {
         // 检查登录
         if (!checkLogin(session)) {
@@ -420,6 +432,13 @@ public class MonitorController {
             }
 
             String originalSql = request.getSql().trim();
+            
+            // SQL 验证
+            SqlValidator.ValidationResult validation = SqlValidator.validateDmlSql(originalSql);
+            if (!validation.isValid()) {
+                return ApiResponse.error(validation.getErrorMessage());
+            }
+            
             String encryptedSql = encryptSqlValues(originalSql);
 
             EncryptSqlResponse response = new EncryptSqlResponse();
@@ -842,7 +861,7 @@ public class MonitorController {
      * 执行 SELECT 查询并返回结果（默认分页 10 条）
      */
     @PostMapping("/api/query-sql.json")
-    public ApiResponse<QuerySqlResponse> querySql(@RequestBody QuerySqlRequest request,
+    public ApiResponse<QuerySqlResponse> querySql(@Valid @RequestBody QuerySqlRequest request,
                                                     HttpSession session) {
         // 检查登录
         if (!checkLogin(session)) {
@@ -865,6 +884,12 @@ public class MonitorController {
             // 验证是否为 SELECT 语句
             if (!sql.trim().toUpperCase().startsWith("SELECT")) {
                 return ApiResponse.error("只支持 SELECT 查询语句");
+            }
+
+            // SQL 验证
+            SqlValidator.ValidationResult validation = SqlValidator.validateSelectSql(sql);
+            if (!validation.isValid()) {
+                return ApiResponse.error(validation.getErrorMessage());
             }
 
             // 解析 SQL 并添加分页
