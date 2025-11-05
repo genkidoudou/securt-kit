@@ -121,4 +121,9 @@ securtkit:
           - field-name: customer_name
           - field-name: customer_phone
     enable: true
+  monitor:
+    enabled: true
+    username: admin
+    password: admin
+    path: /monitor
 
