@@ -65,9 +65,9 @@ public class SecurtkitUtils {
 
     /**
      * 解析SQL语句，获取占位符与表字段的映射关系以及需要加密的字段列表
-     * <p>
-     * 该方法使用缓存机制，相同 SQL 的解析结果会被缓存，显著提升性能。
-     * </p>
+     * 
+     * <p>该方法使用缓存机制，相同 SQL 的解析结果会被缓存，显著提升性能。
+     * 缓存使用 LRU 算法，自动淘汰最久未使用的条目。</p>
      *
      * <p>该方法会执行以下步骤：</p>
      * <ol>
@@ -79,22 +79,14 @@ public class SecurtkitUtils {
      *   <li>将解析结果存入缓存</li>
      * </ol>
      *
-     * @param sql 要解析的SQL语句，包含问号占位符（如：UPDATE user SET name = ? WHERE id = ?）
-     * @return Pair对象，包含：
+     * <p>性能优化：</p>
      * <ul>
-     *   <li>Key: 占位符到ColumnTableDto的映射（占位符名称 -> 表字段信息）</li>
-     *   <li>Value: 需要加密的字段信息列表</li>
+     *   <li>使用缓存机制，避免重复解析相同 SQL</li>
+     *   <li>SQL 规范化处理，提升缓存命中率</li>
+     *   <li>使用 LRU 算法，自动管理缓存大小</li>
      * </ul>
-     * @throws JSQLParserException 如果SQL解析失败
-     * @since 1.0.0
-     */
-    /**
-     * 解析SQL语句，获取占位符与表字段的映射关系以及需要加密的字段列表
-     * <p>
-     * 该方法使用缓存机制，相同 SQL 的解析结果会被缓存，显著提升性能。
-     * </p>
      *
-     * @param sql 要解析的SQL语句，包含问号占位符（如：UPDATE user SET name = ? WHERE id = ?）
+     * @param sql 要解析的SQL语句，包含问号占位符（如：UPDATE user SET name = ? WHERE id = ?），不能为 null 或空白
      * @return Pair对象，包含：
      * <ul>
      *   <li>Key: 占位符到ColumnTableDto的映射（占位符名称 -> 表字段信息）</li>
@@ -103,6 +95,9 @@ public class SecurtkitUtils {
      * @throws IllegalArgumentException 如果 SQL 为 null 或空白
      * @throws JSQLParserException 如果SQL解析失败
      * @since 1.0.0
+     * @see SqlParseCache
+     * @see ColumnTableDto
+     * @see FieldEncryptorInfoDto
      */
     public static Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> parseSql(String sql) throws JSQLParserException {
         if (StrUtil.isBlank(sql)) {
@@ -180,21 +175,13 @@ public class SecurtkitUtils {
      *
      * <p>该方法会将SQL中的所有问号占位符替换为格式为{@code SECURT_KIT_PLACEHOLDER_N}的占位符，
      * 其中N为占位符的索引（从1开始）。这样做的目的是让SQL解析器能够识别和区分不同的占位符。</p>
-     *
-     * <p>示例：</p>
-     * <pre>{@code
-     * 输入: "UPDATE user SET name = ?, phone = ? WHERE id = ?"
-     * 输出: "UPDATE user SET name = SECURT_KIT_PLACEHOLDER_1, phone = SECURT_KIT_PLACEHOLDER_2 WHERE id = SECURT_KIT_PLACEHOLDER_3"
-     * }</pre>
-     *
-     * @param sql 原始SQL语句
-     * @return 替换占位符后的SQL语句，如果输入为空则返回原值
-     */
-    /**
-     * 将SQL中的问号占位符（?）替换为自定义占位符
-     *
-     * <p>该方法会将SQL中的所有问号占位符替换为格式为{@code SECURT_KIT_PLACEHOLDER_N}的占位符，
-     * 其中N为占位符的索引（从1开始）。这样做的目的是让SQL解析器能够识别和区分不同的占位符。</p>
+     * 
+     * <p>性能优化：</p>
+     * <ul>
+     *   <li>使用 ThreadLocal 计数器，每个线程独立计数，避免并发干扰</li>
+     *   <li>预分配 StringBuffer 容量，减少扩容开销</li>
+     *   <li>使用正则表达式高效匹配和替换</li>
+     * </ul>
      *
      * <p>示例：</p>
      * <pre>{@code
@@ -359,6 +346,33 @@ public class SecurtkitUtils {
      * @param tables 要检查的表名集合，可以为 null 或空集合
      * @return 如果需要加密处理返回true，否则返回false
      * @since 1.0.0
+     */
+    /**
+     * 判断表集合中是否有需要加密的表
+     * 
+     * <p>检查给定的表名集合中是否包含配置了加密的表。
+     * 用于快速判断是否需要执行加密/解密操作，避免不必要的SQL解析。</p>
+     * 
+     * <p>性能优化：</p>
+     * <ul>
+     *   <li>使用 Set.contains() 进行 O(1) 查找</li>
+     *   <li>支持表名规范化（自动提取纯表名）</li>
+     *   <li>空集合快速返回 false</li>
+     * </ul>
+     * 
+     * <p>使用示例：</p>
+     * <pre>{@code
+     * Set<String> tables = Set.of("user", "orders");
+     * if (SecurtkitUtils.needEncrypt(tables)) {
+     *     // 执行加密/解密逻辑
+     * }
+     * }</pre>
+     *
+     * @param tables 表名集合，可以为 null 或空集合
+     * @return 如果表集合中包含需要加密的表则返回 true，否则返回 false
+     * @since 1.0.0
+     * @see TableCache#getTables()
+     * @see TableCache#concatTable(String)
      */
     public static boolean needEncrypt(Collection<String> tables) {
         if (CollectionUtil.isEmpty(tables)) {

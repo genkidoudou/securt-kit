@@ -22,6 +22,14 @@
 | **README.md** | Core 模块文档 | [查看](./securt-kit-core/README.md) |
 | **USAGE.md** | 使用文档 | [查看](./securt-kit-core/USAGE.md) |
 
+#### securt-kit-ui
+
+| 文档 | 描述 | 链接 |
+|------|------|------|
+| **SECURITY-PROTECTION-PLAN.md** | UI 模块安全防护方案 | [查看](./securt-kit-ui/SECURITY-PROTECTION-PLAN.md) |
+
+---
+
 #### securt-kit-test
 
 | 文档 | 描述 | 链接 |
@@ -45,7 +53,8 @@
 
 👉 **架构设计**: [ARCHITECTURE.md](./ARCHITECTURE.md) - 了解技术架构  
 👉 **Core 文档**: [securt-kit-core/README.md](./securt-kit-core/README.md) - 核心功能  
-👉 **API 文档**: [API-DOCUMENTATION.md](./securt-kit-test/API-DOCUMENTATION.md) - 详细 API
+👉 **API 文档**: [API-DOCUMENTATION.md](./securt-kit-test/API-DOCUMENTATION.md) - 详细 API  
+👉 **UI 模块**: [securt-kit-ui/SECURITY-PROTECTION-PLAN.md](./securt-kit-ui/SECURITY-PROTECTION-PLAN.md) - UI 安全防护
 
 ### 我是测试人员，想运行测试
 
@@ -55,13 +64,26 @@
 ### 我是运维人员，想部署配置
 
 👉 **配置说明**: [README.md#配置说明](./README.md#配置说明) - 配置指南  
-👉 **快速开始**: [QUICK-START.md](./QUICK-START.md) - 部署步骤
+👉 **快速开始**: [QUICK-START.md](./QUICK-START.md) - 部署步骤  
+👉 **监控 UI**: [README.md#securt-kit-ui](./README.md#securt-kit-ui) - 监控界面使用
 
 ---
 
-## 📖 按主题查找
+### 代码规范文档
 
-### 快速开始
+| 文档 | 描述 | 链接 |
+|------|------|------|
+| **CODE-COMMENT-GUIDE.md** | 代码注释规范指南 | [查看](./CODE-COMMENT-GUIDE.md) |
+| **CODE-COMMENT-SUMMARY.md** | 代码注释完善总结 | [查看](./CODE-COMMENT-SUMMARY.md) |
+| **CONTRIBUTING.md** | 贡献指南（包含代码规范） | [查看](./CONTRIBUTING.md) |
+
+### 优化和安全文档
+
+| 文档 | 描述 | 链接 |
+|------|------|------|
+| **OPTIMIZATION-ANALYSIS.md** | 优化分析报告 | [查看](./OPTIMIZATION-ANALYSIS.md) |
+| **COMPREHENSIVE-OPTIMIZATION-REPORT.md** | 全面优化分析报告 | [查看](./COMPREHENSIVE-OPTIMIZATION-REPORT.md) |
+| **securt-kit-ui/SECURITY-PROTECTION-PLAN.md** | 安全防护方案 | [查看](./securt-kit-ui/SECURITY-PROTECTION-PLAN.md) |
 
 - [QUICK-START.md - 5分钟快速体验](./QUICK-START.md#5分钟快速体验)
 - [README.md - 快速开始](./README.md#快速开始)
@@ -217,6 +239,21 @@ README.md - 常见问题
 **文档**: 无独立文档（功能简单）
 
 **说明**: Starter 模块提供 Spring Boot 自动配置，使用方式在项目主文档中说明。
+
+---
+
+### securt-kit-ui
+
+**文档**:
+- `SECURITY-PROTECTION-PLAN.md` - 安全防护方案
+
+**内容**:
+- UI 模块安全防护方案
+- XSS、SQL 注入、CSRF 防护
+- 输入验证和速率限制
+- 安全最佳实践
+
+**说明**: UI 模块提供 Web 监控界面，用于测试和管理加密功能。
 
 ---
 
