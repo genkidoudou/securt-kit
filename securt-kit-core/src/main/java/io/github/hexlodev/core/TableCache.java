@@ -177,9 +177,43 @@ public class TableCache {
 
 
     /**
-     * 检查表是否需要加密
+     * 从表名中提取纯表名（去掉数据库名和schema前缀）
+     * 
+     * <p>支持的表名格式：</p>
+     * <ul>
+     *   <li>{@code database.table} -> {@code table}</li>
+     *   <li>{@code schema.table} -> {@code table}</li>
+     *   <li>{@code database.schema.table} -> {@code table}</li>
+     *   <li>{@code table} -> {@code table}（已经是纯表名）</li>
+     * </ul>
      *
-     * @param tableName 表名，不能为 null 或空白
+     * @param tableName 表名，可能包含数据库名和schema前缀
+     * @return 纯表名（小写），如果输入为空则返回原值
+     */
+    private static String extractPureTableName(String tableName) {
+        if (StrUtil.isBlank(tableName)) {
+            return tableName;
+        }
+        
+        // 转换为小写
+        String lowerTableName = tableName.toLowerCase().trim();
+        
+        // 如果包含点号，取最后一个点号后的部分作为表名
+        int lastDotIndex = lowerTableName.lastIndexOf('.');
+        if (lastDotIndex >= 0 && lastDotIndex < lowerTableName.length() - 1) {
+            return lowerTableName.substring(lastDotIndex + 1);
+        }
+        
+        // 如果没有点号，说明已经是纯表名
+        return lowerTableName;
+    }
+
+    /**
+     * 检查表是否需要加密
+     * 
+     * <p>支持带数据库名的表名格式（如 testdb.user），会自动提取纯表名进行匹配。</p>
+     *
+     * @param tableName 表名，不能为 null 或空白，可能包含数据库名和schema前缀
      * @return 如果表需要加密返回 true，否则返回 false
      * @throws IllegalArgumentException 如果表名为 null 或空白
      * @since 2025/10/10
@@ -188,7 +222,9 @@ public class TableCache {
         if (StrUtil.isBlank(tableName)) {
             throw new IllegalArgumentException("Table name cannot be null or blank");
         }
-        return getTables().contains(tableName.toLowerCase());
+        // 提取纯表名进行匹配
+        String pureTableName = extractPureTableName(tableName);
+        return getTables().contains(pureTableName);
     }
 
 
@@ -216,8 +252,10 @@ public class TableCache {
 
     /**
      * 获取表加密的字段
+     * 
+     * <p>支持带数据库名的表名格式（如 testdb.user），会自动提取纯表名进行查找。</p>
      *
-     * @param tableName 表名，不能为 null 或空白
+     * @param tableName 表名，不能为 null 或空白，可能包含数据库名和schema前缀
      * @return 字段加密策略映射，如果表不存在或参数无效则返回 null
      * @throws IllegalArgumentException 如果表名为 null 或空白
      * @since 2025/10/10
@@ -226,14 +264,18 @@ public class TableCache {
         if (StrUtil.isBlank(tableName)) {
             throw new IllegalArgumentException("Table name cannot be null or blank");
         }
-        return TABLE_FIELD_ENCRYPT_INFO.get(tableName.toLowerCase());
+        // 提取纯表名进行查找
+        String pureTableName = extractPureTableName(tableName);
+        return TABLE_FIELD_ENCRYPT_INFO.get(pureTableName);
     }
 
 
     /**
      * 根据表名获取加密的字段名列表
+     * 
+     * <p>支持带数据库名的表名格式（如 testdb.user），会自动提取纯表名进行查找。</p>
      *
-     * @param tableName 表名，不能为 null 或空白
+     * @param tableName 表名，不能为 null 或空白，可能包含数据库名和schema前缀
      * @return 加密字段名列表，如果表不存在或参数无效则返回 null
      * @throws IllegalArgumentException 如果表名为 null 或空白
      * @since 2025/10/12
@@ -242,8 +284,10 @@ public class TableCache {
         if (StrUtil.isBlank(tableName)) {
             throw new IllegalArgumentException("Table name cannot be null or blank");
         }
+        // 提取纯表名进行查找
+        String pureTableName = extractPureTableName(tableName);
         Map<String, Class<? extends FieldEncryptorStrategy>> stringClassMap =
-                TABLE_FIELD_ENCRYPT_INFO.get(tableName.toLowerCase());
+                TABLE_FIELD_ENCRYPT_INFO.get(pureTableName);
         if (null == stringClassMap) {
             return null;
         }
@@ -253,8 +297,10 @@ public class TableCache {
 
     /**
      * 获取表字段的加密策略
+     * 
+     * <p>支持带数据库名的表名格式（如 testdb.user），会自动提取纯表名进行查找。</p>
      *
-     * @param tableName 表名，不能为 null 或空白
+     * @param tableName 表名，不能为 null 或空白，可能包含数据库名和schema前缀
      * @param fieldName 字段名，不能为 null 或空白
      * @return 加密策略类，如果表或字段不存在或参数无效则返回 null
      * @throws IllegalArgumentException 如果表名或字段名为 null 或空白
@@ -267,8 +313,10 @@ public class TableCache {
         if (StrUtil.isBlank(fieldName)) {
             throw new IllegalArgumentException("Field name cannot be null or blank");
         }
+        // 提取纯表名进行查找
+        String pureTableName = extractPureTableName(tableName);
         Map<String, Class<? extends FieldEncryptorStrategy>> stringClassMap =
-                TABLE_FIELD_ENCRYPT_INFO.get(tableName.toLowerCase());
+                TABLE_FIELD_ENCRYPT_INFO.get(pureTableName);
         if (null == stringClassMap) {
             return null;
         }

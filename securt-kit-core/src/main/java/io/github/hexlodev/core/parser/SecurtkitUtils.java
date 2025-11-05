@@ -317,10 +317,44 @@ public class SecurtkitUtils {
     }
 
     /**
+     * 从表名中提取纯表名（去掉数据库名和schema前缀）
+     * 
+     * <p>支持的表名格式：</p>
+     * <ul>
+     *   <li>{@code database.table} -> {@code table}</li>
+     *   <li>{@code schema.table} -> {@code table}</li>
+     *   <li>{@code database.schema.table} -> {@code table}</li>
+     *   <li>{@code table} -> {@code table}（已经是纯表名）</li>
+     * </ul>
+     *
+     * @param tableName 表名，可能包含数据库名和schema前缀
+     * @return 纯表名（小写），如果输入为空则返回原值
+     */
+    private static String extractPureTableName(String tableName) {
+        if (StrUtil.isBlank(tableName)) {
+            return tableName;
+        }
+        
+        // 转换为小写
+        String lowerTableName = tableName.toLowerCase().trim();
+        
+        // 如果包含点号，取最后一个点号后的部分作为表名
+        int lastDotIndex = lowerTableName.lastIndexOf('.');
+        if (lastDotIndex >= 0 && lastDotIndex < lowerTableName.length() - 1) {
+            return lowerTableName.substring(lastDotIndex + 1);
+        }
+        
+        // 如果没有点号，说明已经是纯表名
+        return lowerTableName;
+    }
+
+    /**
      * 判断给定的表集合是否需要加密处理
      *
      * <p>该方法会检查传入的表名集合是否与配置中需要加密的表有交集。
      * 如果有任何表在加密配置中，则返回true，表示需要进行加密处理。</p>
+     * 
+     * <p>支持带数据库名的表名格式（如 testdb.user），会自动提取纯表名进行匹配。</p>
      *
      * @param tables 要检查的表名集合，可以为 null 或空集合
      * @return 如果需要加密处理返回true，否则返回false
@@ -331,7 +365,17 @@ public class SecurtkitUtils {
             return false;
         }
         Set<String> configuredTables = TableCache.getTables();
+        
+        // 提取纯表名集合（去掉数据库名和schema前缀）
+        Set<String> pureTableNames = new HashSet<>();
+        for (String table : tables) {
+            String pureTableName = extractPureTableName(table);
+            if (StrUtil.isNotBlank(pureTableName)) {
+                pureTableNames.add(pureTableName);
+            }
+        }
+        
         // 使用 containsAny 检查交集，线程安全
-        return CollectionUtil.containsAny(configuredTables, tables);
+        return CollectionUtil.containsAny(configuredTables, pureTableNames);
     }
 }

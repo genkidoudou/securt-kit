@@ -1,7 +1,7 @@
 package io.github.test.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.example.entity.UserEntity;
+import io.github.test.entity.UserEntity;
 import org.apache.ibatis.annotations.Mapper;
 
 /**
