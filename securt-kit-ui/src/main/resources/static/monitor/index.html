@@ -38,6 +38,7 @@
             <div class="tabs">
                 <button class="tab-btn active" data-tab="crypto">加密解密</button>
                 <button class="tab-btn" data-tab="sqlParse">SQL 解析</button>
+                <button class="tab-btn" data-tab="sqlEncrypt">SQL 加密</button>
             </div>
 
             <!-- 加密解密标签页 -->
@@ -96,6 +97,33 @@
                             <label>需要加密的字段:</label>
                             <div id="encryptFieldsTable" class="result-table"></div>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SQL 加密标签页 -->
+            <div id="sqlEncryptTab" class="tab-content">
+                <div class="card">
+                    <h2>SQL 加密</h2>
+                    <div class="form-group">
+                        <label>输入 SQL（包含实际值）:</label>
+                        <textarea id="sqlEncryptInput" rows="6" placeholder="请输入要加密的 SQL 语句，例如: UPDATE user SET name = '张三', phone = '13800138000' WHERE id = 1"></textarea>
+                    </div>
+                    <div class="button-group">
+                        <button id="encryptSqlBtn" class="btn btn-primary">加密</button>
+                        <button id="clearSqlEncryptBtn" class="btn btn-secondary">清空</button>
+                    </div>
+                    <div id="sqlEncryptResult" style="display: none;">
+                        <div class="form-group">
+                            <label>加密后的 SQL:</label>
+                            <textarea id="sqlEncryptOutput" rows="6" readonly></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>原始 SQL:</label>
+                            <textarea id="sqlEncryptOriginal" rows="4" readonly style="background-color: #f5f5f5;"></textarea>
+                        </div>
+                        <div id="sqlEncryptStats" style="margin-top: 10px; color: #666; font-size: 14px;"></div>
+                        <button id="copySqlEncryptBtn" class="btn btn-secondary" style="display: none;">复制加密后的 SQL</button>
                     </div>
                 </div>
             </div>

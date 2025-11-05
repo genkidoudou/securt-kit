@@ -10,6 +10,13 @@ import io.github.hexlodev.core.strategy.FieldEncryptorStrategy;
 import io.github.hexlodev.ui.monitor.dto.*;
 import lombok.extern.slf4j.Slf4j;
 import net.sf.jsqlparser.JSQLParserException;
+import net.sf.jsqlparser.expression.*;
+import net.sf.jsqlparser.expression.operators.relational.ExpressionList;
+import net.sf.jsqlparser.parser.CCJSqlParserUtil;
+import net.sf.jsqlparser.schema.Column;
+import net.sf.jsqlparser.statement.Statement;
+import net.sf.jsqlparser.statement.update.Update;
+import net.sf.jsqlparser.statement.update.UpdateSet;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -20,6 +27,8 @@ import javax.servlet.http.HttpSession;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -378,6 +387,202 @@ public class MonitorController {
             log.error("SQL 解析失败", e);
             return ApiResponse.error("SQL 解析失败: " + e.getMessage());
         }
+    }
+
+    /**
+     * SQL 加密接口
+     * 将 SQL 中需要加密的字段值进行加密
+     */
+    @PostMapping("/api/encrypt-sql.json")
+    public ApiResponse<EncryptSqlResponse> encryptSql(@RequestBody EncryptSqlRequest request,
+                                                      HttpSession session) {
+        // 检查登录
+        if (!checkLogin(session)) {
+            return ApiResponse.error(401, "未登录");
+        }
+
+        try {
+            // 验证参数
+            if (request.getSql() == null || request.getSql().trim().isEmpty()) {
+                return ApiResponse.error("SQL 语句不能为空");
+            }
+
+            String originalSql = request.getSql().trim();
+            String encryptedSql = encryptSqlValues(originalSql);
+
+            EncryptSqlResponse response = new EncryptSqlResponse();
+            response.setOriginalSql(originalSql);
+            response.setEncryptedSql(encryptedSql);
+            
+            // 计算加密的字段数量（通过比较原始SQL和加密后SQL的差异）
+            int encryptedCount = countEncryptedFields(originalSql, encryptedSql);
+            response.setEncryptedFieldCount(encryptedCount);
+
+            return ApiResponse.success(response);
+
+        } catch (JSQLParserException e) {
+            log.error("SQL 解析失败", e);
+            return ApiResponse.error("SQL 解析失败: " + e.getMessage());
+        } catch (Exception e) {
+            log.error("SQL 加密失败", e);
+            return ApiResponse.error("SQL 加密失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 加密 SQL 中的字段值
+     */
+    private String encryptSqlValues(String sql) throws JSQLParserException {
+        // 解析 SQL
+        Statement statement = CCJSqlParserUtil.parse(sql);
+        
+        if (!(statement instanceof Update)) {
+            throw new IllegalArgumentException("当前仅支持 UPDATE 语句");
+        }
+
+        Update update = (Update) statement;
+        String tableName = update.getTable().getName().toLowerCase();
+        
+        // 存储需要替换的值：原值 -> 加密后的值
+        Map<String, String> valueReplacements = new LinkedHashMap<>();
+        
+        // 遍历 UPDATE SET 子句
+        List<UpdateSet> updateSets = update.getUpdateSets();
+        for (UpdateSet updateSet : updateSets) {
+            List<Column> columns = updateSet.getColumns();
+            ExpressionList<Expression> expressions = (ExpressionList<Expression>) updateSet.getValues();
+            
+            for (int i = 0; i < columns.size(); i++) {
+                Column column = columns.get(i);
+                Expression expression = expressions.get(i);
+                
+                String fieldName = column.getColumnName().toLowerCase();
+                
+                // 检查该字段是否需要加密
+                Class<? extends FieldEncryptorStrategy> strategyClass = 
+                    TableCache.getTableFieldEncryptInfo(tableName, fieldName);
+                
+                if (strategyClass != null) {
+                    // 提取表达式的值
+                    String originalValue = extractValueFromExpression(expression);
+                    if (originalValue != null) {
+                        // 加密值
+                        FieldEncryptorStrategy strategy = StrategyCache.getStrategy(strategyClass);
+                        String encryptedValue = strategy.encryption(originalValue);
+                        
+                        // 记录替换关系（使用原始SQL中的格式，包括引号）
+                        String originalSqlValue = expression.toString();
+                        String encryptedSqlValue = formatSqlValue(encryptedValue);
+                        
+                        valueReplacements.put(originalSqlValue, encryptedSqlValue);
+                    }
+                }
+            }
+        }
+        
+        // 替换 SQL 中的值
+        String result = sql;
+        for (Map.Entry<String, String> entry : valueReplacements.entrySet()) {
+            // 使用正则表达式精确匹配，避免替换部分匹配
+            String original = Pattern.quote(entry.getKey());
+            String replacement = Matcher.quoteReplacement(entry.getValue());
+            result = result.replaceAll(original, replacement);
+        }
+        
+        return result;
+    }
+
+    /**
+     * 从 Expression 中提取实际值
+     */
+    private String extractValueFromExpression(Expression expression) {
+        if (expression instanceof StringValue) {
+            return ((StringValue) expression).getValue();
+        } else if (expression instanceof LongValue) {
+            return String.valueOf(((LongValue) expression).getValue());
+        } else if (expression instanceof DoubleValue) {
+            return String.valueOf(((DoubleValue) expression).getValue());
+        } else if (expression instanceof NullValue) {
+            return null;
+        } else if (expression instanceof SignedExpression) {
+            // 处理带符号的表达式，如 -123
+            SignedExpression signed = (SignedExpression) expression;
+            Expression innerExpr = signed.getExpression();
+            String value = extractValueFromExpression(innerExpr);
+            if (value != null && signed.getSign() == '-') {
+                return "-" + value;
+            }
+            return value;
+        }
+        // 对于其他类型的表达式，尝试通过 toString() 获取
+        // 但需要去掉引号（如果是字符串值）
+        String exprStr = expression.toString();
+        if (exprStr.startsWith("'") && exprStr.endsWith("'")) {
+            // 去掉引号并处理转义
+            return exprStr.substring(1, exprStr.length() - 1).replace("''", "'");
+        }
+        return exprStr;
+    }
+
+    /**
+     * 格式化 SQL 值（添加引号等）
+     */
+    private String formatSqlValue(String value) {
+        if (value == null) {
+            return "NULL";
+        }
+        // 转义单引号
+        String escaped = value.replace("'", "''");
+        return "'" + escaped + "'";
+    }
+
+    /**
+     * 计算加密的字段数量
+     */
+    private int countEncryptedFields(String originalSql, String encryptedSql) {
+        if (originalSql.equals(encryptedSql)) {
+            return 0;
+        }
+        // 简单统计：计算被替换的值的数量
+        // 通过比较原始SQL和加密后SQL的差异来判断
+        try {
+            Statement originalStmt = CCJSqlParserUtil.parse(originalSql);
+            Statement encryptedStmt = CCJSqlParserUtil.parse(encryptedSql);
+            
+            if (originalStmt instanceof Update && encryptedStmt instanceof Update) {
+                Update originalUpdate = (Update) originalStmt;
+                Update encryptedUpdate = (Update) encryptedStmt;
+                
+                int count = 0;
+                List<UpdateSet> originalSets = originalUpdate.getUpdateSets();
+                List<UpdateSet> encryptedSets = encryptedUpdate.getUpdateSets();
+                
+                if (originalSets.size() == encryptedSets.size()) {
+                    for (int i = 0; i < originalSets.size(); i++) {
+                        UpdateSet originalSet = originalSets.get(i);
+                        UpdateSet encryptedSet = encryptedSets.get(i);
+                        
+                        List<Column> columns = originalSet.getColumns();
+                        ExpressionList<Expression> originalExprs = (ExpressionList<Expression>) originalSet.getValues();
+                        ExpressionList<Expression> encryptedExprs = (ExpressionList<Expression>) encryptedSet.getValues();
+                        
+                        for (int j = 0; j < columns.size(); j++) {
+                            String originalValue = originalExprs.get(j).toString();
+                            String encryptedValue = encryptedExprs.get(j).toString();
+                            if (!originalValue.equals(encryptedValue)) {
+                                count++;
+                            }
+                        }
+                    }
+                }
+                return count;
+            }
+        } catch (Exception e) {
+            log.debug("无法精确计算加密字段数量", e);
+        }
+        
+        // 降级方案：粗略统计
+        return 1; // 至少有一个字段被加密
     }
 }
 

@@ -66,139 +66,79 @@ import java.util.regex.Pattern;
  *
  * @author Nadeem Mohammad, hcl
  * @author hexlodev (修改和增强)
- * @since 2019-04-22
  * @see SqlToken
  * @see TableNameVisitor
  * @see StringPool
+ * @since 2019-04-22
  */
 public final class TableNameParser {
 
-    // ==================== SQL关键字常量 ====================
-
-    /** SET关键字 */
     private static final String TOKEN_SET = "set";
-
-    /** OF关键字 */
     private static final String TOKEN_OF = "of";
-
-    /** DUAL关键字（Oracle虚拟表） */
     private static final String TOKEN_DUAL = "dual";
-
-    /** DELETE关键字 */
     private static final String TOKEN_DELETE = "delete";
-
-    /** CREATE关键字 */
     private static final String TOKEN_CREATE = "create";
-
-    /** INDEX关键字 */
     private static final String TOKEN_INDEX = "index";
 
-    // ==================== SQL操作关键字 ====================
-
-    /** JOIN关键字 */
     private static final String KEYWORD_JOIN = "join";
-
-    /** INTO关键字 */
     private static final String KEYWORD_INTO = "into";
-
-    /** TABLE关键字 */
     private static final String KEYWORD_TABLE = "table";
-
-    /** FROM关键字 */
     private static final String KEYWORD_FROM = "from";
-
-    /** USING关键字 */
     private static final String KEYWORD_USING = "using";
-
-    /** UPDATE关键字 */
     private static final String KEYWORD_UPDATE = "update";
-
-    /** DUPLICATE关键字（MySQL特有） */
     private static final String KEYWORD_DUPLICATE = "duplicate";
 
-    // ==================== 解析配置 ====================
-
-    /** 需要关注的关键字列表，这些关键字后面通常跟着表名 */
     private static final List<String> concerned = Arrays.asList(KEYWORD_TABLE, KEYWORD_INTO, KEYWORD_JOIN, KEYWORD_USING, KEYWORD_UPDATE);
-
-    /** 需要忽略的token列表，这些token不应该被识别为表名 */
     private static final List<String> ignored = Arrays.asList(StringPool.LEFT_BRACKET, TOKEN_SET, TOKEN_OF, TOKEN_DUAL);
 
     /**
-     *  SQL词法分析正则表达式
-     * @author luyanan
-     * @since 2025/10/27
+     * 该表达式会匹配 SQL 中不是 SQL TOKEN 的部分，比如换行符，注释信息，结尾的 {@code ;} 等。
+     * <p>
+     * 排除的项目包括：
+     * 1、以 -- 开头的注释信息
+     * 2、;
+     * 3、空白字符
+     * 4、使用 /* * / 注释的信息
+     * 5、把 ,() 也要分出来
      */
     private static final Pattern NON_SQL_TOKEN_PATTERN = Pattern.compile("(--[^\\v]+)|;|(\\s+)|((?s)/[*].*?[*]/)"
             + "|(((\\b|\\B)(?=[,()]))|((?<=[,()])(\\b|\\B)))"
     );
 
-    /** SQL token列表 */
     private final List<SqlToken> tokens;
 
     /**
-     * 构造函数
+     * 从 SQL 中提取表名称
      *
-     * <p>创建一个新的表名解析器，解析指定的SQL语句。</p>
-     *
-     * @param sql 需要解析的SQL语句，不能为null
-     * @throws IllegalArgumentException 如果sql为null
+     * @param sql 需要解析的 SQL 语句
      */
     public TableNameParser(String sql) {
-        if (sql == null) {
-            throw new IllegalArgumentException("SQL cannot be null");
-        }
         tokens = fetchAllTokens(sql);
     }
 
     /**
-     * 接受表名访问者 - 访问者模式
+     * 接受一个新的访问者，并访问当前 SQL 的表名称
+     * <p>
+     * 现在我们改成了访问者模式，不在对以前的 SQL 做改动
+     * 同时，你可以方便的获得表名位置的索引
      *
-     * <p>使用访问者模式遍历SQL中的所有表名，为每个表名调用访问者的 {@code visit} 方法。
-     * 这种方法允许调用者获取表名的详细信息，包括位置索引。</p>
-     *
-     * <p>解析过程：</p>
-     * <ol>
-     *   <li>检查是否为Oracle特殊DELETE语法</li>
-     *   <li>检查是否为CREATE INDEX语句</li>
-     *   <li>遍历所有token，查找关注的关键字</li>
-     *   <li>处理FROM子句（包括多表JOIN）</li>
-     *   <li>处理其他关键字后的表名</li>
-     *   <li>跳过MySQL的ON DUPLICATE KEY UPDATE子句</li>
-     * </ol>
-     *
-     * @param visitor 表名访问者，不能为null
-     * @throws IllegalArgumentException 如果visitor为null
+     * @param visitor 访问者
      */
     public void accept(TableNameVisitor visitor) {
-        if (visitor == null) {
-            throw new IllegalArgumentException("Visitor cannot be null");
-        }
-
         int index = 0;
         String first = tokens.get(index).getValue();
-
-        // 处理Oracle特殊DELETE语法：DELETE table WHERE ...
         if (isOracleSpecialDelete(first, tokens, index)) {
             visitNameToken(tokens.get(index + 1), visitor);
-        }
-        // 处理CREATE INDEX语句
-        else if (isCreateIndex(first, tokens, index)) {
+        } else if (isCreateIndex(first, tokens, index)) {
             visitNameToken(tokens.get(index + 4), visitor);
-        }
-        // 处理标准SQL语句
-        else {
+        } else {
             while (hasMoreTokens(tokens, index)) {
                 String current = tokens.get(index++).getValue();
-
                 if (isFromToken(current)) {
-                    // 处理FROM子句
                     processFromToken(tokens, index, visitor);
                 } else if (isOnDuplicateKeyUpdate(current, index)) {
-                    // 跳过MySQL的ON DUPLICATE KEY UPDATE
                     index = skipDuplicateKeyUpdateIndex(index);
                 } else if (concerned.contains(current.toLowerCase())) {
-                    // 处理其他关注的关键字
                     if (hasMoreTokens(tokens, index)) {
                         SqlToken next = tokens.get(index++);
                         visitNameToken(next, visitor);
@@ -209,15 +149,11 @@ public final class TableNameParser {
     }
 
     /**
-     * 表名访问者接口
-     *
-     * <p>定义了访问表名的方法，使用访问者模式支持扩展功能。</p>
+     * 表名访问器
      */
     public interface TableNameVisitor {
         /**
-         * 访问表名token
-         *
-         * @param name 表示表名称的token，包含表名值和位置信息
+         * @param name 表示表名称的 token
          */
         void visit(SqlToken name);
     }
@@ -365,130 +301,180 @@ public final class TableNameParser {
     }
 
     /**
-     * 提取SQL中的所有表名
+     * parser tables
      *
-     * <p>这是最常用的方法，返回SQL语句中所有表名的集合。
-     * 表名会自动去重和规范化（保留原始大小写）。</p>
-     *
-     * <p>使用示例：</p>
-     * <pre>{@code
-     * TableNameParser parser = new TableNameParser("SELECT * FROM users u JOIN orders o ON u.id = o.user_id");
-     * Collection<String> tables = parser.tables();
-     * System.out.println(tables); // 输出: [users, orders]
-     * }</pre>
-     *
-     * @return 表名集合，如果没有找到表名则返回空集合
+     * @return table names extracted out of sql
      * @see #accept(TableNameVisitor)
      */
-    public HashSet<String> tables() {
+    public Set<String> tables() {
         Map<String, String> tableMap = new HashMap<>();
+        List<SqlToken> allTokens = new ArrayList<>();
         accept(token -> {
+            allTokens.add(token);
+        });
+
+        // 按位置排序，确保顺序正确
+        allTokens.sort(Comparator.comparingInt(SqlToken::getStart));
+
+        // 处理表名，合并点号后有空格的情况（如 db. sys_user -> db.sys_user）
+        // 需要检查原始 token 列表，因为 sys_user 可能没有被访问
+        for (int i = 0; i < allTokens.size(); i++) {
+            SqlToken token = allTokens.get(i);
             String name = token.getValue();
+
+            // 如果当前 token 以点号结尾，需要从原始 token 列表中找到下一个 token
+            if (name.endsWith(".")) {
+                // 在原始 token 列表中找到当前 token 的位置
+                int tokenIndex = -1;
+                for (int j = 0; j < tokens.size(); j++) {
+                    if (tokens.get(j).getStart() == token.getStart()) {
+                        tokenIndex = j;
+                        break;
+                    }
+                }
+
+                // 如果在原始 token 列表中找到，且下一个 token 存在，则尝试合并
+                if (tokenIndex >= 0 && tokenIndex + 1 < tokens.size()) {
+                    SqlToken nextToken = tokens.get(tokenIndex + 1);
+                    String nextValue = nextToken.getValue();
+
+                    // 如果下一个 token 不是关键字或分隔符，则合并
+                    if (!isKeywordOrSeparator(nextValue)) {
+                        name = name + nextValue; // 合并为 database.table
+                        // 检查下一个 token 是否也在 allTokens 中，如果在则跳过
+                        boolean nextTokenInAllTokens = false;
+                        for (SqlToken t : allTokens) {
+                            if (t.getStart() == nextToken.getStart()) {
+                                nextTokenInAllTokens = true;
+                                break;
+                            }
+                        }
+                        if (nextTokenInAllTokens) {
+                            i++; // 跳过下一个 token
+                        }
+                    }
+                }
+            }
+
             // 使用小写作为key去重，但保留原始大小写作为value
             tableMap.putIfAbsent(name.toLowerCase(), name);
-        });
+        }
+
         return new HashSet<>(tableMap.values());
     }
 
     /**
-     * SQL词法单元
-     *
-     * <p>表示SQL语句中的一个词法单元（token），包含token的值和在原SQL中的位置信息。
-     * 这个类主要用于表名解析过程中，提供表名的位置索引以便进行更精确的处理。</p>
-     *
-     * <p>主要功能：</p>
-     * <ul>
-     *   <li>存储token的文本值</li>
-     *   <li>记录token在SQL中的起始和结束位置</li>
-     *   <li>支持按位置排序（实现Comparable接口）</li>
-     *   <li>提供toString方法便于调试</li>
-     * </ul>
-     *
-     * <p>使用示例：</p>
-     * <pre>{@code
-     * SqlToken token = new SqlToken(10, 15, "users");
-     * System.out.println("表名: " + token.getValue()); // 输出: 表名: users
-     * System.out.println("位置: " + token.getStart() + "-" + token.getEnd()); // 输出: 位置: 10-15
-     * }</pre>
-     *
-     * @author hexlodev
-     * @since 1.0.0
+     * 检查字符串是否是关键字或分隔符
+     */
+    private static boolean isKeywordOrSeparator(String value) {
+        if (value == null || value.isEmpty()) {
+            return true;
+        }
+        String lowerValue = value.toLowerCase();
+        // 检查是否是 SQL 关键字
+        return lowerValue.equals(KEYWORD_JOIN) ||
+                lowerValue.equals(KEYWORD_INTO) ||
+                lowerValue.equals(KEYWORD_FROM) ||
+                lowerValue.equals(KEYWORD_UPDATE) ||
+                lowerValue.equals(KEYWORD_USING) ||
+                lowerValue.equals("on") ||
+                lowerValue.equals("where") ||
+                lowerValue.equals("and") ||
+                lowerValue.equals("or") ||
+                lowerValue.equals("group") ||
+                lowerValue.equals("order") ||
+                lowerValue.equals("having") ||
+                lowerValue.equals("limit") ||
+                lowerValue.equals("union") ||
+                lowerValue.equals(StringPool.COMMA) ||
+                lowerValue.equals(StringPool.LEFT_BRACKET) ||
+                lowerValue.equals(StringPool.RIGHT_BRACKET);
+    }
+
+    /**
+     * SQL 词
      */
     public static class SqlToken implements Comparable<SqlToken> {
-
-        /** token在SQL中的起始位置 */
         private final int start;
-
-        /** token在SQL中的结束位置 */
         private final int end;
-
-        /** token的文本值 */
         private final String value;
 
-        /**
-         * 构造函数
-         *
-         * @param start token在SQL中的起始位置
-         * @param end token在SQL中的结束位置
-         * @param value token的文本值
-         */
         private SqlToken(int start, int end, String value) {
             this.start = start;
             this.end = end;
             this.value = value;
         }
 
-        /**
-         * 获取token在SQL中的起始位置
-         *
-         * @return 起始位置索引
-         */
         public int getStart() {
             return start;
         }
 
-        /**
-         * 获取token在SQL中的结束位置
-         *
-         * @return 结束位置索引
-         */
         public int getEnd() {
             return end;
         }
 
-        /**
-         * 获取token的文本值
-         *
-         * @return token文本
-         */
         public String getValue() {
             return value;
         }
 
-        /**
-         * 比较两个token的位置
-         *
-         * <p>用于按位置排序token，主要用于调试和日志记录。</p>
-         *
-         * @param o 要比较的另一个token
-         * @return 位置比较结果
-         */
         @Override
         public int compareTo(SqlToken o) {
             return Integer.compare(start, o.start);
         }
 
-        /**
-         * 返回token的字符串表示
-         *
-         * <p>主要用于调试和日志记录，返回token的文本值。</p>
-         *
-         * @return token的文本值
-         */
         @Override
         public String toString() {
             return value;
         }
+
+    }
+
+
+
+    public static void main(String[] args) {
+        String sql = "select u.user_id,\n" +
+                "               u.dept_id,\n" +
+                "               u.user_name,\n" +
+                "               u.nick_name,\n" +
+                "               u.email,\n" +
+                "               u.avatar_id,\n" +
+                "               u.phonenumber,\n" +
+                "\n" +
+                "               u.sex,\n" +
+                "               u.status,\n" +
+                "               u.del_flag,\n" +
+                "               u.login_ip,\n" +
+                "               u.login_date,\n" +
+                "               u.create_by,\n" +
+                "               u.create_time,\n" +
+                "               u.remark,\n" +
+                "               u.user_type,\n" +
+                "               u.source,\n" +
+                "               u.real_name,\n" +
+                "               d.dept_id,\n" +
+                "               d.parent_id,\n" +
+                "               d.ancestors,\n" +
+                "               d.dept_name,\n" +
+                "               d.order_num,\n" +
+                "               d.leader,\n" +
+                "               d.status as dept_status,\n" +
+                "               d.area_code,\n" +
+                "               r.role_id,\n" +
+                "               r.role_name,\n" +
+                "               r.role_key,\n" +
+                "               r.role_sort,\n" +
+                "               r.data_scope,\n" +
+                "               r.status as role_status\n" +
+                "        FROM  business_platform_sy. sys_user u\n" +
+                "                 left join  business_platform_sy. sys_dept d on u.dept_id = d.dept_id\n" +
+                "                 left join  business_platform_sy. sys_user_role ur on u.user_id = ur.user_id\n" +
+                "                 left join  business_platform_sy. sys_role r on r.role_id = ur.role_id\n" +
+                "     \n" +
+                "        where u.user_id =1985684407922077696";
+
+        String sql2 = "select * from db. sys_user";
+        TableNameParser parser = new TableNameParser(sql);
+        System.out.println(parser.tables());
     }
 
 }

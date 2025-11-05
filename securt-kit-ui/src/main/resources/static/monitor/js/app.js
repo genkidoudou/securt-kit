@@ -498,6 +498,129 @@ const sqlParser = {
     }
 };
 
+// SQL 加密功能
+const sqlEncrypt = {
+    /**
+     * 处理 SQL 加密
+     */
+    async handleEncryptSql() {
+        try {
+            const sqlInput = document.getElementById('sqlEncryptInput');
+            if (!sqlInput) {
+                throw new Error('SQL 输入框未找到');
+            }
+
+            const sql = sqlInput.value.trim();
+            if (!sql) {
+                utils.showNotification('请输入要加密的 SQL 语句', 'error');
+                return;
+            }
+
+            const response = await utils.request(`${CONFIG.apiPath}/encrypt-sql.json`, {
+                method: 'POST',
+                body: JSON.stringify({ sql })
+            });
+
+            if (response.success) {
+                this.displayResult(response.data);
+            } else {
+                utils.showNotification(response.message || 'SQL 加密失败', 'error');
+            }
+        } catch (error) {
+            console.error('SQL 加密失败:', error);
+            utils.showNotification('SQL 加密失败: ' + (error.message || '请稍后重试'), 'error');
+        }
+    },
+
+    /**
+     * 显示加密结果
+     */
+    displayResult(data) {
+        const resultDiv = document.getElementById('sqlEncryptResult');
+        const outputTextarea = document.getElementById('sqlEncryptOutput');
+        const originalTextarea = document.getElementById('sqlEncryptOriginal');
+        const statsDiv = document.getElementById('sqlEncryptStats');
+        const copyBtn = document.getElementById('copySqlEncryptBtn');
+
+        if (!resultDiv || !outputTextarea || !originalTextarea || !statsDiv) return;
+
+        resultDiv.style.display = 'block';
+
+        // 显示原始 SQL
+        originalTextarea.value = data.originalSql || '';
+
+        // 显示加密后的 SQL
+        outputTextarea.value = data.encryptedSql || '';
+
+        // 显示统计信息
+        const encryptedCount = data.encryptedFieldCount || 0;
+        if (encryptedCount > 0) {
+            statsDiv.textContent = `已加密 ${encryptedCount} 个字段的值`;
+            statsDiv.style.color = '#1890ff';
+        } else {
+            statsDiv.textContent = '未发现需要加密的字段';
+            statsDiv.style.color = '#999';
+        }
+
+        // 显示复制按钮
+        if (copyBtn) {
+            copyBtn.style.display = 'inline-block';
+        }
+    },
+
+    /**
+     * 清空 SQL 输入和结果
+     */
+    clear() {
+        const sqlInput = document.getElementById('sqlEncryptInput');
+        const resultDiv = document.getElementById('sqlEncryptResult');
+        const outputTextarea = document.getElementById('sqlEncryptOutput');
+        const originalTextarea = document.getElementById('sqlEncryptOriginal');
+        const statsDiv = document.getElementById('sqlEncryptStats');
+        const copyBtn = document.getElementById('copySqlEncryptBtn');
+
+        if (sqlInput) {
+            sqlInput.value = '';
+        }
+        if (resultDiv) {
+            resultDiv.style.display = 'none';
+        }
+        if (outputTextarea) {
+            outputTextarea.value = '';
+        }
+        if (originalTextarea) {
+            originalTextarea.value = '';
+        }
+        if (statsDiv) {
+            statsDiv.textContent = '';
+        }
+        if (copyBtn) {
+            copyBtn.style.display = 'none';
+        }
+    },
+
+    /**
+     * 复制加密后的 SQL
+     */
+    async copyResult() {
+        try {
+            const outputTextarea = document.getElementById('sqlEncryptOutput');
+            if (!outputTextarea) return;
+
+            const text = outputTextarea.value;
+            if (text) {
+                const success = await utils.copyToClipboard(text);
+                if (!success) {
+                    utils.showNotification('复制失败', 'error');
+                }
+            }
+        } catch (error) {
+            console.error('复制失败:', error);
+            utils.showNotification('复制失败', 'error');
+        }
+    }
+};
+
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
     // 绑定登录事件
@@ -557,6 +680,30 @@ document.addEventListener('DOMContentLoaded', () => {
                 sqlParser.handleParseSql();
             }
         });
+    }
+
+    // 绑定 SQL 加密事件
+    const encryptSqlBtn = document.getElementById('encryptSqlBtn');
+    const clearSqlEncryptBtn = document.getElementById('clearSqlEncryptBtn');
+    const sqlEncryptInput = document.getElementById('sqlEncryptInput');
+    const copySqlEncryptBtn = document.getElementById('copySqlEncryptBtn');
+
+    if (encryptSqlBtn) {
+        encryptSqlBtn.addEventListener('click', () => sqlEncrypt.handleEncryptSql());
+    }
+    if (clearSqlEncryptBtn) {
+        clearSqlEncryptBtn.addEventListener('click', () => sqlEncrypt.clear());
+    }
+    if (sqlEncryptInput) {
+        // 支持 Ctrl+Enter 快捷键
+        sqlEncryptInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && e.ctrlKey) {
+                sqlEncrypt.handleEncryptSql();
+            }
+        });
+    }
+    if (copySqlEncryptBtn) {
+        copySqlEncryptBtn.addEventListener('click', () => sqlEncrypt.copyResult());
     }
 
     // 初始化标签页
