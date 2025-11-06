@@ -19,5 +19,16 @@ public class EncryptSqlRequest {
     @NotNull(message = "SQL 语句不能为空")
     @SafeInput(maxLength = 50 * 1024, message = "SQL 语句过长")
     private String sql;
+
+    /**
+     * 数据源标识（可选，多数据源场景使用）
+     * 
+     * <p>如果不指定，则使用默认数据源（"default"）</p>
+     * <p>多数据源场景下，需要指定数据源标识以获取正确的加密配置</p>
+     * 
+     * @since 1.1.0
+     */
+    @SafeInput(maxLength = 64, pattern = "^[a-zA-Z_][a-zA-Z0-9_]*$", message = "数据源标识格式不正确")
+    private String datasourceId;
 }
 

@@ -3,6 +3,7 @@ package io.github.hexlodev.ui.monitor;
 import cn.hutool.core.lang.Pair;
 import io.github.hexlodev.core.TableCache;
 import io.github.hexlodev.core.cache.StrategyCache;
+import io.github.hexlodev.core.config.DataSourceConfigManager;
 import io.github.hexlodev.core.parser.SecurtkitUtils;
 import io.github.hexlodev.core.parser.dto.ColumnTableDto;
 import io.github.hexlodev.core.parser.dto.FieldEncryptorInfoDto;
@@ -259,23 +260,92 @@ public class MonitorController {
     }
 
     /**
+     * 获取数据源列表接口
+     * 
+     * <p>返回所有配置的数据源标识列表，用于前端下拉框选择</p>
+     * 
+     * @param session HTTP 会话
+     * @return 数据源列表响应
+     * @since 1.1.0
+     */
+    @GetMapping("/api/datasources.json")
+    public ApiResponse<DatasourceListResponse> getDatasources(HttpSession session) {
+        // 检查登录
+        if (!checkLogin(session)) {
+            return ApiResponse.error(401, "未登录");
+        }
+
+        try {
+            // 通过反射获取 TableCache 中的 configManager
+            // 然后调用 getDatasourceIds() 方法
+            DatasourceListResponse response = new DatasourceListResponse();
+            
+            try {
+                // 使用反射获取 configManager
+                java.lang.reflect.Field configManagerField = TableCache.class.getDeclaredField("configManager");
+                configManagerField.setAccessible(true);
+                Object configManager = configManagerField.get(null);
+                
+                if (configManager != null) {
+                    // 调用 getDatasourceIds() 方法
+                    java.lang.reflect.Method getDatasourceIdsMethod = 
+                        configManager.getClass().getMethod("getDatasourceIds");
+                    @SuppressWarnings("unchecked")
+                    Set<String> datasourceIds = (Set<String>) getDatasourceIdsMethod.invoke(configManager);
+                    
+                    List<String> datasourceIdList = new ArrayList<>(datasourceIds);
+                    Collections.sort(datasourceIdList); // 排序以便前端显示
+                    
+                    response.setDatasourceIds(datasourceIdList);
+                    response.setDefaultDatasourceId(DataSourceConfigManager.DEFAULT_DATASOURCE_ID);
+                    
+                    log.debug("获取数据源列表: {}", datasourceIdList);
+                } else {
+                    // 如果没有配置管理器，返回默认数据源
+                    response.setDatasourceIds(Collections.singletonList(DataSourceConfigManager.DEFAULT_DATASOURCE_ID));
+                    response.setDefaultDatasourceId(DataSourceConfigManager.DEFAULT_DATASOURCE_ID);
+                }
+            } catch (Exception e) {
+                log.warn("无法获取数据源列表，返回默认数据源: {}", e.getMessage());
+                // 如果反射失败，返回默认数据源
+                response.setDatasourceIds(Collections.singletonList(DataSourceConfigManager.DEFAULT_DATASOURCE_ID));
+                response.setDefaultDatasourceId(DataSourceConfigManager.DEFAULT_DATASOURCE_ID);
+            }
+            
+            return ApiResponse.success(response);
+            
+        } catch (Exception e) {
+            log.error("获取数据源列表失败", e);
+            return ApiResponse.error("获取数据源列表失败: " + e.getMessage());
+        }
+    }
+
+    /**
      * 确定使用的策略
+     * 
+     * <p>支持多数据源场景，如果请求中包含 datasourceId，则使用指定的数据源配置</p>
+     * 
+     * @param request 请求对象（EncryptRequest 或 DecryptRequest）
+     * @return 加密策略实例，如果无法确定则返回 null
      */
     private FieldEncryptorStrategy determineStrategy(Object request) {
         String strategyClassName = null;
         String tableName = null;
         String fieldName = null;
+        String datasourceId = null;
 
         if (request instanceof EncryptRequest) {
             EncryptRequest req = (EncryptRequest) request;
             strategyClassName = req.getStrategy();
             tableName = req.getTableName();
             fieldName = req.getFieldName();
+            datasourceId = req.getDatasourceId();
         } else if (request instanceof DecryptRequest) {
             DecryptRequest req = (DecryptRequest) request;
             strategyClassName = req.getStrategy();
             tableName = req.getTableName();
             fieldName = req.getFieldName();
+            datasourceId = req.getDatasourceId();
         }
 
         Class<? extends FieldEncryptorStrategy> strategyClass = null;
@@ -292,10 +362,10 @@ public class MonitorController {
                 return null;
             }
         }
-        // 优先级2: 通过表名和字段名获取策略
+        // 优先级2: 通过表名和字段名获取策略（支持多数据源）
         else if (tableName != null && !tableName.trim().isEmpty() &&
                 fieldName != null && !fieldName.trim().isEmpty()) {
-            strategyClass = TableCache.getTableFieldEncryptStrategy(tableName, fieldName);
+            strategyClass = TableCache.getTableFieldEncryptStrategy(tableName, fieldName, datasourceId);
         }
         // 优先级3: 使用默认策略
         else {
@@ -319,7 +389,9 @@ public class MonitorController {
 
     /**
      * SQL 解析接口
-     * 调用 SecurtkitUtils.doParseSql 方法解析 SQL
+     * 调用 SecurtkitUtils.parseSql 方法解析 SQL（支持多数据源）
+     * 
+     * <p>支持多数据源场景，如果请求中包含 datasourceId，则使用指定的数据源配置进行解析</p>
      */
     @PostMapping("/api/parse-sql.json")
     public ApiResponse<ParseSqlResponse> parseSql(@Valid @RequestBody ParseSqlRequest request,
@@ -343,13 +415,10 @@ public class MonitorController {
                 return ApiResponse.error(validation.getErrorMessage());
             }
 
-            // 使用反射调用私有的 doParseSql 方法
-            Method doParseSqlMethod = SecurtkitUtils.class.getDeclaredMethod("doParseSql", String.class);
-            doParseSqlMethod.setAccessible(true);
-            @SuppressWarnings("unchecked")
+            // 使用 parseSql 方法解析 SQL（支持多数据源）
+            // 如果请求中包含 datasourceId，则使用指定的数据源配置
             Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> result =
-                    (Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>>)
-                            doParseSqlMethod.invoke(null, request.getSql());
+                    SecurtkitUtils.parseSql(sql, request.getDatasourceId());
 
             // 转换结果
             ParseSqlResponse response = new ParseSqlResponse();
@@ -404,9 +473,6 @@ public class MonitorController {
 
             return ApiResponse.success(response);
 
-        } catch (NoSuchMethodException e) {
-            log.error("找不到 doParseSql 方法", e);
-            return ApiResponse.error("解析失败: 找不到解析方法");
         } catch (Exception e) {
             log.error("SQL 解析失败", e);
             return ApiResponse.error("SQL 解析失败: " + e.getMessage());
@@ -439,7 +505,8 @@ public class MonitorController {
                 return ApiResponse.error(validation.getErrorMessage());
             }
             
-            String encryptedSql = encryptSqlValues(originalSql);
+            // 加密 SQL（支持多数据源）
+            String encryptedSql = encryptSqlValues(originalSql, request.getDatasourceId());
 
             EncryptSqlResponse response = new EncryptSqlResponse();
             response.setOriginalSql(originalSql);
@@ -461,10 +528,15 @@ public class MonitorController {
     }
 
     /**
-     * 加密 SQL 中的字段值
+     * 加密 SQL 中的字段值（支持多数据源）
      * 支持 INSERT、UPDATE、DELETE、SELECT 等所有 SQL 类型
+     * 
+     * @param sql SQL 语句
+     * @param datasourceId 数据源标识（可选）
+     * @return 加密后的 SQL 语句
+     * @throws JSQLParserException 如果 SQL 解析失败
      */
-    private String encryptSqlValues(String sql) throws JSQLParserException {
+    private String encryptSqlValues(String sql, String datasourceId) throws JSQLParserException {
         // 解析 SQL
         Statement statement = CCJSqlParserUtil.parse(sql);
         
@@ -477,32 +549,32 @@ public class MonitorController {
             // UPDATE 语句
             Update update = (Update) statement;
             tableName = update.getTable().getName();
-            log.debug("解析 UPDATE SQL，表名: {}", tableName);
+            log.debug("解析 UPDATE SQL，表名: {}, 数据源: {}", tableName, datasourceId);
             
-            encryptUpdateValues(update, tableName, valueReplacements);
+            encryptUpdateValues(update, tableName, valueReplacements, datasourceId);
             
         } else if (statement instanceof net.sf.jsqlparser.statement.insert.Insert) {
             // INSERT 语句
             net.sf.jsqlparser.statement.insert.Insert insert = (net.sf.jsqlparser.statement.insert.Insert) statement;
             tableName = insert.getTable().getName();
-            log.debug("解析 INSERT SQL，表名: {}", tableName);
+            log.debug("解析 INSERT SQL，表名: {}, 数据源: {}", tableName, datasourceId);
             
-            encryptInsertValues(insert, tableName, valueReplacements);
+            encryptInsertValues(insert, tableName, valueReplacements, datasourceId);
             
         } else if (statement instanceof net.sf.jsqlparser.statement.delete.Delete) {
             // DELETE 语句（WHERE 条件中的值）
             net.sf.jsqlparser.statement.delete.Delete delete = (net.sf.jsqlparser.statement.delete.Delete) statement;
             tableName = delete.getTable().getName();
-            log.debug("解析 DELETE SQL，表名: {}", tableName);
+            log.debug("解析 DELETE SQL，表名: {}, 数据源: {}", tableName, datasourceId);
             
-            encryptDeleteValues(delete, tableName, valueReplacements);
+            encryptDeleteValues(delete, tableName, valueReplacements, datasourceId);
             
         } else if (statement instanceof Select) {
             // SELECT 语句（WHERE 条件中的值）
             Select select = (Select) statement;
-            log.debug("解析 SELECT SQL");
+            log.debug("解析 SELECT SQL，数据源: {}", datasourceId);
             
-            encryptSelectValues(select, valueReplacements);
+            encryptSelectValues(select, valueReplacements, datasourceId);
             
         } else {
             throw new IllegalArgumentException("不支持的 SQL 类型: " + statement.getClass().getSimpleName());
@@ -546,9 +618,9 @@ public class MonitorController {
     }
 
     /**
-     * 加密 UPDATE 语句中的字段值
+     * 加密 UPDATE 语句中的字段值（支持多数据源）
      */
-    private void encryptUpdateValues(Update update, String tableName, Map<String, String> valueReplacements) {
+    private void encryptUpdateValues(Update update, String tableName, Map<String, String> valueReplacements, String datasourceId) {
         List<UpdateSet> updateSets = update.getUpdateSets();
         log.debug("UPDATE SET 数量: {}", updateSets.size());
         
@@ -561,16 +633,16 @@ public class MonitorController {
                 Expression expression = expressions.get(i);
                 
                 String fieldName = column.getColumnName().toLowerCase();
-                encryptFieldValue(tableName, fieldName, expression, valueReplacements);
+                encryptFieldValue(tableName, fieldName, expression, valueReplacements, datasourceId);
             }
         }
     }
 
     /**
-     * 加密 INSERT 语句中的字段值
+     * 加密 INSERT 语句中的字段值（支持多数据源）
      */
     private void encryptInsertValues(net.sf.jsqlparser.statement.insert.Insert insert, String tableName, 
-                                     Map<String, String> valueReplacements) {
+                                     Map<String, String> valueReplacements, String datasourceId) {
         List<Column> columns = insert.getColumns();
         
         // INSERT INTO table VALUES (...) 的情况
@@ -591,7 +663,7 @@ public class MonitorController {
                             String fieldName = columns != null ? columns.get(i).getColumnName().toLowerCase() : null;
                             
                             if (fieldName != null) {
-                                encryptFieldValue(tableName, fieldName, expression, valueReplacements);
+                                encryptFieldValue(tableName, fieldName, expression, valueReplacements, datasourceId);
                             }
                         }
                     }
@@ -603,7 +675,7 @@ public class MonitorController {
                     String fieldName = columns != null ? columns.get(i).getColumnName().toLowerCase() : null;
                     
                     if (fieldName != null) {
-                        encryptFieldValue(tableName, fieldName, expression, valueReplacements);
+                        encryptFieldValue(tableName, fieldName, expression, valueReplacements, datasourceId);
                     }
                 }
             }
@@ -614,20 +686,20 @@ public class MonitorController {
     }
 
     /**
-     * 加密 DELETE 语句 WHERE 条件中的字段值
+     * 加密 DELETE 语句 WHERE 条件中的字段值（支持多数据源）
      */
     private void encryptDeleteValues(net.sf.jsqlparser.statement.delete.Delete delete, String tableName,
-                                     Map<String, String> valueReplacements) {
+                                     Map<String, String> valueReplacements, String datasourceId) {
         net.sf.jsqlparser.expression.Expression whereExpr = delete.getWhere();
         if (whereExpr != null) {
-            encryptWhereExpressionValues(whereExpr, tableName, valueReplacements);
+            encryptWhereExpressionValues(whereExpr, tableName, valueReplacements, datasourceId);
         }
     }
 
     /**
-     * 加密 SELECT 语句 WHERE 条件中的字段值
+     * 加密 SELECT 语句 WHERE 条件中的字段值（支持多数据源）
      */
-    private void encryptSelectValues(Select select, Map<String, String> valueReplacements) {
+    private void encryptSelectValues(Select select, Map<String, String> valueReplacements, String datasourceId) {
         try {
             java.lang.reflect.Method getSelectBodyMethod = select.getClass().getMethod("getSelectBody");
             Object selectBody = getSelectBodyMethod.invoke(select);
@@ -644,7 +716,7 @@ public class MonitorController {
                 if (tableName != null) {
                     net.sf.jsqlparser.expression.Expression whereExpr = plainSelect.getWhere();
                     if (whereExpr != null) {
-                        encryptWhereExpressionValues(whereExpr, tableName, valueReplacements);
+                        encryptWhereExpressionValues(whereExpr, tableName, valueReplacements, datasourceId);
                     }
                 }
             }
@@ -654,10 +726,10 @@ public class MonitorController {
     }
 
     /**
-     * 加密 WHERE 表达式中的字段值
+     * 加密 WHERE 表达式中的字段值（支持多数据源）
      */
     private void encryptWhereExpressionValues(net.sf.jsqlparser.expression.Expression expr, String tableName,
-                                            Map<String, String> valueReplacements) {
+                                            Map<String, String> valueReplacements, String datasourceId) {
         if (expr == null) {
             return;
         }
@@ -685,19 +757,19 @@ public class MonitorController {
             
             if (column != null && valueExpr != null) {
                 String fieldName = column.getColumnName().toLowerCase();
-                encryptFieldValue(tableName, fieldName, valueExpr, valueReplacements);
+                encryptFieldValue(tableName, fieldName, valueExpr, valueReplacements, datasourceId);
                 return; // 处理完这个二元表达式后返回，不再递归处理左右表达式
             }
             
             // 如果没有处理当前表达式，递归处理左右表达式（用于处理 AND、OR 等复杂表达式）
-            encryptWhereExpressionValues(leftExpr, tableName, valueReplacements);
-            encryptWhereExpressionValues(rightExpr, tableName, valueReplacements);
+            encryptWhereExpressionValues(leftExpr, tableName, valueReplacements, datasourceId);
+            encryptWhereExpressionValues(rightExpr, tableName, valueReplacements, datasourceId);
         }
         // 处理括号表达式
         else if (expr instanceof net.sf.jsqlparser.expression.Parenthesis) {
             net.sf.jsqlparser.expression.Parenthesis paren = 
                 (net.sf.jsqlparser.expression.Parenthesis) expr;
-            encryptWhereExpressionValues(paren.getExpression(), tableName, valueReplacements);
+            encryptWhereExpressionValues(paren.getExpression(), tableName, valueReplacements, datasourceId);
         }
         // 处理 IN 表达式
         else if (expr instanceof net.sf.jsqlparser.expression.operators.relational.InExpression) {
@@ -713,22 +785,28 @@ public class MonitorController {
                 ExpressionList<?> exprList = (ExpressionList<?>) rightExpr;
                 
                 for (net.sf.jsqlparser.expression.Expression e : exprList.getExpressions()) {
-                    encryptFieldValue(tableName, fieldName, e, valueReplacements);
+                    encryptFieldValue(tableName, fieldName, e, valueReplacements, datasourceId);
                 }
             }
         }
     }
 
     /**
-     * 加密单个字段的值
+     * 加密单个字段的值（支持多数据源）
+     * 
+     * @param tableName 表名
+     * @param fieldName 字段名
+     * @param expression 表达式
+     * @param valueReplacements 值替换映射
+     * @param datasourceId 数据源标识（可选）
      */
     private void encryptFieldValue(String tableName, String fieldName, Expression expression,
-                                   Map<String, String> valueReplacements) {
-        log.debug("检查字段: {} (表: {})", fieldName, tableName);
+                                   Map<String, String> valueReplacements, String datasourceId) {
+        log.debug("检查字段: {} (表: {}, 数据源: {})", fieldName, tableName, datasourceId);
         
-        // 检查该字段是否需要加密
+        // 检查该字段是否需要加密（支持多数据源）
         Class<? extends FieldEncryptorStrategy> strategyClass = 
-            TableCache.getTableFieldEncryptStrategy(tableName, fieldName);
+            TableCache.getTableFieldEncryptStrategy(tableName, fieldName, datasourceId);
         
         if (strategyClass != null) {
             log.debug("字段 {} 需要加密，策略: {}", fieldName, strategyClass.getName());
@@ -903,8 +981,8 @@ public class MonitorController {
             log.debug("原始 SQL: {}", sql);
             log.debug("分页 SQL: {}", pagedSql);
 
-            // 对 WHERE 条件中的加密字段值进行加密
-            String encryptedSql = encryptWhereClauseValues(pagedSql);
+            // 对 WHERE 条件中的加密字段值进行加密（支持多数据源）
+            String encryptedSql = encryptWhereClauseValues(pagedSql, request.getDatasourceId());
             log.debug("加密后的 SQL: {}", encryptedSql);
 
             // 执行查询
@@ -1027,10 +1105,15 @@ public class MonitorController {
     }
 
     /**
-     * 加密 SELECT 查询中 WHERE 条件里的字段值
+     * 加密 SELECT 查询中 WHERE 条件里的字段值（支持多数据源）
      * 使用占位符方式，复用 core 项目的逻辑
+     * 
+     * @param sql SQL 语句
+     * @param datasourceId 数据源标识（可选）
+     * @return 加密后的 SQL 语句
+     * @throws JSQLParserException 如果 SQL 解析失败
      */
-    private String encryptWhereClauseValues(String sql) throws JSQLParserException {
+    private String encryptWhereClauseValues(String sql, String datasourceId) throws JSQLParserException {
         Statement statement = CCJSqlParserUtil.parse(sql);
         
         if (!(statement instanceof Select)) {
@@ -1065,9 +1148,9 @@ public class MonitorController {
                 log.debug("转换为占位符 SQL: {}", placeholderSql);
                 log.debug("提取的值: {}", values);
                 
-                // 步骤2: 使用 core 项目的逻辑解析占位符映射
+                // 步骤2: 使用 core 项目的逻辑解析占位符映射（支持多数据源）
                 Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> parseResult = 
-                    SecurtkitUtils.parseSql(placeholderSql);
+                    SecurtkitUtils.parseSql(placeholderSql, datasourceId);
                 
                 Map<String, ColumnTableDto> placeholderColumnMap = parseResult.getKey();
                 log.debug("占位符映射数量: {}", placeholderColumnMap.size());
@@ -1086,9 +1169,9 @@ public class MonitorController {
                         String tableName = columnDto.getSourceTableName();
                         String fieldName = columnDto.getSourceColumn();
                         
-                        // 检查是否需要加密
+                        // 检查是否需要加密（支持多数据源）
                         Class<? extends FieldEncryptorStrategy> strategyClass = 
-                            TableCache.getTableFieldEncryptStrategy(tableName, fieldName);
+                            TableCache.getTableFieldEncryptStrategy(tableName, fieldName, datasourceId);
                         
                         if (strategyClass != null) {
                             try {

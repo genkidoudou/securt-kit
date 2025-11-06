@@ -52,6 +52,12 @@
                     </div>
                     <div class="form-row">
                         <div class="form-group">
+                            <label>数据源（可选）:</label>
+                            <select id="cryptoDatasourceId">
+                                <option value="">默认数据源</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
                             <label>表名（可选）:</label>
                             <input type="text" id="cryptoTableName" placeholder="例如: user">
                         </div>
@@ -82,6 +88,12 @@
                 <div class="card">
                     <h2>SQL 解析</h2>
                     <div class="form-group">
+                        <label>数据源（可选）:</label>
+                        <select id="sqlParseDatasourceId">
+                            <option value="">默认数据源</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
                         <label>输入 SQL:</label>
                         <textarea id="sqlInput" rows="6" placeholder="请输入要解析的 SQL 语句，例如: UPDATE user SET name = ?, phone = ? WHERE id = ?"></textarea>
                     </div>
@@ -106,6 +118,12 @@
             <div id="sqlEncryptTab" class="tab-content">
                 <div class="card">
                     <h2>SQL参数加密</h2>
+                    <div class="form-group">
+                        <label>数据源（可选）:</label>
+                        <select id="sqlEncryptDatasourceId">
+                            <option value="">默认数据源</option>
+                        </select>
+                    </div>
                     <div class="form-group">
                         <label>输入 SQL（包含实际值，支持 INSERT、UPDATE、DELETE、SELECT）:</label>
                         <textarea id="sqlEncryptInput" rows="6" placeholder="请输入要加密的 SQL 语句，例如: UPDATE user SET name = '张三', phone = '13800138000' WHERE id = 1"></textarea>
@@ -133,6 +151,12 @@
             <div id="sqlQueryTab" class="tab-content">
                 <div class="card">
                     <h2>SQL 查询</h2>
+                    <div class="form-group">
+                        <label>数据源（可选）:</label>
+                        <select id="sqlQueryDatasourceId">
+                            <option value="">默认数据源</option>
+                        </select>
+                    </div>
                     <div class="form-group">
                         <label>输入查询 SQL（只支持 SELECT）:</label>
                         <textarea id="sqlQueryInput" rows="6" placeholder="请输入 SELECT 查询语句，例如: SELECT * FROM user WHERE id = 1"></textarea>

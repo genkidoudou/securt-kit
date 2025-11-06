@@ -8,6 +8,78 @@ const CONFIG = {
     apiPath: '/monitor/api'
 };
 
+// 数据源管理
+const datasourceManager = {
+    /**
+     * 数据源列表
+     */
+    datasourceIds: [],
+    defaultDatasourceId: 'default',
+
+    /**
+     * 获取数据源列表
+     */
+    async fetchDatasources() {
+        try {
+            const response = await utils.request(`${CONFIG.apiPath}/datasources.json`);
+            if (response.success && response.data) {
+                this.datasourceIds = response.data.datasourceIds || [];
+                this.defaultDatasourceId = response.data.defaultDatasourceId || 'default';
+                this.populateSelects();
+            }
+        } catch (error) {
+            console.error('获取数据源列表失败:', error);
+            // 失败时使用默认值
+            this.datasourceIds = [];
+            this.defaultDatasourceId = 'default';
+        }
+    },
+
+    /**
+     * 填充所有数据源下拉框
+     */
+    populateSelects() {
+        const selectIds = [
+            'cryptoDatasourceId',
+            'sqlParseDatasourceId',
+            'sqlEncryptDatasourceId',
+            'sqlQueryDatasourceId'
+        ];
+
+        selectIds.forEach(selectId => {
+            const select = document.getElementById(selectId);
+            if (select) {
+                // 保留第一个选项（默认数据源）
+                const firstOption = select.firstElementChild;
+                select.innerHTML = '';
+                if (firstOption) {
+                    select.appendChild(firstOption);
+                }
+
+                // 添加其他数据源选项
+                this.datasourceIds.forEach(dsId => {
+                    const option = document.createElement('option');
+                    option.value = dsId;
+                    option.textContent = dsId;
+                    select.appendChild(option);
+                });
+            }
+        });
+    },
+
+    /**
+     * 获取选中的数据源ID（如果为空则返回null，不传参）
+     */
+    getSelectedDatasourceId(selectId) {
+        const select = document.getElementById(selectId);
+        if (!select) {
+            return null;
+        }
+        const value = select.value.trim();
+        return value === '' ? null : value;
+    }
+};
+
 // 工具函数
 const utils = {
     /**
@@ -207,6 +279,8 @@ const login = {
     showMainPage() {
         document.getElementById('loginPage').style.display = 'none';
         document.getElementById('mainPage').style.display = 'block';
+        // 显示主页面后加载数据源列表
+        datasourceManager.fetchDatasources();
     }
 };
 
@@ -243,6 +317,12 @@ const crypto = {
             if (tableName) requestBody.tableName = tableName;
             if (fieldName) requestBody.fieldName = fieldName;
             if (strategy) requestBody.strategy = strategy;
+            
+            // 添加数据源ID
+            const datasourceId = datasourceManager.getSelectedDatasourceId('cryptoDatasourceId');
+            if (datasourceId) {
+                requestBody.datasourceId = datasourceId;
+            }
 
             const response = await utils.request(`${CONFIG.apiPath}/encrypt.json`, {
                 method: 'POST',
@@ -281,6 +361,12 @@ const crypto = {
             if (tableName) requestBody.tableName = tableName;
             if (fieldName) requestBody.fieldName = fieldName;
             if (strategy) requestBody.strategy = strategy;
+            
+            // 添加数据源ID
+            const datasourceId = datasourceManager.getSelectedDatasourceId('cryptoDatasourceId');
+            if (datasourceId) {
+                requestBody.datasourceId = datasourceId;
+            }
 
             const response = await utils.request(`${CONFIG.apiPath}/decrypt.json`, {
                 method: 'POST',
@@ -393,9 +479,16 @@ const sqlParser = {
                 return;
             }
 
+            const requestBody = { sql };
+            // 添加数据源ID
+            const datasourceId = datasourceManager.getSelectedDatasourceId('sqlParseDatasourceId');
+            if (datasourceId) {
+                requestBody.datasourceId = datasourceId;
+            }
+
             const response = await utils.request(`${CONFIG.apiPath}/parse-sql.json`, {
                 method: 'POST',
-                body: JSON.stringify({ sql })
+                body: JSON.stringify(requestBody)
             });
 
             if (response.success) {
@@ -541,9 +634,16 @@ const sqlEncrypt = {
                 return;
             }
 
+            const requestBody = { sql };
+            // 添加数据源ID
+            const datasourceId = datasourceManager.getSelectedDatasourceId('sqlEncryptDatasourceId');
+            if (datasourceId) {
+                requestBody.datasourceId = datasourceId;
+            }
+
             const response = await utils.request(`${CONFIG.apiPath}/encrypt-sql.json`, {
                 method: 'POST',
-                body: JSON.stringify({ sql })
+                body: JSON.stringify(requestBody)
             });
 
             if (response.success) {
@@ -676,13 +776,20 @@ const sqlQuery = {
             const pageSize = pageSizeInput ? parseInt(pageSizeInput.value) || 10 : 10;
             const pageNum = pageNumInput ? parseInt(pageNumInput.value) || 1 : 1;
 
+            const requestBody = {
+                sql: sql,
+                pageSize: pageSize,
+                pageNum: pageNum
+            };
+            // 添加数据源ID
+            const datasourceId = datasourceManager.getSelectedDatasourceId('sqlQueryDatasourceId');
+            if (datasourceId) {
+                requestBody.datasourceId = datasourceId;
+            }
+
             const response = await utils.request(`${CONFIG.apiPath}/query-sql.json`, {
                 method: 'POST',
-                body: JSON.stringify({ 
-                    sql: sql,
-                    pageSize: pageSize,
-                    pageNum: pageNum
-                })
+                body: JSON.stringify(requestBody)
             });
 
             if (response.success) {
