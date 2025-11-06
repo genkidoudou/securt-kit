@@ -183,44 +183,33 @@ public DataSource primaryDataSource() {
 ```yaml
 securtkit:
   encryptor:
-    # 全局配置（所有数据源共享，除非被覆盖）
-    global:
+    # 全局配置（所有数据源共享）
+    enable: true
+    failure-policy: FALLBACK
+    sql-parse-cache:
       enable: true
-      failure-policy: FALLBACK
-      sql-parse-cache:
-        enable: true
-        max-size: 1000
-      tables:
-        - table-name: user
-          fields:
-            - field-name: name
-            - field-name: phone
+      max-size: 1000
     
-    # 数据源级别配置（可选，覆盖全局配置）
-    datasources:
+    # 表配置（通过 datasource-id 区分不同数据源）
+    tables:
       # 主数据源配置
-      primary:
-        enable: true
-        tables:
-          - table-name: user
-            fields:
-              - field-name: name
-                strategy: com.example.AESStrategy
-              - field-name: phone
-                strategy: com.example.AESStrategy
+      - table-name: user
+        datasource-id: primary
+        fields:
+          - field-name: name
+            strategy: com.example.AESStrategy
+          - field-name: phone
+            strategy: com.example.AESStrategy
       
-      # 从数据源配置（继承全局配置，不加密）
-      secondary:
-        enable: false  # 关闭加密
+      # 从数据源配置（不配置等于关闭加密）
+      # secondary 数据源不配置，等于关闭加密
       
       # 第三方数据源配置（使用不同的加密策略）
-      third:
-        enable: true
-        tables:
-          - table-name: user
-            fields:
-              - field-name: name
-                strategy: com.example.RSAStrategy
+      - table-name: user
+        datasource-id: third
+        fields:
+          - field-name: name
+            strategy: com.example.RSAStrategy
 ```
 
 **配置类结构**：
@@ -230,52 +219,46 @@ securtkit:
 public class FieldEncryptorProperties {
     
     /**
-     * 全局配置（向后兼容，可替代原有的顶级配置）
+     * 是否启用加密（全局配置，所有数据源共享）
      */
-    private GlobalConfig global;
+    private boolean enable;
     
     /**
-     * 数据源级别配置
-     * Key: 数据源标识
-     * Value: 数据源配置
+     * 失败处理策略（全局配置，所有数据源共享）
      */
-    private Map<String, DataSourceConfig> datasources;
+    private FailurePolicy failurePolicy;
     
     /**
-     * 全局配置（向后兼容）
+     * SQL 解析缓存配置（全局配置，所有数据源共享）
+     */
+    private SqlParseCacheConfig sqlParseCache;
+    
+    /**
+     * 表配置列表（通过 datasource-id 区分不同数据源）
+     */
+    private List<TableConfig> tables;
+    
+    /**
+     * 表配置
      */
     @Data
-    public static class GlobalConfig {
-        private boolean enable;
-        private FailurePolicy failurePolicy;
-        private SqlParseCacheConfig sqlParseCache;
-        private List<TableConfig> tables;
-    }
-    
-    /**
-     * 数据源配置
-     */
-    @Data
-    public static class DataSourceConfig {
+    public static class TableConfig {
         /**
-         * 是否启用（继承全局配置）
+         * 表名
          */
-        private Boolean enable;
+        private String tableName;
         
         /**
-         * 失败策略（继承全局配置）
+         * 数据源标识（可选）
+         * - 不指定：应用到所有数据源（单数据源场景）
+         * - 指定：只应用到该数据源（多数据源场景）
          */
-        private FailurePolicy failurePolicy;
+        private String datasourceId;
         
         /**
-         * SQL 解析缓存配置（继承全局配置）
+         * 字段配置列表
          */
-        private SqlParseCacheConfig sqlParseCache;
-        
-        /**
-         * 表配置（覆盖全局配置）
-         */
-        private List<TableConfig> tables;
+        private List<FieldConfig> fields;
     }
 }
 ```
@@ -698,21 +681,21 @@ securtkit:
           - field-name: name
 ```
 
-**新配置方式（推荐）**：
+**统一配置方式**：
 ```yaml
 securtkit:
   encryptor:
-    global:
-      enable: true
-      tables:
-        - table-name: user
-          fields:
-            - field-name: name
+    enable: true
+    tables:
+      - table-name: user
+        fields:
+          - field-name: name
 ```
 
-**兼容逻辑**：
-- 如果配置中没有 `datasources` 字段，则将顶级配置作为全局配置
-- 数据源标识默认为 `"default"`，使用全局配置
+**配置说明**：
+- 单数据源场景：不指定 `datasource-id`，配置应用到所有数据源
+- 多数据源场景：指定 `datasource-id`，配置只应用到该数据源
+- 数据源标识默认为 `"default"`，如果未指定 `datasource-id` 则使用 `"default"`
 
 #### 2.4.2 代码兼容性
 
@@ -760,46 +743,40 @@ securtkit:
 ```yaml
 securtkit:
   encryptor:
-    global:
-      enable: true
-      failure-policy: FALLBACK
-      tables:
-        - table-name: user
-          fields:
-            - field-name: name
-    
-    datasources:
-      primary:
-        tables:
-          - table-name: user
-            fields:
-              - field-name: name
-                strategy: com.example.AESStrategy
-              - field-name: phone
-                strategy: com.example.AESStrategy
+    enable: true
+    failure-policy: FALLBACK
+    tables:
+      # 主数据源配置
+      - table-name: user
+        datasource-id: primary
+        fields:
+          - field-name: name
+            strategy: com.example.AESStrategy
+          - field-name: phone
+            strategy: com.example.AESStrategy
       
-      secondary:
-        enable: false  # 从库不加密
+      # 从数据源不配置（等于关闭加密）
 ```
 
 #### 示例3：多数据源 - 相同表名不同策略
 ```yaml
 securtkit:
   encryptor:
-    datasources:
-      main_db:
-        tables:
-          - table-name: user
-            fields:
-              - field-name: name
-                strategy: com.example.AESStrategy
+    enable: true
+    tables:
+      # 主库配置
+      - table-name: user
+        datasource-id: main_db
+        fields:
+          - field-name: name
+            strategy: com.example.AESStrategy
       
-      read_db:
-        tables:
-          - table-name: user
-            fields:
-              - field-name: name
-                strategy: com.example.RSAStrategy
+      # 从库配置
+      - table-name: user
+        datasource-id: read_db
+        fields:
+          - field-name: name
+            strategy: com.example.RSAStrategy
 ```
 
 #### 示例4：Spring Boot 多数据源配置

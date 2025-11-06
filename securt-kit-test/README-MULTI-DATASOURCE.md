@@ -48,36 +48,26 @@ spring:
 ```yaml
 securtkit:
   encryptor:
-    # 全局配置（所有数据源共享）
-    global:
+    enable: true
+    failure-policy: FALLBACK
+    sql-parse-cache:
       enable: true
-      tables:
-        - table-name: user
-          fields:
-            - field-name: name  # 全局配置：只加密 name 字段
-    
-    # 数据源级别配置（覆盖全局配置）
-    datasources:
-      # 主数据源：加密 name 和 phone
-      primary:
-        enable: true
-        tables:
-          - table-name: user
-            fields:
-              - field-name: name
-              - field-name: phone
+      max-size: 1000
+    tables:
+      # 主数据源配置（primary）：加密 name 和 phone
+      - table-name: user
+        datasource-id: primary
+        fields:
+          - field-name: name
+          - field-name: phone
       
-      # 从数据源：只加密 name（不加密 phone）
-      secondary:
-        enable: true
-        tables:
-          - table-name: user
-            fields:
-              - field-name: name
+      # 从数据源配置（secondary）：只加密 name
+      - table-name: user
+        datasource-id: secondary
+        fields:
+          - field-name: name
       
-      # 第三方数据源：关闭加密
-      third:
-        enable: false
+      # 第三方数据源不配置（等于关闭加密）
 ```
 
 ## 测试类
@@ -185,7 +175,7 @@ mvn test
 
 - ✅ 主数据源配置不影响从数据源
 - ✅ 从数据源配置不影响第三方数据源
-- ✅ 全局配置作为默认值，数据源配置可以覆盖
+- ✅ 每个数据源的配置相互独立
 
 ### 2. 加密功能验证
 
@@ -206,7 +196,7 @@ mvn test
    "jdbc:interceptor:h2:mem:testdb?datasource-id=primary"
    ```
 
-2. **配置顺序**：数据源配置会覆盖全局配置（按表名合并）
+2. **配置方式**：在 tables 中通过 datasource-id 区分不同数据源的配置
 
 3. **默认数据源**：如果未指定 `datasource-id`，则使用 `"default"` 作为标识
 
@@ -219,37 +209,27 @@ mvn test
 ```yaml
 securtkit:
   encryptor:
-    global:
+    enable: true
+    failure-policy: FALLBACK
+    sql-parse-cache:
       enable: true
-      failure-policy: FALLBACK
-      sql-parse-cache:
-        enable: true
-        max-size: 1000
-      tables:
-        - table-name: user
-          fields:
-            - field-name: name
-            - field-name: email
-    
-    datasources:
-      primary:
-        enable: true
-        tables:
-          - table-name: user
-            fields:
-              - field-name: name
-              - field-name: phone
-              - field-name: email
+      max-size: 1000
+    tables:
+      # 主数据源配置
+      - table-name: user
+        datasource-id: primary
+        fields:
+          - field-name: name
+          - field-name: phone
+          - field-name: email
       
-      secondary:
-        enable: true
-        tables:
-          - table-name: user
-            fields:
-              - field-name: name
+      # 从数据源配置
+      - table-name: user
+        datasource-id: secondary
+        fields:
+          - field-name: name
       
-      read_only:
-        enable: false  # 只读库不加密
+      # 只读库不配置（等于关闭加密）
 ```
 
 ## 使用 MyBatis-Plus 多数据源
