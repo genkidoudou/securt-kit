@@ -261,12 +261,13 @@ public class PlaceholderSelectVisitor extends PlaceholderFieldParseTable impleme
                         // 使用标准的占位符格式，不添加批次索引
 //                        log.info("【securt-kit】处理表达式对 {}: upstream={}, current={}",
 //                                i, upstreamExpression, curExp);
+                        // JDBC 参数索引从 1 开始，所以需要 +1
                         JsqlparserUtil.parseWhereColumTable(this.getLayer(),
                                 this.getLayerFieldTableMap(),
                                 upstreamExpression,
                                 curExp,
                                 this.getPlaceholderColumnTableMap(),
-                                i); // 传递 INSERT 字段索引
+                                i + 1); // 传递 INSERT 字段索引（从 1 开始，对应 JDBC 参数索引）
                     }
                 }
             }
@@ -279,12 +280,13 @@ public class PlaceholderSelectVisitor extends PlaceholderFieldParseTable impleme
                     Expression curExp = (Expression) eList.get(i);
                     Expression upstreamExpression = this.upstreamExpressionList.get(i);
 //                    log.info("【securt-kit】处理表达式对 {}: upstream={}, current={}", i, upstreamExpression, curExp);
+                    // JDBC 参数索引从 1 开始，所以需要 +1
                     JsqlparserUtil.parseWhereColumTable(this.getLayer(),
                             this.getLayerFieldTableMap(),
                             upstreamExpression,
                             curExp,
                             this.getPlaceholderColumnTableMap(),
-                            i); // 传递 INSERT 字段索引
+                            i + 1); // 传递 INSERT 字段索引（从 1 开始，对应 JDBC 参数索引）
                 }
             } else {
 //                log.info("【securt-kit】处理单个Values");
@@ -292,12 +294,13 @@ public class PlaceholderSelectVisitor extends PlaceholderFieldParseTable impleme
                     Expression curExp = (Expression) expressions.get(i);
                     Expression upstreamExpression = this.upstreamExpressionList.get(i);
 //                    log.info("【securt-kit】处理表达式对 {}: upstream={}, current={}", i, upstreamExpression, curExp);
+                    // JDBC 参数索引从 1 开始，所以需要 +1
                     JsqlparserUtil.parseWhereColumTable(this.getLayer(),
                             this.getLayerFieldTableMap(),
                             upstreamExpression,
                             curExp,
                             this.getPlaceholderColumnTableMap(),
-                            i); // 传递 INSERT 字段索引
+                            i + 1); // 传递 INSERT 字段索引（从 1 开始，对应 JDBC 参数索引）
                 }
             }
         }

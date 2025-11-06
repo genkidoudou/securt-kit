@@ -148,6 +148,13 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
         this.delegate = delegate;
         this.sql = sql.trim();
         this.datasourceId = StrUtil.isBlank(datasourceId) ? "default" : datasourceId;
+        
+        // 调试日志：记录 datasource-id 的来源
+        if (StrUtil.isBlank(datasourceId)) {
+            log.warn("PreparedStatement created with blank datasource-id, using default. SQL: {}", sql);
+        } else {
+            log.debug("PreparedStatement created with datasource-id: {} for SQL: {}", datasourceId, sql);
+        }
 
         // 判断是否为更新类操作（INSERT/UPDATE/DELETE）
         String lowerSql = this.sql.toLowerCase();
@@ -395,16 +402,33 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
      */
     private Map<Integer, ColumnTableDto> buildParameterIndexMap(Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> pair) {
         if (pair == null || pair.getKey() == null) {
+            log.debug("buildParameterIndexMap: pair or key is null");
             return Collections.emptyMap();
         }
         
         Map<Integer, ColumnTableDto> indexMap = new HashMap<>();
-        for (ColumnTableDto dto : pair.getKey().values()) {
+        for (Map.Entry<String, ColumnTableDto> entry : pair.getKey().entrySet()) {
+            String key = entry.getKey();
+            ColumnTableDto dto = entry.getValue();
             Integer index = dto.getInsertFieldIndex();
             if (index != null && index > 0) {
                 // 如果同一个索引对应多个字段，保留第一个（通常不会发生）
                 indexMap.putIfAbsent(index, dto);
+                if (log.isDebugEnabled()) {
+                    log.debug("Mapped parameterIndex {} -> table: {}, column: {} (placeholder: {})",
+                            index, dto.getSourceTableName(), dto.getSourceColumn(), key);
+                }
+            } else {
+                if (log.isDebugEnabled()) {
+                    log.debug("Skipping placeholder {}: insertFieldIndex is null or <= 0 (index: {})",
+                            key, index);
+                }
             }
+        }
+        
+        if (log.isDebugEnabled()) {
+            log.debug("buildParameterIndexMap: built {} mappings from {} placeholders (datasource-id: {})",
+                    indexMap.size(), pair.getKey().size(), this.datasourceId);
         }
         return indexMap;
     }
@@ -427,7 +451,14 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
         String newValue = x;
 
         // 使用预构建的映射进行 O(1) 查找，替代原来的 O(n) Stream 查找
-        if (SecurtkitUtils.needEncrypt(this.tables) && this.parameterIndexToFieldMap != null) {
+        if (SecurtkitUtils.needEncrypt(this.tables, this.datasourceId) && this.parameterIndexToFieldMap != null) {
+            if (log.isDebugEnabled()) {
+                log.debug("setString called for parameterIndex: {} (datasource-id: {}, mapSize: {}, needEncrypt: {})",
+                        parameterIndex, this.datasourceId, 
+                        this.parameterIndexToFieldMap != null ? this.parameterIndexToFieldMap.size() : 0,
+                        SecurtkitUtils.needEncrypt(this.tables, this.datasourceId));
+            }
+            
             ColumnTableDto columnTableDto = this.parameterIndexToFieldMap.get(parameterIndex);
             
             if (columnTableDto != null) {
@@ -446,16 +477,34 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
                                 sourceColumn,
                                 () -> {
                                     String encrypted = strategy.encryption(x);
-                                    if (log.isDebugEnabled()) {
-                                        log.debug("Encrypted field: {} in table: {}",
-                                                sourceColumn, columnTableDto.getSourceTableName());
-                                    }
+                                    log.info("Encrypted field: {} in table: {} (parameterIndex: {}, datasource-id: {}, original: {}, encrypted: {})",
+                                            sourceColumn, columnTableDto.getSourceTableName(), parameterIndex, this.datasourceId,
+                                            x, encrypted);
                                     return encrypted;
                                 },
                                 null // 使用默认策略
                         );
+                    } else {
+                        log.warn("No encryption strategy found for field: {} in table: {} (parameterIndex: {}, datasource-id: {})",
+                                sourceColumn, columnTableDto.getSourceTableName(), parameterIndex, this.datasourceId);
                     }
+                } else {
+                    log.warn("ColumnTableDto missing table/column info (parameterIndex: {}, datasource-id: {}, tableName: {}, column: {})",
+                            parameterIndex, this.datasourceId, 
+                            columnTableDto.getSourceTableName(), sourceColumn);
                 }
+            } else {
+                log.warn("No ColumnTableDto found for parameterIndex: {} (datasource-id: {}, mapSize: {}, mapKeys: {})",
+                        parameterIndex, this.datasourceId, 
+                        this.parameterIndexToFieldMap != null ? this.parameterIndexToFieldMap.size() : 0,
+                        this.parameterIndexToFieldMap != null ? this.parameterIndexToFieldMap.keySet() : "null");
+            }
+        } else {
+            if (log.isDebugEnabled()) {
+                log.debug("setString skipped encryption for parameterIndex: {} (needEncrypt: {}, mapNull: {})",
+                        parameterIndex, 
+                        SecurtkitUtils.needEncrypt(this.tables, this.datasourceId),
+                        this.parameterIndexToFieldMap == null);
             }
         }
 
@@ -608,7 +657,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     @Override
     public void setCharacterStream(int parameterIndex, java.io.Reader reader, int length) throws SQLException {
-        if (reader != null && SecurtkitUtils.needEncrypt(this.tables) && null != this.pair) {
+        if (reader != null && SecurtkitUtils.needEncrypt(this.tables, this.datasourceId) && null != this.pair) {
             try {
                 // 读取 Reader 内容
                 String value = readerToString(reader, length);
@@ -642,7 +691,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     @Override
     public void setClob(int parameterIndex, Clob x) throws SQLException {
-        if (x != null && SecurtkitUtils.needEncrypt(this.tables) && null != this.pair) {
+        if (x != null && SecurtkitUtils.needEncrypt(this.tables, this.datasourceId) && null != this.pair) {
             try {
                 // 读取 Clob 内容
                 String value = clobToString(x);
@@ -728,7 +777,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     @Override
     public void setNCharacterStream(int parameterIndex, java.io.Reader value, long length) throws SQLException {
-        if (value != null && SecurtkitUtils.needEncrypt(this.tables) && null != this.pair) {
+        if (value != null && SecurtkitUtils.needEncrypt(this.tables, this.datasourceId) && null != this.pair) {
             try {
                 // 读取 Reader 内容
                 String strValue = readerToString(value, length);
@@ -752,7 +801,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     @Override
     public void setNClob(int parameterIndex, NClob value) throws SQLException {
-        if (value != null && SecurtkitUtils.needEncrypt(this.tables) && null != this.pair) {
+        if (value != null && SecurtkitUtils.needEncrypt(this.tables, this.datasourceId) && null != this.pair) {
             try {
                 // 读取 NClob 内容
                 String strValue = nClobToString(value);
@@ -788,7 +837,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     @Override
     public void setClob(int parameterIndex, java.io.Reader reader, long length) throws SQLException {
-        if (reader != null && SecurtkitUtils.needEncrypt(this.tables) && null != this.pair) {
+        if (reader != null && SecurtkitUtils.needEncrypt(this.tables, this.datasourceId) && null != this.pair) {
             try {
                 // 读取 Reader 内容
                 String value = readerToString(reader, length);
@@ -819,7 +868,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     @Override
     public void setNClob(int parameterIndex, java.io.Reader reader, long length) throws SQLException {
-        if (reader != null && SecurtkitUtils.needEncrypt(this.tables) && null != this.pair) {
+        if (reader != null && SecurtkitUtils.needEncrypt(this.tables, this.datasourceId) && null != this.pair) {
             try {
                 // 读取 Reader 内容
                 String value = readerToString(reader, length);
@@ -866,7 +915,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     @Override
     public void setCharacterStream(int parameterIndex, java.io.Reader reader, long length) throws SQLException {
-        if (reader != null && SecurtkitUtils.needEncrypt(this.tables) && null != this.pair) {
+        if (reader != null && SecurtkitUtils.needEncrypt(this.tables, this.datasourceId) && null != this.pair) {
             try {
                 // 读取 Reader 内容
                 String value = readerToString(reader, length);
@@ -900,7 +949,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     @Override
     public void setCharacterStream(int parameterIndex, java.io.Reader reader) throws SQLException {
-        if (reader != null && SecurtkitUtils.needEncrypt(this.tables) && null != this.pair) {
+        if (reader != null && SecurtkitUtils.needEncrypt(this.tables, this.datasourceId) && null != this.pair) {
             try {
                 // 读取 Reader 内容（无长度限制，读取全部）
                 String value = readerToString(reader, Long.MAX_VALUE);
@@ -924,7 +973,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     @Override
     public void setNCharacterStream(int parameterIndex, java.io.Reader value) throws SQLException {
-        if (value != null && SecurtkitUtils.needEncrypt(this.tables) && null != this.pair) {
+        if (value != null && SecurtkitUtils.needEncrypt(this.tables, this.datasourceId) && null != this.pair) {
             try {
                 // 读取 Reader 内容（无长度限制，读取全部）
                 String strValue = readerToString(value, Long.MAX_VALUE);
@@ -948,7 +997,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     @Override
     public void setClob(int parameterIndex, java.io.Reader reader) throws SQLException {
-        if (reader != null && SecurtkitUtils.needEncrypt(this.tables) && null != this.pair) {
+        if (reader != null && SecurtkitUtils.needEncrypt(this.tables, this.datasourceId) && null != this.pair) {
             try {
                 // 读取 Reader 内容（无长度限制，读取全部）
                 String value = readerToString(reader, Long.MAX_VALUE);
@@ -979,7 +1028,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     @Override
     public void setNClob(int parameterIndex, java.io.Reader reader) throws SQLException {
-        if (reader != null && SecurtkitUtils.needEncrypt(this.tables) && null != this.pair) {
+        if (reader != null && SecurtkitUtils.needEncrypt(this.tables, this.datasourceId) && null != this.pair) {
             try {
                 // 读取 Reader 内容（无长度限制，读取全部）
                 String value = readerToString(reader, Long.MAX_VALUE);
@@ -1033,7 +1082,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
      * @return 加密后的值，如果不需要加密或加密失败则返回原值
      */
     private String maybeEncryptValue(int parameterIndex, String value) {
-        if (value == null || !SecurtkitUtils.needEncrypt(this.tables) || this.parameterIndexToFieldMap == null) {
+        if (value == null || !SecurtkitUtils.needEncrypt(this.tables, this.datasourceId) || this.parameterIndexToFieldMap == null) {
             return value;
         }
 
@@ -1319,7 +1368,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     @Override
     public ResultSet getResultSet() throws SQLException {
-        return ResultSetDecryptingProxy.wrap(delegate.getResultSet(), this.tables, this.pair, this.sql);
+        return ResultSetDecryptingProxy.wrap(delegate.getResultSet(), this.tables, this.pair, this.sql, this.datasourceId);
     }
 
     // 添加所有缺失的execute方法

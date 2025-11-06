@@ -108,6 +108,22 @@
                     <encoding>UTF-8</encoding>
                 </configuration>
             </plugin>
+            <!-- Spring Boot Maven Plugin -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>${spring-boot.version}</version>
+                <configuration>
+                    <mainClass>io.github.test.MultiDataSourceApplication</mainClass>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
             <!-- Use a Surefire version that supports JUnit 5 -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

@@ -70,6 +70,27 @@ public class PoJoEncrtptorStatementVisitor implements StatementVisitor {
      * value: 这个字段所属的表字段
      */
     private Map<String, ColumnTableDto> placeholderColumnTableMap;
+    
+    /**
+     * 数据源标识（多数据源场景）
+     */
+    private final String datasourceId;
+    
+    /**
+     * 构造函数（向后兼容）
+     */
+    public PoJoEncrtptorStatementVisitor() {
+        this.datasourceId = null;
+    }
+    
+    /**
+     * 构造函数（支持多数据源）
+     * 
+     * @param datasourceId 数据源标识
+     */
+    public PoJoEncrtptorStatementVisitor(String datasourceId) {
+        this.datasourceId = StrUtil.isBlank(datasourceId) ? "default" : datasourceId;
+    }
 
     public List<FieldEncryptorInfoDto> getFieldEncryptorInfos() {
         return fieldEncryptorInfos;
@@ -212,13 +233,16 @@ public class PoJoEncrtptorStatementVisitor implements StatementVisitor {
             return;
         }
         //2.2将insert的所有字段格式进行转换
+        // 提取纯表名（去掉双引号、数据库名、schema前缀）
+        String tableName = table.getName();
+        String pureTableName = extractPureTableName(tableName);
         Set<FieldInfoDto> fieldInfoDtos = columns.stream()
-                .map(m -> new FieldInfoDto(m.getColumnName().toLowerCase(), m.getColumnName().toLowerCase(), table.getName().toLowerCase(), true))
+                .map(m -> new FieldInfoDto(m.getColumnName().toLowerCase(), m.getColumnName().toLowerCase(), pureTableName, true))
                 .collect(Collectors.toSet());
         //2.3 将转换后的字段信息维护成 layerFieldTableMap 的数据格式
         Map<String, Map<String, Set<FieldInfoDto>>> layerFieldTableMap = MapUtil.<String, Map<String, Set<FieldInfoDto>>>builder()
                 .put(String.valueOf(NumberConstant.ONE), MapUtil.<String, Set<FieldInfoDto>>builder()
-                        .put(table.getName().toLowerCase(), fieldInfoDtos)
+                        .put(pureTableName, fieldInfoDtos)
                         .build())
                 .build();
 
@@ -236,8 +260,24 @@ public class PoJoEncrtptorStatementVisitor implements StatementVisitor {
         //5.解析占位符（注意：insert 语句的前后字段有对应关系，所以这里把insert前面的字段传递给后面的visitor）
         PlaceholderSelectVisitor selectVisitor = PlaceholderSelectVisitor.newInstanceCurLayer(fieldParseTableSelectVisitor, this.getPlaceholderColumnTableMap(), columns);
         select.accept(selectVisitor);
+        
+        //6.提取字段加密信息（用于参数加密）
+        // 对于 INSERT 语句，需要检查每个字段是否需要加密
+        List<FieldEncryptorInfoDto> fieldInfos = fieldInfoDtos.stream()
+                .filter(field -> StrUtil.isNotBlank(field.getSourceTableName()) && StrUtil.isNotBlank(field.getSourceColumn()))
+                .map(field -> FieldEncryptorInfoDto.builder()
+                        .columnName(field.getColumnName())
+                        .sourceColumn(field.getSourceColumn())
+                        .sourceTableName(field.getSourceTableName())
+                        // 注意：这里不传递 datasourceId，因为会在 SecurtkitUtils.parseSql 中根据 datasourceId 过滤
+                        .fieldEncryptor(TableCache.getTableFieldEncryptStrategy(field.getSourceTableName(), field.getSourceColumn()))
+                        .build())
+                .collect(Collectors.toList());
+        
+        // 将字段加密信息添加到结果中
+        this.fieldEncryptorInfos.addAll(fieldInfos);
 
-        //6.ON DUPLICATE KEY UPDATE 语法 此语法不用单独处理，即可兼容
+        //7.ON DUPLICATE KEY UPDATE 语法 此语法不用单独处理，即可兼容
 //        List<Column> duplicateUpdateColumns = insert.getDuplicateUpdateColumns();
 //        List<Expression> duplicateUpdateExpressionList = insert.getDuplicateUpdateExpressionList();
     }
@@ -342,17 +382,36 @@ public class PoJoEncrtptorStatementVisitor implements StatementVisitor {
                 .flatMap(Collection::stream)
                 .collect(Collectors.toList());
 
+        if (log.isDebugEnabled()) {
+            log.debug("visit(Select): found {} fields in SELECT statement", selectFiles.size());
+            for (FieldInfoDto field : selectFiles) {
+                log.debug("  Field: columnName={}, sourceColumn={}, sourceTableName={}, fromSourceTable={}",
+                        field.getColumnName(), field.getSourceColumn(), field.getSourceTableName(), field.isFromSourceTable());
+            }
+        }
+
         //1.3.将每个字段从实体类上找到标注的@FieldEncryptor 注解
+        // 注意：这里不设置 fieldEncryptor，因为 datasourceId 在解析时可能不可用
+        // fieldEncryptor 会在 SecurtkitUtils.parseSql 的后续过滤步骤中根据 datasourceId 设置
         List<FieldEncryptorInfoDto> fieldInfos = selectFiles.stream()
                 .filter(a -> StrUtil.isNotBlank(a.getSourceTableName()) && StrUtil.isNotBlank(a.getSourceColumn()))
                 .map(m -> FieldEncryptorInfoDto.builder()
                         .columnName(m.getColumnName())
                         .sourceColumn(m.getSourceColumn())
                         .sourceTableName(m.getSourceTableName())
-                        .fieldEncryptor(TableCache.getTableFieldEncryptStrategy(m.getSourceTableName(),
-                                m.getSourceColumn()))
+                        // 不在这里设置 fieldEncryptor，因为需要 datasourceId
+                        // 会在 SecurtkitUtils.parseSql 的后续过滤步骤中设置
+                        .fieldEncryptor(null)
                         .build()
                 ).collect(Collectors.toList());
+
+        if (log.isDebugEnabled()) {
+            log.debug("visit(Select): created {} FieldEncryptorInfoDto objects", fieldInfos.size());
+            for (FieldEncryptorInfoDto info : fieldInfos) {
+                log.debug("  FieldEncryptorInfo: columnName={}, sourceColumn={}, sourceTableName={}",
+                        info.getColumnName(), info.getSourceColumn(), info.getSourceTableName());
+            }
+        }
 
         //1.4.结果集赋值
         this.fieldEncryptorInfos.addAll(fieldInfos);
@@ -453,5 +512,43 @@ public class PoJoEncrtptorStatementVisitor implements StatementVisitor {
     @Override
     public void visit(UnsupportedStatement unsupportedStatement) {
 
+    }
+
+    /**
+     * 从表名中提取纯表名（去掉数据库名和schema前缀，以及双引号）
+     * 
+     * <p>支持的表名格式：</p>
+     * <ul>
+     *   <li>{@code database.table} -> {@code table}</li>
+     *   <li>{@code schema.table} -> {@code table}</li>
+     *   <li>{@code database.schema.table} -> {@code table}</li>
+     *   <li>{@code "table"} -> {@code table}（去掉双引号）</li>
+     *   <li>{@code table} -> {@code table}（已经是纯表名）</li>
+     * </ul>
+     *
+     * @param tableName 表名，可能包含数据库名、schema前缀或双引号
+     * @return 纯表名（小写，已去掉双引号），如果输入为空则返回原值
+     */
+    private String extractPureTableName(String tableName) {
+        if (StrUtil.isBlank(tableName)) {
+            return tableName;
+        }
+        
+        // 转换为小写并去除首尾空白
+        String lowerTableName = tableName.toLowerCase().trim();
+        
+        // 去掉双引号（如果存在）
+        if (lowerTableName.startsWith("\"") && lowerTableName.endsWith("\"")) {
+            lowerTableName = lowerTableName.substring(1, lowerTableName.length() - 1);
+        }
+        
+        // 如果包含点号，取最后一个点号后的部分作为表名
+        int lastDotIndex = lowerTableName.lastIndexOf('.');
+        if (lastDotIndex >= 0 && lastDotIndex < lowerTableName.length() - 1) {
+            return lowerTableName.substring(lastDotIndex + 1);
+        }
+        
+        // 如果没有点号，说明已经是纯表名
+        return lowerTableName;
     }
 }

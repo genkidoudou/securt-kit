@@ -74,10 +74,19 @@
 - **MyBatis/MyBatis-Plus 支持**：完美集成 MyBatis 生态
 - **数据库兼容**：支持 MySQL、PostgreSQL、Oracle、H2 等主流数据库
 
-### 5. 完善的测试
+### 5. 多数据源支持
+
+- **多数据源配置**：支持为不同数据源配置不同的加密字段
+- **配置隔离**：不同数据源的加密配置相互独立
+- **MyBatis-Plus 集成**：完美集成 dynamic-datasource
+- **灵活配置**：支持在表配置中直接指定 `datasource-id`
+
+### 6. 完善的测试
 
 - **单表操作测试**：CRUD 操作验证
 - **多表查询测试**：JOIN 查询验证
+- **多数据源测试**：多数据源场景验证
+- **复杂场景测试**：批量操作、事务、复杂查询等场景验证
 - **集成测试**：完整的使用场景测试
 
 ---
@@ -128,17 +137,29 @@ securt-kit/
 │           └── security/             # 安全相关
 │               └── SqlValidator.java
 │
-└── securt-kit-test/                  # 测试项目
+├── securt-kit-test/                  # 测试项目
+│   ├── pom.xml
+│   ├── README.md                     # 测试项目文档
+│   ├── API-DOCUMENTATION.md          # API 文档
+│   ├── TEST-GUIDE.md                 # 测试指南
+│   └── src/main/java/com/example/
+│       ├── TestApplication.java
+│       ├── entity/                   # 实体类
+│       ├── mapper/                   # Mapper 接口
+│       ├── dto/                      # DTO 类
+│       └── test/                     # 测试类
+│
+└── securt-kit-dy-datasource-test/    # 多数据源测试项目
     ├── pom.xml
-    ├── README.md                     # 测试项目文档
-    ├── API-DOCUMENTATION.md          # API 文档
-    ├── TEST-GUIDE.md                 # 测试指南
-    └── src/main/java/com/example/
-        ├── TestApplication.java
+    ├── README.md                     # 多数据源测试文档
+    ├── COMPLEX-TEST-GUIDE.md         # 复杂场景测试指南
+    └── src/main/java/io/github/test/
+        ├── MultiDataSourceApplication.java
+        ├── config/                   # 配置类
+        ├── controller/               # 控制器
         ├── entity/                   # 实体类
         ├── mapper/                   # Mapper 接口
-        ├── dto/                      # DTO 类
-        └── test/                     # 测试类
+        └── service/                  # 服务类
 ```
 
 ---
@@ -383,6 +404,34 @@ mvn spring-boot:run
 
 ---
 
+### securt-kit-dy-datasource-test
+
+**多数据源测试项目**，提供完整的多数据源场景测试示例。
+
+**包含内容**：
+- 多数据源配置示例
+- 差异化加密配置测试
+- MyBatis-Plus dynamic-datasource 集成
+- 复杂场景测试（批量操作、事务、复杂查询）
+- 完整的 REST API 测试接口
+
+**运行测试**：
+
+```bash
+cd securt-kit-dy-datasource-test
+mvn spring-boot:run
+```
+
+**访问地址**：
+- 基础测试：`http://localhost:8081/test/primary`
+- 复杂场景测试：`http://localhost:8081/api/complex/*`
+
+**文档**: 
+- [securt-kit-dy-datasource-test/README.md](./securt-kit-dy-datasource-test/README.md) - 多数据源测试使用说明
+- [securt-kit-dy-datasource-test/COMPLEX-TEST-GUIDE.md](./securt-kit-dy-datasource-test/COMPLEX-TEST-GUIDE.md) - 复杂场景测试指南
+
+---
+
 ## 🏗️ 技术架构
 
 ### 架构图
@@ -513,6 +562,8 @@ mvn spring-boot:run
 - [securt-kit-test/README.md](./securt-kit-test/README.md) - 测试项目文档
 - [securt-kit-test/API-DOCUMENTATION.md](./securt-kit-test/API-DOCUMENTATION.md) - API 文档
 - [securt-kit-test/TEST-GUIDE.md](./securt-kit-test/TEST-GUIDE.md) - 测试指南
+- [securt-kit-dy-datasource-test/README.md](./securt-kit-dy-datasource-test/README.md) - 多数据源测试文档
+- [securt-kit-dy-datasource-test/COMPLEX-TEST-GUIDE.md](./securt-kit-dy-datasource-test/COMPLEX-TEST-GUIDE.md) - 复杂场景测试指南
 - [securt-kit-ui/SECURITY-PROTECTION-PLAN.md](./securt-kit-ui/SECURITY-PROTECTION-PLAN.md) - UI 模块安全防护方案
 
 ### 设计文档
@@ -1427,6 +1478,7 @@ fields:
 - ✅ ResultSet 结果解密
 - ✅ SQL 解析与表字段识别
 - ✅ 多表查询支持
+- ✅ 多数据源支持
 - ✅ 自定义加密策略
 - ✅ Spring Boot 自动配置
 
@@ -1434,10 +1486,13 @@ fields:
 - ✅ securt-kit-core：核心功能模块
 - ✅ securt-kit-starter：Spring Boot 启动器
 - ✅ securt-kit-test：测试项目
+- ✅ securt-kit-dy-datasource-test：多数据源测试项目
 
 #### 测试
 - ✅ 单表操作测试
 - ✅ 多表查询测试
+- ✅ 多数据源测试
+- ✅ 复杂场景测试（批量操作、事务、复杂查询）
 - ✅ 集成测试
 
 ---
@@ -1495,11 +1550,14 @@ mvn spring-boot:run
 - [测试项目文档](./securt-kit-test/README.md)
 - [API 文档](./securt-kit-test/API-DOCUMENTATION.md)
 - [测试指南](./securt-kit-test/TEST-GUIDE.md)
+- [多数据源测试文档](./securt-kit-dy-datasource-test/README.md)
+- [复杂场景测试指南](./securt-kit-dy-datasource-test/COMPLEX-TEST-GUIDE.md)
 
 ### 项目结构
 - [Core 源码](./securt-kit-core/src)
 - [Starter 源码](./securt-kit-starter/src)
 - [测试示例](./securt-kit-test/src)
+- [多数据源测试示例](./securt-kit-dy-datasource-test/src)
 
 ---
 

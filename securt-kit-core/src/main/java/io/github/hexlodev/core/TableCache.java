@@ -409,7 +409,8 @@ public class TableCache {
 
         if (CollectionUtil.isNotEmpty(config.getTables())) {
             for (FieldEncryptorProperties.TableConfig table : config.getTables()) {
-                String tableName = table.getTableName().toLowerCase(Locale.ROOT);
+                // 提取纯表名（去掉双引号、数据库名、schema前缀）
+                String tableName = extractPureTableName(table.getTableName());
                 Map<String, Class<? extends FieldEncryptorStrategy>> fieldMap = new HashMap<>();
 
                 if (CollectionUtil.isNotEmpty(table.getFields())) {
@@ -467,26 +468,32 @@ public class TableCache {
 
 
     /**
-     * 从表名中提取纯表名（去掉数据库名和schema前缀）
+     * 从表名中提取纯表名（去掉数据库名和schema前缀，以及双引号）
      * 
      * <p>支持的表名格式：</p>
      * <ul>
      *   <li>{@code database.table} -> {@code table}</li>
      *   <li>{@code schema.table} -> {@code table}</li>
      *   <li>{@code database.schema.table} -> {@code table}</li>
+     *   <li>{@code "table"} -> {@code table}（去掉双引号）</li>
      *   <li>{@code table} -> {@code table}（已经是纯表名）</li>
      * </ul>
      *
-     * @param tableName 表名，可能包含数据库名和schema前缀
-     * @return 纯表名（小写），如果输入为空则返回原值
+     * @param tableName 表名，可能包含数据库名、schema前缀或双引号
+     * @return 纯表名（小写，已去掉双引号），如果输入为空则返回原值
      */
     private static String extractPureTableName(String tableName) {
         if (StrUtil.isBlank(tableName)) {
             return tableName;
         }
         
-        // 转换为小写
+        // 转换为小写并去除首尾空白
         String lowerTableName = tableName.toLowerCase().trim();
+        
+        // 去掉双引号（如果存在）
+        if (lowerTableName.startsWith("\"") && lowerTableName.endsWith("\"")) {
+            lowerTableName = lowerTableName.substring(1, lowerTableName.length() - 1);
+        }
         
         // 如果包含点号，取最后一个点号后的部分作为表名
         int lastDotIndex = lowerTableName.lastIndexOf('.');

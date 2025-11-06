@@ -7,6 +7,7 @@ import io.github.hexlodev.core.parser.dto.FieldInfoDto;
 import io.github.hexlodev.core.parser.visitor.BaseFieldParseTable;
 import io.github.hexlodev.core.parser.visitor.JsqlparserUtil;
 import io.github.hexlodev.core.strategy.FieldEncryptorStrategy;
+import lombok.extern.slf4j.Slf4j;
 import net.sf.jsqlparser.expression.Alias;
 import net.sf.jsqlparser.schema.Table;
 import net.sf.jsqlparser.statement.select.*;
@@ -18,6 +19,7 @@ import java.util.*;
      * - 将当前层可用的表字段全集放入 layerFieldTableMap（表别名 → 字段集合）
      * - 字段来源于 TableCache（已按注解/配置合并），用于后续占位符匹配
      */
+@Slf4j
 public class FieldParseParseTableFromItemVisitor extends BaseFieldParseTable implements FromItemVisitor {
     
     /**
@@ -39,8 +41,13 @@ public class FieldParseParseTableFromItemVisitor extends BaseFieldParseTable imp
             return tableName;
         }
         
-        // 转换为小写
+        // 转换为小写并去除首尾空白
         String lowerTableName = tableName.toLowerCase().trim();
+        
+        // 去掉双引号（如果存在）
+        if (lowerTableName.startsWith("\"") && lowerTableName.endsWith("\"")) {
+            lowerTableName = lowerTableName.substring(1, lowerTableName.length() - 1);
+        }
         
         // 如果包含点号，取最后一个点号后的部分作为表名
         int lastDotIndex = lowerTableName.lastIndexOf('.');
@@ -71,20 +78,25 @@ public class FieldParseParseTableFromItemVisitor extends BaseFieldParseTable imp
     public void visit(Table table) {
         //解析表结构信息
         String tableName = table.getName();
-        String tableAlias = Optional.ofNullable(table.getAlias()).map(Alias::getName).orElse(tableName);
+        String rawTableAlias = Optional.ofNullable(table.getAlias()).map(Alias::getName).orElse(tableName);
         
         // 提取纯表名（去掉数据库名和schema前缀），用于 TableCache 查找
         String pureTableName = extractPureTableName(tableName);
+        // 提取纯表别名（去掉双引号），用于 layerFieldTableMap 的 key
+        String tableAlias = extractPureTableName(rawTableAlias);
         
         // 从 TableCache 中获取表的字段信息
+        // 注意：在解析阶段，我们不知道具体使用哪个数据源，所以需要获取所有数据源的字段信息
+        // 这里先尝试获取默认数据源的字段信息，如果获取不到，再尝试其他数据源
         Set<FieldInfoDto> fieldInfoDtos = new HashSet<>();
-        if (TableCache.concatTable(tableName)) {
+        
+        // 先尝试默认数据源
+        if (TableCache.concatTable(pureTableName)) {
             Map<String, Class<? extends FieldEncryptorStrategy>> tableFieldEncryptInfo =
-                    TableCache.getTableFieldEncryptInfo(tableName);
+                    TableCache.getTableFieldEncryptInfo(pureTableName, null);
             if (CollectionUtil.isNotEmpty(tableFieldEncryptInfo)) {
                 for (Map.Entry<String, Class<? extends FieldEncryptorStrategy>> entry : tableFieldEncryptInfo.entrySet()) {
                     String columnName = entry.getKey();
-                    Class<? extends FieldEncryptorStrategy> value = entry.getValue();
                     FieldInfoDto fieldInfo = new FieldInfoDto(
                             columnName,  // columnName
                             columnName,  // sourceColumn
@@ -95,12 +107,45 @@ public class FieldParseParseTableFromItemVisitor extends BaseFieldParseTable imp
                 }
             }
         }
+        
+        // 如果默认数据源没有字段信息，尝试所有数据源
+        // 注意：这里可能会获取到多个数据源的字段信息，但这是可以接受的，因为解析阶段无法确定数据源
+        if (fieldInfoDtos.isEmpty()) {
+            // 尝试所有可能的数据源（这里简化处理，只尝试默认数据源和常见的数据源ID）
+            String[] possibleDatasourceIds = {null, "default", "primary", "secondary"};
+            for (String dsId : possibleDatasourceIds) {
+                if (TableCache.concatTable(pureTableName, dsId)) {
+                    Map<String, Class<? extends FieldEncryptorStrategy>> tableFieldEncryptInfo =
+                            TableCache.getTableFieldEncryptInfo(pureTableName, dsId);
+                    if (CollectionUtil.isNotEmpty(tableFieldEncryptInfo)) {
+                        for (Map.Entry<String, Class<? extends FieldEncryptorStrategy>> entry : tableFieldEncryptInfo.entrySet()) {
+                            String columnName = entry.getKey();
+                            FieldInfoDto fieldInfo = new FieldInfoDto(
+                                    columnName,  // columnName
+                                    columnName,  // sourceColumn
+                                    pureTableName,  // sourceTableName：使用纯表名，便于后续匹配
+                                    true  // fromSourceTable
+                            );
+                            fieldInfoDtos.add(fieldInfo);
+                        }
+                        // 找到一个数据源有字段信息就退出
+                        break;
+                    }
+                }
+            }
+        }
 
         // 将表字段信息存储到 layerFieldTableMap 中
         Map<String, Set<FieldInfoDto>> tableFieldMap = this.getLayerFieldTableMap().computeIfAbsent(
                 String.valueOf(this.getLayer()), k -> new HashMap<>()
         );
-        tableFieldMap.put(tableAlias.toLowerCase(), fieldInfoDtos);
+        String normalizedTableAlias = tableAlias.toLowerCase();
+        tableFieldMap.put(normalizedTableAlias, fieldInfoDtos);
+        
+        if (log.isDebugEnabled()) {
+            log.debug("visit(Table): tableName={}, tableAlias={}, pureTableName={}, normalizedAlias={}, fieldCount={}",
+                    tableName, rawTableAlias, pureTableName, normalizedTableAlias, fieldInfoDtos.size());
+        }
     }
 
     /**

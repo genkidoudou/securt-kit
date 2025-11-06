@@ -121,18 +121,39 @@ public class SecurtkitUtils {
         // 但解析时需要根据数据源标识过滤加密字段
         Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> result = SqlParseCache.parseSql(sql, SecurtkitUtils::doParseSql);
         
-        // 根据数据源标识过滤加密字段信息
-        if (StrUtil.isNotBlank(datasourceId) && result != null && result.getValue() != null) {
+        // 根据数据源标识过滤加密字段信息并设置 fieldEncryptor
+        // 注意：即使 datasourceId 为 null，也要执行过滤，使用 "default" 作为默认值
+        if (result != null && result.getValue() != null) {
             List<FieldEncryptorInfoDto> filteredFields = new ArrayList<>();
+            String dsId = StrUtil.isBlank(datasourceId) ? "default" : datasourceId;
+            
+            if (log.isDebugEnabled()) {
+                log.debug("Filtering {} fields for datasource-id: {}", result.getValue().size(), dsId);
+            }
+            
             for (FieldEncryptorInfoDto field : result.getValue()) {
                 // 检查该字段在该数据源中是否需要加密
                 Class<? extends FieldEncryptorStrategy> strategy = TableCache.getTableFieldEncryptStrategy(
-                    field.getSourceTableName(), field.getSourceColumn(), datasourceId);
+                    field.getSourceTableName(), field.getSourceColumn(), dsId);
                 if (strategy != null) {
                     field.setFieldEncryptor(strategy);
                     filteredFields.add(field);
+                    if (log.isDebugEnabled()) {
+                        log.debug("  Field matched: columnName={}, sourceTable={}, sourceColumn={}, strategy={}",
+                                field.getColumnName(), field.getSourceTableName(), field.getSourceColumn(), strategy.getName());
+                    }
+                } else {
+                    if (log.isDebugEnabled()) {
+                        log.debug("  Field skipped (no strategy): columnName={}, sourceTable={}, sourceColumn={}",
+                                field.getColumnName(), field.getSourceTableName(), field.getSourceColumn());
+                    }
                 }
             }
+            
+            if (log.isDebugEnabled()) {
+                log.debug("Filtered result: {} fields need encryption (datasource-id: {})", filteredFields.size(), dsId);
+            }
+            
             return Pair.of(result.getKey(), filteredFields);
         }
         
@@ -172,6 +193,8 @@ public class SecurtkitUtils {
             Statement statement = CCJSqlParserUtil.parse(placeholderSql);
 
             // 4. 使用访问者模式提取表字段信息和加密字段信息
+            // 注意：这里不传递 datasourceId，因为 doParseSql 方法没有 datasourceId 参数
+            // datasourceId 的过滤会在后续步骤中进行
             PoJoEncrtptorStatementVisitor visitor = new PoJoEncrtptorStatementVisitor();
             statement.accept(visitor);
 

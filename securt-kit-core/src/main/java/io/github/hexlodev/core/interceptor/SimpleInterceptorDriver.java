@@ -107,7 +107,7 @@ public class SimpleInterceptorDriver implements Driver {
 
         // 提取真实的JDBC URL（去掉interceptor前缀和datasource-id参数）
         String realUrl = extractRealUrl(url);
-        log.info("Intercepting connection to: {} (datasource-id: {})", realUrl, datasourceId);
+        log.info("Intercepting connection to: {} (datasource-id: {}) [original-url: {}]", realUrl, datasourceId, url);
 
         // 查找底层的JDBC驱动
         Driver underlyingDriver = findUnderlyingDriver(realUrl);
@@ -173,12 +173,13 @@ public class SimpleInterceptorDriver implements Driver {
         }
 
         // 查找 datasource-id 参数（支持 ? 和 ; 两种分隔符）
+        // 注意：H2 数据库使用 ; 作为参数分隔符，MySQL 等使用 ? 或 &
         String[] patterns = {"?datasource-id=", "&datasource-id=", ";datasource-id="};
         for (String pattern : patterns) {
             int index = url.indexOf(pattern);
             if (index >= 0) {
                 int start = index + pattern.length();
-                // 查找参数结束位置（& 或 ; 或 字符串结尾）
+                // 查找参数结束位置（& 或 ; 或 ? 或 字符串结尾）
                 int end = url.length();
                 for (int i = start; i < url.length(); i++) {
                     char c = url.charAt(i);
@@ -189,11 +190,13 @@ public class SimpleInterceptorDriver implements Driver {
                 }
                 String value = url.substring(start, end);
                 if (StrUtil.isNotBlank(value)) {
+                    log.debug("Extracted datasource-id '{}' from URL using pattern '{}'", value, pattern);
                     return value;
                 }
             }
         }
 
+        log.debug("No datasource-id found in URL: {}", url);
         return null;
     }
 
