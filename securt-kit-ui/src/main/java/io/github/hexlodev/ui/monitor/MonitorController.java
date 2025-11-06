@@ -3,6 +3,7 @@ package io.github.hexlodev.ui.monitor;
 import cn.hutool.core.lang.Pair;
 import io.github.hexlodev.core.TableCache;
 import io.github.hexlodev.core.cache.StrategyCache;
+import io.github.hexlodev.core.config.FieldEncryptorProperties;
 import io.github.hexlodev.core.parser.SecurtkitUtils;
 import io.github.hexlodev.core.parser.dto.ColumnTableDto;
 import io.github.hexlodev.core.parser.dto.FieldEncryptorInfoDto;
@@ -63,6 +64,9 @@ public class MonitorController {
 
     @Autowired(required = false)
     private DataSource dataSource;
+
+    @Autowired(required = false)
+    private FieldEncryptorProperties fieldEncryptorProperties;
 
     /**
      * 检查登录状态
@@ -1265,6 +1269,260 @@ public class MonitorController {
         ValueInfo(String value, String sqlRepr) {
             this.value = value;
             this.sqlRepr = sqlRepr;
+        }
+    }
+
+    /**
+     * 数据初始化 - 加密接口
+     * 根据表名、WHERE条件和主键字段，对数据库中的加密字段进行加密
+     */
+    @PostMapping("/api/data-init/encrypt.json")
+    public ApiResponse<DataInitResponse> dataInitEncrypt(@Valid @RequestBody DataInitRequest request,
+                                                         HttpSession session) {
+        // 检查登录
+        if (!checkLogin(session)) {
+            return ApiResponse.error(401, "未登录");
+        }
+
+        try {
+            // 检查 DataSource 是否可用
+            if (dataSource == null) {
+                return ApiResponse.error("数据源不可用，无法执行操作");
+            }
+
+            // 执行数据初始化
+            DataInitResponse response = processDataInit(request, true);
+            return ApiResponse.success(response, "加密完成");
+
+        } catch (Exception e) {
+            log.error("数据初始化加密失败", e);
+            return ApiResponse.error("数据初始化加密失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 数据初始化 - 解密接口
+     * 根据表名、WHERE条件和主键字段，对数据库中的加密字段进行解密
+     */
+    @PostMapping("/api/data-init/decrypt.json")
+    public ApiResponse<DataInitResponse> dataInitDecrypt(@Valid @RequestBody DataInitRequest request,
+                                                         HttpSession session) {
+        // 检查登录
+        if (!checkLogin(session)) {
+            return ApiResponse.error(401, "未登录");
+        }
+
+        try {
+            // 检查 DataSource 是否可用
+            if (dataSource == null) {
+                return ApiResponse.error("数据源不可用，无法执行操作");
+            }
+
+            // 执行数据初始化
+            DataInitResponse response = processDataInit(request, false);
+            return ApiResponse.success(response, "解密完成");
+
+        } catch (Exception e) {
+            log.error("数据初始化解密失败", e);
+            return ApiResponse.error("数据初始化解密失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 处理数据初始化（加密或解密）
+     *
+     * @param request 请求参数
+     * @param isEncrypt true=加密，false=解密
+     * @return 处理结果
+     */
+    private DataInitResponse processDataInit(DataInitRequest request, boolean isEncrypt) throws SQLException {
+        String tableName = request.getTableName().trim();
+        String whereCondition = request.getWhereCondition() != null ? request.getWhereCondition().trim() : "";
+        String primaryKeyField = request.getPrimaryKeyField().trim();
+
+        DataInitResponse response = new DataInitResponse();
+        response.setTableName(tableName);
+        response.setPrimaryKeyField(primaryKeyField);
+        response.setOperationType(isEncrypt ? "encrypt" : "decrypt");
+
+        // 获取表需要加密的字段
+        Map<String, Class<? extends FieldEncryptorStrategy>> encryptFields = TableCache.getTableFieldEncryptInfo(tableName);
+        if (encryptFields == null || encryptFields.isEmpty()) {
+            throw new IllegalArgumentException("表 " + tableName + " 没有配置需要加密的字段");
+        }
+
+        List<String> sqlStatements = new ArrayList<>();
+        int processedCount = 0;
+        int processedFieldCount = 0;
+
+        // 构建查询SQL
+        StringBuilder selectSql = new StringBuilder("SELECT ");
+        selectSql.append(primaryKeyField);
+        for (String fieldName : encryptFields.keySet()) {
+            selectSql.append(", ").append(fieldName);
+        }
+        selectSql.append(" FROM ").append(tableName);
+        if (!whereCondition.isEmpty()) {
+            selectSql.append(" WHERE ").append(whereCondition);
+        }
+
+        log.debug("查询SQL: {}", selectSql);
+
+        // 执行查询
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(selectSql.toString());
+             ResultSet rs = stmt.executeQuery()) {
+
+            // 处理每条记录
+            while (rs.next()) {
+                // 获取主键值
+                Object primaryKeyValue = rs.getObject(primaryKeyField);
+
+                // 构建UPDATE SQL
+                StringBuilder updateSql = new StringBuilder("UPDATE ");
+                updateSql.append(tableName).append(" SET ");
+
+                List<String> setClauses = new ArrayList<>();
+                int fieldProcessed = 0;
+
+                // 遍历需要加密的字段
+                for (Map.Entry<String, Class<? extends FieldEncryptorStrategy>> entry : encryptFields.entrySet()) {
+                    String fieldName = entry.getKey();
+                    Class<? extends FieldEncryptorStrategy> strategyClass = entry.getValue();
+
+                    try {
+                        // 获取字段值
+                        Object fieldValue = rs.getObject(fieldName);
+                        if (fieldValue == null) {
+                            continue; // 跳过null值
+                        }
+
+                        String originalValue = String.valueOf(fieldValue);
+
+                        // 获取加密策略
+                        FieldEncryptorStrategy strategy = StrategyCache.getStrategy(strategyClass);
+
+                        // 加密或解密
+                        String processedValue;
+                        if (isEncrypt) {
+                            processedValue = strategy.encryption(originalValue);
+                        } else {
+                            processedValue = strategy.decryption(originalValue);
+                        }
+
+                        // 构建SET子句
+                        String setClause = fieldName + " = '" + processedValue.replace("'", "''") + "'";
+                        setClauses.add(setClause);
+                        fieldProcessed++;
+
+                    } catch (Exception e) {
+                        log.warn("处理字段 {} 失败: {}", fieldName, e.getMessage());
+                        // 继续处理其他字段
+                    }
+                }
+
+                if (!setClauses.isEmpty()) {
+                    updateSql.append(String.join(", ", setClauses));
+                    updateSql.append(" WHERE ").append(primaryKeyField).append(" = ");
+
+                    // 处理主键值（支持字符串和数字）
+                    if (primaryKeyValue instanceof String) {
+                        updateSql.append("'").append(primaryKeyValue.toString().replace("'", "''")).append("'");
+                    } else {
+                        updateSql.append(primaryKeyValue);
+                    }
+
+                    String finalSql = updateSql.toString();
+                    sqlStatements.add(finalSql);
+                    log.debug("生成UPDATE SQL: {}", finalSql);
+
+                    // 执行UPDATE
+                    try (PreparedStatement updateStmt = conn.prepareStatement(finalSql)) {
+                        int rowsAffected = updateStmt.executeUpdate();
+                        if (rowsAffected > 0) {
+                            processedCount++;
+                            processedFieldCount += fieldProcessed;
+                            log.debug("更新成功，影响行数: {}", rowsAffected);
+                        }
+                    } catch (SQLException e) {
+                        log.error("执行UPDATE SQL失败: {}", finalSql, e);
+                        throw new SQLException("执行UPDATE SQL失败: " + e.getMessage());
+                    }
+                }
+            }
+        }
+
+        response.setProcessedCount(processedCount);
+        response.setProcessedFieldCount(processedFieldCount);
+        response.setSqlStatements(sqlStatements);
+
+        return response;
+    }
+
+    /**
+     * 获取配置信息接口
+     * 返回 FieldEncryptorProperties 的配置信息
+     */
+    @GetMapping("/api/config.json")
+    public ApiResponse<ConfigResponse> getConfig(HttpSession session) {
+        // 检查登录
+        if (!checkLogin(session)) {
+            return ApiResponse.error(401, "未登录");
+        }
+
+        try {
+            ConfigResponse response = new ConfigResponse();
+
+            if (fieldEncryptorProperties == null) {
+                return ApiResponse.error("配置信息不可用");
+            }
+
+            // 设置基本配置
+            response.setEnable(fieldEncryptorProperties.isEnable());
+            response.setFailurePolicy(fieldEncryptorProperties.getFailurePolicy() != null 
+                    ? fieldEncryptorProperties.getFailurePolicy().name() 
+                    : "FALLBACK");
+
+            // 设置SQL解析缓存配置
+            if (fieldEncryptorProperties.getSqlParseCache() != null) {
+                ConfigResponse.SqlParseCacheConfigInfo cacheConfig = new ConfigResponse.SqlParseCacheConfigInfo();
+                cacheConfig.setEnable(fieldEncryptorProperties.getSqlParseCache().isEnable());
+                cacheConfig.setMaxSize(fieldEncryptorProperties.getSqlParseCache().getMaxSize());
+                response.setSqlParseCache(cacheConfig);
+            }
+
+            // 设置表配置
+            if (fieldEncryptorProperties.getTables() != null && !fieldEncryptorProperties.getTables().isEmpty()) {
+                List<ConfigResponse.TableConfigInfo> tableConfigs = new ArrayList<>();
+                
+                for (FieldEncryptorProperties.TableConfig tableConfig : fieldEncryptorProperties.getTables()) {
+                    ConfigResponse.TableConfigInfo tableInfo = new ConfigResponse.TableConfigInfo();
+                    tableInfo.setTableName(tableConfig.getTableName());
+                    
+                    if (tableConfig.getFields() != null && !tableConfig.getFields().isEmpty()) {
+                        List<ConfigResponse.FieldConfigInfo> fieldConfigs = new ArrayList<>();
+                        
+                        for (FieldEncryptorProperties.FieldConfig fieldConfig : tableConfig.getFields()) {
+                            ConfigResponse.FieldConfigInfo fieldInfo = new ConfigResponse.FieldConfigInfo();
+                            fieldInfo.setFieldName(fieldConfig.getFieldName());
+                            fieldInfo.setStrategy(fieldConfig.getStrategy());
+                            fieldConfigs.add(fieldInfo);
+                        }
+                        
+                        tableInfo.setFields(fieldConfigs);
+                    }
+                    
+                    tableConfigs.add(tableInfo);
+                }
+                
+                response.setTables(tableConfigs);
+            }
+
+            return ApiResponse.success(response);
+
+        } catch (Exception e) {
+            log.error("获取配置信息失败", e);
+            return ApiResponse.error("获取配置信息失败: " + e.getMessage());
         }
     }
 }

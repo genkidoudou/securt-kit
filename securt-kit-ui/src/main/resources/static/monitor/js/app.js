@@ -360,6 +360,16 @@ const tabs = {
         if (activeContent) {
             activeContent.classList.add('active');
         }
+
+        // 如果切换到配置信息标签页，自动加载配置
+        if (tabName === 'config') {
+            // 延迟一下，确保DOM已经更新
+            setTimeout(() => {
+                if (typeof configInfo !== 'undefined' && configInfo && typeof configInfo.loadConfig === 'function') {
+                    configInfo.loadConfig();
+                }
+            }, 100);
+        }
     },
 
     /**
@@ -805,6 +815,389 @@ const sqlQuery = {
     }
 };
 
+// 数据初始化功能
+const dataInit = {
+    /**
+     * 处理数据初始化加密
+     */
+    async handleEncrypt() {
+        try {
+            const tableName = document.getElementById('dataInitTableName').value.trim();
+            const whereCondition = document.getElementById('dataInitWhereCondition').value.trim();
+            const primaryKeyField = document.getElementById('dataInitPrimaryKeyField').value.trim();
+
+            // 验证必填字段
+            if (!tableName) {
+                utils.showNotification('表名不能为空', 'error');
+                return;
+            }
+            if (!primaryKeyField) {
+                utils.showNotification('主键字段不能为空', 'error');
+                return;
+            }
+
+            // 显示加载状态
+            const encryptBtn = document.getElementById('dataInitEncryptBtn');
+            const decryptBtn = document.getElementById('dataInitDecryptBtn');
+            if (encryptBtn) {
+                encryptBtn.disabled = true;
+                encryptBtn.textContent = '加密中...';
+            }
+            if (decryptBtn) {
+                decryptBtn.disabled = true;
+            }
+
+            try {
+                const requestBody = {
+                    tableName: tableName,
+                    primaryKeyField: primaryKeyField
+                };
+                if (whereCondition) {
+                    requestBody.whereCondition = whereCondition;
+                }
+
+                const response = await utils.request(`${CONFIG.apiPath}/data-init/encrypt.json`, {
+                    method: 'POST',
+                    body: JSON.stringify(requestBody)
+                });
+
+                if (response.success) {
+                    this.displayResult(response.data, 'encrypt');
+                } else {
+                    utils.showNotification(response.message || '加密失败', 'error');
+                }
+            } finally {
+                // 恢复按钮状态
+                if (encryptBtn) {
+                    encryptBtn.disabled = false;
+                    encryptBtn.textContent = '加密';
+                }
+                if (decryptBtn) {
+                    decryptBtn.disabled = false;
+                }
+            }
+        } catch (error) {
+            console.error('数据初始化加密失败:', error);
+            utils.showNotification('数据初始化加密失败: ' + (error.message || '请稍后重试'), 'error');
+            
+            // 恢复按钮状态
+            const encryptBtn = document.getElementById('dataInitEncryptBtn');
+            const decryptBtn = document.getElementById('dataInitDecryptBtn');
+            if (encryptBtn) {
+                encryptBtn.disabled = false;
+                encryptBtn.textContent = '加密';
+            }
+            if (decryptBtn) {
+                decryptBtn.disabled = false;
+            }
+        }
+    },
+
+    /**
+     * 处理数据初始化解密
+     */
+    async handleDecrypt() {
+        try {
+            const tableName = document.getElementById('dataInitTableName').value.trim();
+            const whereCondition = document.getElementById('dataInitWhereCondition').value.trim();
+            const primaryKeyField = document.getElementById('dataInitPrimaryKeyField').value.trim();
+
+            // 验证必填字段
+            if (!tableName) {
+                utils.showNotification('表名不能为空', 'error');
+                return;
+            }
+            if (!primaryKeyField) {
+                utils.showNotification('主键字段不能为空', 'error');
+                return;
+            }
+
+            // 显示加载状态
+            const encryptBtn = document.getElementById('dataInitEncryptBtn');
+            const decryptBtn = document.getElementById('dataInitDecryptBtn');
+            if (decryptBtn) {
+                decryptBtn.disabled = true;
+                decryptBtn.textContent = '解密中...';
+            }
+            if (encryptBtn) {
+                encryptBtn.disabled = true;
+            }
+
+            try {
+                const requestBody = {
+                    tableName: tableName,
+                    primaryKeyField: primaryKeyField
+                };
+                if (whereCondition) {
+                    requestBody.whereCondition = whereCondition;
+                }
+
+                const response = await utils.request(`${CONFIG.apiPath}/data-init/decrypt.json`, {
+                    method: 'POST',
+                    body: JSON.stringify(requestBody)
+                });
+
+                if (response.success) {
+                    this.displayResult(response.data, 'decrypt');
+                } else {
+                    utils.showNotification(response.message || '解密失败', 'error');
+                }
+            } finally {
+                // 恢复按钮状态
+                if (decryptBtn) {
+                    decryptBtn.disabled = false;
+                    decryptBtn.textContent = '解密';
+                }
+                if (encryptBtn) {
+                    encryptBtn.disabled = false;
+                }
+            }
+        } catch (error) {
+            console.error('数据初始化解密失败:', error);
+            utils.showNotification('数据初始化解密失败: ' + (error.message || '请稍后重试'), 'error');
+            
+            // 恢复按钮状态
+            const encryptBtn = document.getElementById('dataInitEncryptBtn');
+            const decryptBtn = document.getElementById('dataInitDecryptBtn');
+            if (decryptBtn) {
+                decryptBtn.disabled = false;
+                decryptBtn.textContent = '解密';
+            }
+            if (encryptBtn) {
+                encryptBtn.disabled = false;
+            }
+        }
+    },
+
+    /**
+     * 显示处理结果
+     */
+    displayResult(data, operationType) {
+        const resultDiv = document.getElementById('dataInitResult');
+        const statsDiv = document.getElementById('dataInitStats');
+        const sqlOutput = document.getElementById('dataInitSqlOutput');
+        const copyBtn = document.getElementById('copyDataInitSqlBtn');
+
+        if (!resultDiv || !statsDiv || !sqlOutput) return;
+
+        resultDiv.style.display = 'block';
+
+        // 显示统计信息
+        const processedCount = data.processedCount || 0;
+        const processedFieldCount = data.processedFieldCount || 0;
+        const operationText = operationType === 'encrypt' ? '加密' : '解密';
+        
+        statsDiv.innerHTML = `
+            <div style="margin-bottom: 10px;">
+                <strong>${operationText}完成</strong>
+            </div>
+            <div>
+                处理记录数: <span style="color: #1890ff; font-weight: bold;">${processedCount}</span> | 
+                处理字段数: <span style="color: #1890ff; font-weight: bold;">${processedFieldCount}</span>
+            </div>
+        `;
+        statsDiv.style.color = '#333';
+
+        // 显示生成的SQL语句
+        const sqlStatements = data.sqlStatements || [];
+        if (sqlStatements.length > 0) {
+            sqlOutput.value = sqlStatements.join(';\n') + ';';
+            if (copyBtn) {
+                copyBtn.style.display = 'inline-block';
+            }
+        } else {
+            sqlOutput.value = '未生成SQL语句';
+            if (copyBtn) {
+                copyBtn.style.display = 'none';
+            }
+        }
+    },
+
+    /**
+     * 清空输入和结果
+     */
+    clear() {
+        const tableNameInput = document.getElementById('dataInitTableName');
+        const whereConditionInput = document.getElementById('dataInitWhereCondition');
+        const primaryKeyFieldInput = document.getElementById('dataInitPrimaryKeyField');
+        const resultDiv = document.getElementById('dataInitResult');
+        const statsDiv = document.getElementById('dataInitStats');
+        const sqlOutput = document.getElementById('dataInitSqlOutput');
+        const copyBtn = document.getElementById('copyDataInitSqlBtn');
+
+        if (tableNameInput) {
+            tableNameInput.value = '';
+        }
+        if (whereConditionInput) {
+            whereConditionInput.value = '';
+        }
+        if (primaryKeyFieldInput) {
+            primaryKeyFieldInput.value = '';
+        }
+        if (resultDiv) {
+            resultDiv.style.display = 'none';
+        }
+        if (statsDiv) {
+            statsDiv.textContent = '';
+        }
+        if (sqlOutput) {
+            sqlOutput.value = '';
+        }
+        if (copyBtn) {
+            copyBtn.style.display = 'none';
+        }
+    },
+
+    /**
+     * 复制SQL语句
+     */
+    async copySql() {
+        try {
+            const sqlOutput = document.getElementById('dataInitSqlOutput');
+            if (!sqlOutput) return;
+
+            const text = sqlOutput.value;
+            if (text) {
+                const success = await utils.copyToClipboard(text);
+                if (!success) {
+                    utils.showNotification('复制失败', 'error');
+                }
+            }
+        } catch (error) {
+            console.error('复制失败:', error);
+            utils.showNotification('复制失败', 'error');
+        }
+    }
+};
+
+// 配置信息功能
+const configInfo = {
+    /**
+     * 加载配置信息
+     */
+    async loadConfig() {
+        try {
+            const loadingDiv = document.getElementById('configLoading');
+            const resultDiv = document.getElementById('configResult');
+            
+            if (loadingDiv) {
+                loadingDiv.style.display = 'block';
+            }
+            if (resultDiv) {
+                resultDiv.style.display = 'none';
+            }
+
+            try {
+                const apiUrl = `${CONFIG.apiPath}/config.json`;
+                const response = await utils.request(apiUrl);
+
+                if (response.success) {
+                    this.displayConfig(response.data);
+                } else {
+                    if (loadingDiv) {
+                        loadingDiv.textContent = '加载配置失败: ' + (response.message || '未知错误');
+                        loadingDiv.style.color = '#ff4d4f';
+                    }
+                    utils.showNotification(response.message || '加载配置失败', 'error');
+                }
+            } catch (error) {
+                console.error('加载配置失败:', error);
+                if (loadingDiv) {
+                    loadingDiv.textContent = '加载配置失败: ' + (error.message || '请稍后重试');
+                    loadingDiv.style.color = '#ff4d4f';
+                }
+                utils.showNotification('加载配置失败: ' + (error.message || '请稍后重试'), 'error');
+            }
+        } catch (error) {
+            console.error('加载配置失败:', error);
+            utils.showNotification('加载配置失败: ' + (error.message || '请稍后重试'), 'error');
+        }
+    },
+
+    /**
+     * 显示配置信息
+     */
+    displayConfig(data) {
+        const resultDiv = document.getElementById('configResult');
+        const loadingDiv = document.getElementById('configLoading');
+        const basicConfigDiv = document.getElementById('basicConfig');
+        const cacheConfigDiv = document.getElementById('cacheConfig');
+        const tablesConfigDiv = document.getElementById('tablesConfig');
+
+        if (!resultDiv || !basicConfigDiv || !cacheConfigDiv || !tablesConfigDiv) {
+            return;
+        }
+
+        // 隐藏加载提示，显示结果
+        if (loadingDiv) {
+            loadingDiv.style.display = 'none';
+        }
+        resultDiv.style.display = 'block';
+
+        // 显示基本配置 - 紧凑形式
+        let basicHtml = '<div class="compact-config-list">';
+        const enableText = data.enable !== null && data.enable !== undefined ? (data.enable ? '是' : '否') : '未配置';
+        const enableClass = data.enable === true ? 'config-value enabled' : data.enable === false ? 'config-value disabled' : 'config-value';
+        basicHtml += `<span class="config-item"><span class="config-label">是否启用:</span><span class="${enableClass}">${enableText}</span></span>`;
+        basicHtml += `<span class="config-item"><span class="config-label">失败处理策略:</span><span class="config-value">${utils.escapeHtml(data.failurePolicy || 'FALLBACK')}</span></span>`;
+        basicHtml += '</div>';
+        basicConfigDiv.innerHTML = basicHtml;
+
+        // 显示SQL解析缓存配置 - 紧凑形式
+        if (data.sqlParseCache) {
+            let cacheHtml = '<div class="compact-config-list">';
+            const cacheEnableText = data.sqlParseCache.enable !== null && data.sqlParseCache.enable !== undefined ? (data.sqlParseCache.enable ? '是' : '否') : '未配置';
+            const cacheEnableClass = data.sqlParseCache.enable === true ? 'config-value enabled' : data.sqlParseCache.enable === false ? 'config-value disabled' : 'config-value';
+            cacheHtml += `<span class="config-item"><span class="config-label">是否启用缓存:</span><span class="${cacheEnableClass}">${cacheEnableText}</span></span>`;
+            cacheHtml += `<span class="config-item"><span class="config-label">缓存最大容量:</span><span class="config-value">${data.sqlParseCache.maxSize !== null && data.sqlParseCache.maxSize !== undefined ? data.sqlParseCache.maxSize : '未配置'}</span></span>`;
+            cacheHtml += '</div>';
+            cacheConfigDiv.innerHTML = cacheHtml;
+        } else {
+            cacheConfigDiv.innerHTML = '<div class="empty-message">未配置SQL解析缓存</div>';
+        }
+
+        // 显示表配置 - 紧凑形式
+        if (data.tables && data.tables.length > 0) {
+            let tablesHtml = '<table class="compact-table"><thead><tr>';
+            tablesHtml += '<th style="width: 150px;">表名</th>';
+            tablesHtml += '<th>字段配置</th>';
+            tablesHtml += '</tr></thead><tbody>';
+            
+            for (let i = 0; i < data.tables.length; i++) {
+                const table = data.tables[i];
+                tablesHtml += '<tr>';
+                tablesHtml += `<td class="table-name-cell"><strong>${utils.escapeHtml(table.tableName || '未知')}</strong></td>`;
+                
+                if (table.fields && table.fields.length > 0) {
+                    let fieldsHtml = '<div class="fields-list">';
+                    for (let j = 0; j < table.fields.length; j++) {
+                        const field = table.fields[j];
+                        fieldsHtml += '<span class="field-tag">';
+                        fieldsHtml += `<span class="field-name">${utils.escapeHtml(field.fieldName || '-')}</span>`;
+                        if (field.strategy) {
+                            fieldsHtml += `<span class="field-strategy" title="${utils.escapeHtml(field.strategy)}">(${utils.escapeHtml(field.strategy.length > 30 ? field.strategy.substring(0, 30) + '...' : field.strategy)})</span>`;
+                        } else {
+                            fieldsHtml += '<span class="field-strategy default">(默认)</span>';
+                        }
+                        fieldsHtml += '</span>';
+                    }
+                    fieldsHtml += '</div>';
+                    tablesHtml += `<td>${fieldsHtml}</td>`;
+                } else {
+                    tablesHtml += '<td><span class="empty-message">无加密字段</span></td>';
+                }
+                
+                tablesHtml += '</tr>';
+            }
+            
+            tablesHtml += '</tbody></table>';
+            tablesConfigDiv.innerHTML = tablesHtml;
+        } else {
+            tablesConfigDiv.innerHTML = '<div class="empty-message">未配置表加密规则</div>';
+        }
+    }
+};
+
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
     // 绑定登录事件
@@ -908,6 +1301,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 sqlQuery.handleQuery();
             }
         });
+    }
+
+    // 绑定数据初始化事件
+    const dataInitEncryptBtn = document.getElementById('dataInitEncryptBtn');
+    const dataInitDecryptBtn = document.getElementById('dataInitDecryptBtn');
+    const clearDataInitBtn = document.getElementById('clearDataInitBtn');
+    const copyDataInitSqlBtn = document.getElementById('copyDataInitSqlBtn');
+
+    if (dataInitEncryptBtn) {
+        dataInitEncryptBtn.addEventListener('click', () => dataInit.handleEncrypt());
+    }
+    if (dataInitDecryptBtn) {
+        dataInitDecryptBtn.addEventListener('click', () => dataInit.handleDecrypt());
+    }
+    if (clearDataInitBtn) {
+        clearDataInitBtn.addEventListener('click', () => dataInit.clear());
+    }
+    if (copyDataInitSqlBtn) {
+        copyDataInitSqlBtn.addEventListener('click', () => dataInit.copySql());
     }
 
     // 初始化标签页

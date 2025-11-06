@@ -111,17 +111,31 @@ body {
 
 /* 主页面样式 */
 .header {
-    background: white;
+    background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%);
+    color: white;
     padding: 20px 30px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
 
 .header h1 {
-    color: #1890ff;
+    color: white;
     font-size: 24px;
+    margin: 0;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.header .btn-secondary {
+    background-color: rgba(255, 255, 255, 0.2);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.header .btn-secondary:hover {
+    background-color: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.5);
 }
 
 .container {
@@ -138,7 +152,7 @@ body {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-/* 标签页样式 */
+/* 菜单导航样式 */
 .tabs {
     display: flex;
     gap: 0;
@@ -147,6 +161,7 @@ body {
     background: white;
     padding: 0 20px;
     border-radius: 8px 8px 0 0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .tab-btn {
@@ -160,18 +175,46 @@ body {
     transition: all 0.3s;
     position: relative;
     top: 2px;
+    white-space: nowrap;
+    font-weight: 500;
 }
 
 .tab-btn:hover {
     color: #1890ff;
-    background-color: #f5f5f5;
+    background-color: #f0f7ff;
+    border-bottom-color: #91d5ff;
 }
 
 .tab-btn.active {
     color: #1890ff;
     border-bottom-color: #1890ff;
     font-weight: 600;
-    background-color: #fafafa;
+    background-color: #e6f7ff;
+}
+
+.tab-btn.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background-color: #1890ff;
+}
+
+/* 响应式菜单 */
+@media (max-width: 768px) {
+    .tabs {
+        flex-wrap: wrap;
+        padding: 10px;
+    }
+    
+    .tab-btn {
+        padding: 12px 20px;
+        font-size: 14px;
+        flex: 1 1 auto;
+        min-width: 120px;
+    }
 }
 
 .tab-content {
@@ -273,5 +316,161 @@ textarea[readonly] {
     text-align: center;
     color: #999;
     font-style: italic;
+}
+
+/* 按钮禁用状态 */
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+/* 配置信息样式 */
+.config-section {
+    margin-top: 10px;
+    padding: 12px;
+    background-color: #fafafa;
+    border-radius: 4px;
+    border: 1px solid #e0e0e0;
+}
+
+.config-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    font-size: 14px;
+}
+
+.config-table td {
+    padding: 10px;
+    border: 1px solid #e0e0e0;
+}
+
+.config-table td:first-child {
+    width: 200px;
+    background-color: #f5f5f5;
+    font-weight: 500;
+}
+
+/* 紧凑型配置列表样式 */
+.compact-config-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    padding: 8px 0;
+}
+
+.config-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.config-label {
+    color: #666;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.config-value {
+    color: #333;
+    font-size: 13px;
+    padding: 2px 8px;
+    background-color: #f5f5f5;
+    border-radius: 3px;
+}
+
+.config-value.enabled {
+    color: #52c41a;
+    background-color: #f6ffed;
+    border: 1px solid #b7eb8f;
+}
+
+.config-value.disabled {
+    color: #ff4d4f;
+    background-color: #fff1f0;
+    border: 1px solid #ffccc7;
+}
+
+/* 紧凑型表配置样式 */
+.compact-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    font-size: 13px;
+}
+
+.compact-table th {
+    background-color: #f5f5f5;
+    font-weight: 600;
+    color: #333;
+    padding: 8px 10px;
+    text-align: left;
+    border: 1px solid #e0e0e0;
+}
+
+.compact-table td {
+    padding: 8px 10px;
+    border: 1px solid #e0e0e0;
+    vertical-align: top;
+}
+
+.compact-table tbody tr:hover {
+    background-color: #f0f7ff;
+}
+
+.table-name-cell {
+    font-weight: 500;
+    color: #1890ff;
+}
+
+.fields-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.field-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    background-color: #e6f7ff;
+    border: 1px solid #91d5ff;
+    border-radius: 3px;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.field-name {
+    color: #1890ff;
+    font-weight: 500;
+    margin-right: 4px;
+}
+
+.field-strategy {
+    color: #666;
+    font-size: 11px;
+    font-style: italic;
+}
+
+.field-strategy.default {
+    color: #999;
+}
+
+.field-strategy:hover {
+    color: #1890ff;
+}
+
+.config-table th {
+    background-color: #f5f5f5;
+    font-weight: 600;
+    color: #333;
+    padding: 10px;
+    text-align: left;
+    border: 1px solid #e0e0e0;
+}
+
+.config-table tbody tr:hover {
+    background-color: #f0f7ff;
 }
 
