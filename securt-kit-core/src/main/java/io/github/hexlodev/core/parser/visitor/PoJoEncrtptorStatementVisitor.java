@@ -10,7 +10,7 @@ import io.github.hexlodev.core.parser.dto.FieldInfoDto;
 import io.github.hexlodev.core.parser.visitor.fieldparse.FieldParseParseTableFromItemVisitor;
 import io.github.hexlodev.core.parser.visitor.fieldparse.FieldParseParseTableSelectVisitor;
 import io.github.hexlodev.core.parser.visitor.fieldparse.PlaceholderSelectVisitor;
-import io.github.hexlodev.core.utils.CollectionUtils;
+import cn.hutool.core.collection.CollectionUtil;
 import lombok.extern.slf4j.Slf4j;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.operators.relational.ExpressionList;
@@ -228,7 +228,7 @@ public class PoJoEncrtptorStatementVisitor implements StatementVisitor {
 //            }
 //        }
 
-        if (CollectionUtils.isEmpty(columns)) {
+        if (CollectionUtil.isEmpty(columns)) {
             log.warn("【securt-kit】insert 语句未指定表字段顺序，不支持自动加解密，请规范语法 原sql:{}", insert.toString());
             return;
         }

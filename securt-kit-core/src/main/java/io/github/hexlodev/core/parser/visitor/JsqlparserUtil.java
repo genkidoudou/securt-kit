@@ -3,6 +3,7 @@ package io.github.hexlodev.core.parser.visitor;
 import io.github.hexlodev.core.parser.constant.FieldConstant;
 import io.github.hexlodev.core.parser.dto.ColumnTableDto;
 import io.github.hexlodev.core.parser.dto.FieldInfoDto;
+import cn.hutool.core.collection.CollectionUtil;
 import io.github.hexlodev.core.utils.CollectionUtils;
 import io.github.hexlodev.core.utils.StringUtils;
 import net.sf.jsqlparser.expression.BinaryExpression;
@@ -48,7 +49,7 @@ public class JsqlparserUtil {
         if (table == null) {
             layerFieldTableMap.get(String.valueOf(layer)).entrySet().forEach(f -> {
                 List<FieldInfoDto> matchFields = f.getValue().stream().filter(fi -> StringUtils.equalIgnoreFieldSymbol(fi.getColumnName(), columName)).collect(Collectors.toList());
-                if (CollectionUtils.isNotEmpty(matchFields)) {
+                if (CollectionUtil.isNotEmpty(matchFields)) {
                     //当前层的所有字段里面叫这个的，正确sql语法中只会有一个，所以get(0)
                     FieldInfoDto matchField = matchFields.get(0);
                     sourceTableName.set(matchField.getSourceTableName());
@@ -64,7 +65,7 @@ public class JsqlparserUtil {
             String columnTableName = table.getName().toLowerCase();
             List<FieldInfoDto> matchFields = Optional
                     .ofNullable(CollectionUtils.getValueIgnoreFloat(layerFieldTableMap.get(String.valueOf(layer)), columnTableName)).orElse(new HashSet<>()).stream().filter(f -> StringUtils.equalIgnoreFieldSymbol(f.getColumnName(), columName)).collect(Collectors.toList());
-            if (CollectionUtils.isNotEmpty(matchFields)) {
+            if (CollectionUtil.isNotEmpty(matchFields)) {
                 //当前层的所有字段里面叫这个的，正确sql语法中只会有一个，所以get(0)
                 FieldInfoDto matchField = matchFields.get(0);
                 sourceTableName.set(matchField.getSourceTableName());

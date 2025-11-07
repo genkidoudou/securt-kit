@@ -4,7 +4,7 @@ import io.github.hexlodev.core.parser.constant.FieldConstant;
 import io.github.hexlodev.core.parser.dto.ColumnTableDto;
 import io.github.hexlodev.core.parser.visitor.fieldparse.FieldParseParseTableSelectVisitor;
 import io.github.hexlodev.core.parser.visitor.fieldparse.PlaceholderSelectVisitor;
-import io.github.hexlodev.core.utils.CollectionUtils;
+import cn.hutool.core.collection.CollectionUtil;
 import net.sf.jsqlparser.expression.*;
 import net.sf.jsqlparser.expression.operators.arithmetic.*;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
@@ -280,7 +280,7 @@ public class PlaceholderExpressionVisitor extends PlaceholderFieldParseTable imp
             ParenthesedExpressionList<Expression> rightExpressionList = (ParenthesedExpressionList<Expression>) rightExpression;
             for (int i = 0; i < rightExpressionList.size(); i++) {
                 //找出对应的左边的表达式（语法1中左表达式集合长度肯定为1，所以get(0)，语法6这种不兼容，所以直接返回null）
-                Expression leftExp = CollectionUtils.isNotEmpty(leftExpressionList) ? leftExpressionList.get(0) : null;
+                Expression leftExp = CollectionUtil.isNotEmpty(leftExpressionList) ? leftExpressionList.get(0) : null;
                 //解析占位符
                 JsqlparserUtil.parseWhereColumTable(this.getLayer(),
                         this.getLayerFieldTableMap(),
@@ -394,7 +394,7 @@ public class PlaceholderExpressionVisitor extends PlaceholderFieldParseTable imp
         Expression upstreamExpression = caseExpression.getSwitchExpression();
 
         //处理when条件
-        if (CollectionUtils.isNotEmpty(caseExpression.getWhenClauses())) {
+        if (CollectionUtil.isNotEmpty(caseExpression.getWhenClauses())) {
             for (WhenClause whenClause : caseExpression.getWhenClauses()) {
                 //这里处理的逻辑在下面的public void visit(WhenClause whenClause)会处理
                 PlaceholderExpressionVisitor placeholderWhereExpressionVisitor = PlaceholderExpressionVisitor.newInstanceCurLayer(this, upstreamExpression);

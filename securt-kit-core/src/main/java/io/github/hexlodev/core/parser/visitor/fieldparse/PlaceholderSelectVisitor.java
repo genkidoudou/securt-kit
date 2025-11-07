@@ -6,7 +6,7 @@ import io.github.hexlodev.core.parser.visitor.BaseFieldParseTable;
 import io.github.hexlodev.core.parser.visitor.JsqlparserUtil;
 import io.github.hexlodev.core.parser.visitor.PlaceholderExpressionVisitor;
 import io.github.hexlodev.core.parser.visitor.PlaceholderFieldParseTable;
-import io.github.hexlodev.core.utils.CollectionUtils;
+import cn.hutool.core.collection.CollectionUtil;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.operators.relational.ExpressionList;
 import net.sf.jsqlparser.statement.select.*;
@@ -190,7 +190,7 @@ public class PlaceholderSelectVisitor extends PlaceholderFieldParseTable impleme
 
         //4.解析join
         List<Join> joins = plainSelect.getJoins();
-        if (CollectionUtils.isNotEmpty(joins)) {
+        if (CollectionUtil.isNotEmpty(joins)) {
             PlaceholderSelectFromItemVisitor phFromItemVisitor = PlaceholderSelectFromItemVisitor.newInstanceCurLayer(this);
             for (Join join : joins) {
                 //4.1解析join的表

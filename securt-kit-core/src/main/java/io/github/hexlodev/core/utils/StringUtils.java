@@ -1,27 +1,27 @@
 package io.github.hexlodev.core.utils;
 
-
+import cn.hutool.core.util.StrUtil;
 import io.github.hexlodev.core.parser.constant.SymbolConstant;
 
 /**
- * 字符串工具类
- * 提供字符串相关的常用操作方法，包括空值判断、字符串比较、字符去除等功能
+ * 字符串工具类（自定义扩展）
+ * <p>
+ * 注意：本类仅包含项目特定的自定义方法。对于通用的字符串操作（如 isBlank、equalsIgnoreCase），
+ * 请使用 {@link cn.hutool.core.util.StrUtil}。
+ * </p>
+ * <p>
+ * 已迁移到 Hutool 的方法：
+ * <ul>
+ *   <li>{@code isBlank(String)} → {@link cn.hutool.core.util.StrUtil#isBlank}</li>
+ *   <li>{@code equalCaseInsensitive(String, String)} → {@link cn.hutool.core.util.StrUtil#equalsIgnoreCase}</li>
+ * </ul>
+ * </p>
  * 
  * @author chu7
  * @date 2025/5/26 11:28
+ * @since 1.0.0
  */
 public class StringUtils {
-    
-    /**
-     * 判断字符串是否为空
-     * 包括null、空字符串和只包含空白字符的字符串
-     * 
-     * @param str 待检查的字符串
-     * @return 如果字符串为null、空字符串或只包含空白字符则返回true，否则返回false
-     */
-    public static boolean isBlank(String str) {
-        return str == null || str.trim().isEmpty();
-    }
     /**
      * 去除字符串开头和结尾的指定字符
      * 支持重复去除，例如去除字符串"abcabc"开头和结尾的"abc"会得到空字符串
@@ -60,20 +60,6 @@ public class StringUtils {
 
         return (start > 0 || end < str1Len) ? str.substring(start, end) : str;
     }
-    /**
-     * 忽略大小写比较两个字符串是否相等
-     * 如果任一字符串为空（null或空白），则返回false
-     * 
-     * @param a 第一个字符串
-     * @param b 第二个字符串
-     * @return 如果两个字符串忽略大小写后相等则返回true，否则返回false
-     */
-    public static boolean equalCaseInsensitive(String a, String b) {
-        if (isBlank(a) || isBlank(b)) {
-            return false;
-        }
-        return a.toLowerCase().equals(b.toLowerCase());
-    }
 
     /**
      * 忽略大小写，忽略开头结尾的反引号(`)和双引号(")判断两个字段是否相等
@@ -84,12 +70,12 @@ public class StringUtils {
      * @return 如果去除符号并忽略大小写后两个字段名相等则返回true，否则返回false
      */
     public static boolean equalIgnoreFieldSymbol(String a, String b) {
-        if (isBlank(a) || isBlank(b)) {
+        if (StrUtil.isBlank(a) || StrUtil.isBlank(b)) {
             return false;
         }
         //去掉首尾的 ` 、 "
         String clearA = trim(trim(a, SymbolConstant.FLOAT), SymbolConstant.DOUBLE_QUOTES);
         String clearB = trim(trim(b, SymbolConstant.FLOAT), SymbolConstant.DOUBLE_QUOTES);
-        return equalCaseInsensitive(clearA, clearB);
+        return StrUtil.equalsIgnoreCase(clearA, clearB);
     }
 }

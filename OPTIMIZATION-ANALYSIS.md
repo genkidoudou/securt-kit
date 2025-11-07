@@ -1,367 +1,570 @@
-# Securt-Kit 项目优化分析报告
+# 项目优化分析报告
 
-> 生成时间：2025-01-XX  
-> 分析范围：securt-kit-core 模块
+## 📋 概述
 
-## 📊 优化概览
+本报告对 `securt-kit-core`、`securt-kit-starter`、`securt-kit-ui` 三个模块进行了全面分析，识别出可以优化的地方，并提供了具体的优化建议。
 
-本报告分析了项目中可以进一步优化的地方，按优先级和类别分类。
-
----
-
-## 🔴 高优先级优化
-
-### 1. Stream 操作性能优化
-
-**问题位置**：
-- `SimpleInterceptorPreparedStatement.java:364-365` - 每次 `setString` 调用都创建 Stream
-- `ResultSetDecryptingProxy.java:138` - 每次解密都遍历整个字段列表
-
-**问题描述**：
-```java
-// 当前实现
-first = pair.getKey().values().stream()
-    .filter(a -> a.getInsertFieldIndex() == parameterIndex)
-    .findFirst();
-```
-
-在高频调用的场景下，每次参数设置都要创建 Stream 并遍历，性能开销较大。
-
-**优化方案**：
-1. **建立参数索引到字段的映射**：在初始化时构建 `Map<Integer, ColumnTableDto>`，直接 O(1) 查找
-2. **字段列表优化**：对于 ResultSet 解密，可以建立 `Map<String, FieldEncryptorInfoDto>` 以列名为 key
-
-**预期收益**：
-- 减少 Stream 创建开销（避免每次调用都创建）
-- 从 O(n) 查找优化到 O(1) 查找
-- 在高并发场景下显著提升性能
-
-**代码位置**：
-- `SimpleInterceptorPreparedStatement.java`: `setString` 方法
-- `ResultSetDecryptingProxy.java`: `maybeDecryptWithInfo` 方法
+**分析日期**: 2025-11-07  
+**分析范围**: Core、Starter、UI 三个模块
 
 ---
 
-### 2. 清理注释代码和未使用的方法
+## 🔍 Core 模块优化建议
 
-**问题位置**：
-- `SimpleInterceptorPreparedStatement.java:367-375` - 注释掉的代码
-- `ResultSetDecryptingProxy.java:157-205` - `maybeDecrypt` 方法似乎未被使用
+### 1. 静态方法过多，可改为实例方法
 
 **问题描述**：
-- 注释掉的代码增加了维护成本
-- 未使用的方法增加了代码复杂度
+- `TableCache`、`ConfigInitializer`、`SqlParseCache`、`SecurtkitUtils` 等类大量使用静态方法
+- 静态方法不利于测试、依赖注入和扩展
 
-**优化方案**：
-1. 删除注释掉的代码块
-2. 如果 `maybeDecrypt` 方法确实未使用，考虑删除或重构
-3. 如果未来需要，可以通过 Git 历史找回
+**影响**：
+- 难以进行单元测试（无法 mock）
+- 无法使用依赖注入
+- 不利于多实例场景
 
-**预期收益**：
-- 代码更清晰，减少维护成本
-- 减少代码体积
-
----
-
-### 3. 改进异常处理中的静默吞异常
-
-**问题位置**：
-- `ResultSetDecryptingProxy.java:84-86` - `catch (Throwable ignore)`
-- `ResultSetDecryptingProxy.java:177-178` - `catch (Throwable ignore)`
-
-**问题描述**：
+**优化建议**：
 ```java
-} catch (Throwable ignore) {
-    // 解密失败不影响读取
-}
-```
+// 当前：静态方法
+public static void init(FieldEncryptorProperties properties) { ... }
 
-完全忽略异常可能导致问题难以排查。
-
-**优化方案**：
-```java
-} catch (Throwable e) {
-    if (log.isDebugEnabled()) {
-        log.debug("Failed to decrypt field, using original value [column={}]", 
-                columnLabel, e);
-    }
-    return result;
-}
-```
-
-**预期收益**：
-- 在调试模式下可以发现问题
-- 不影响正常运行，但提供调试信息
-
----
-
-## 🟡 中优先级优化
-
-### 4. 对象创建优化
-
-**问题位置**：
-- `ResultSetDecryptingProxy.java:41` - 每次包装都创建新的 HashSet
-- `SimpleInterceptorPreparedStatement.java` - 多个地方创建临时对象
-
-**问题描述**：
-```java
-this.tables = tables == null ? new HashSet<>() : new HashSet<>(tables);
-```
-
-如果 `tables` 已经是不可变集合，可以避免复制。
-
-**优化方案**：
-1. 如果 `tables` 来自 `TableCache.getTables()`（已经是不可变集合），直接使用
-2. 使用 `Collections.emptySet()` 替代 `new HashSet<>()`
-3. 对于频繁创建的小对象，考虑对象池
-
-**预期收益**：
-- 减少内存分配
-- 降低 GC 压力
-
----
-
-### 5. 实现真正的 RETRY 策略
-
-**问题位置**：
-- `EncryptionHandler.java:199-210` - RETRY 策略当前只是降级处理
-
-**问题描述**：
-```java
-case RETRY:
-    // TODO: 未来版本可以添加真正的重试逻辑
-    log.warn("{} failed for {}, retrying once...", operation, context);
-    return value; // 直接返回原值，没有真正重试
-```
-
-**优化方案**：
-```java
-case RETRY:
-    int maxRetries = 3;
-    int retryCount = 0;
-    Exception lastException = e;
+// 优化：实例方法 + 单例模式
+public class ConfigInitializer {
+    private static final ConfigInitializer INSTANCE = new ConfigInitializer();
     
-    while (retryCount < maxRetries) {
+    public static ConfigInitializer getInstance() {
+        return INSTANCE;
+    }
+    
+    public void initialize(FieldEncryptorProperties properties) { ... }
+}
+```
+
+**优先级**: ⭐⭐⭐ (高)
+
+---
+
+### 2. SecurtkitUtils 类过大，需要拆分
+
+**问题描述**：
+- `SecurtkitUtils` 类包含多个职责：
+  - SQL 解析入口
+  - 占位符替换
+  - SQL 规范化
+  - 缓存管理（通过 SqlParseCache）
+
+**当前代码行数**: 约 468 行
+
+**优化建议**：
+```java
+// 拆分为多个类：
+// 1. SqlParser - SQL 解析核心逻辑
+public class SqlParser {
+    public Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> parse(String sql) { ... }
+}
+
+// 2. PlaceholderReplacer - 占位符替换
+public class PlaceholderReplacer {
+    public String replacePlaceholders(String sql) { ... }
+}
+
+// 3. SqlNormalizer - SQL 规范化
+public class SqlNormalizer {
+    public String normalize(String sql) { ... }
+}
+
+// 4. SecurtkitUtils - 门面类（保持向后兼容）
+public class SecurtkitUtils {
+    private static final SqlParser parser = new SqlParser();
+    private static final PlaceholderReplacer replacer = new PlaceholderReplacer();
+    private static final SqlNormalizer normalizer = new SqlNormalizer();
+    
+    public static Pair<...> parseSql(String sql, String datasourceId) {
+        // 委托给各个组件
+    }
+}
+```
+
+**优先级**: ⭐⭐⭐ (高)
+
+---
+
+### 3. 工具类与 Hutool 重复
+
+**问题描述**：
+- `StringUtils`、`CollectionUtils` 与 Hutool 提供的工具类功能重复
+- 项目已依赖 Hutool，但未充分利用
+
+**优化建议**：
+```java
+// 当前：自定义工具类
+public class StringUtils {
+    public static boolean isBlank(String str) { ... }
+}
+
+// 优化：直接使用 Hutool
+import cn.hutool.core.util.StrUtil;
+
+// 替换所有 StringUtils.isBlank() 为 StrUtil.isBlank()
+// 替换所有 CollectionUtils.isEmpty() 为 CollectionUtil.isEmpty()
+```
+
+**优先级**: ⭐⭐ (中)
+
+---
+
+### 4. 异常处理可以更细化
+
+**问题描述**：
+- 异常类型较多，但处理逻辑可以更统一
+- 某些异常缺少上下文信息
+
+**优化建议**：
+```java
+// 1. 统一异常基类
+public abstract class SecurtKitException extends RuntimeException {
+    private final String errorCode;
+    private final Map<String, Object> context;
+    
+    public SecurtKitException(String errorCode, String message, Map<String, Object> context) {
+        super(message);
+        this.errorCode = errorCode;
+        this.context = context != null ? context : new HashMap<>();
+    }
+}
+
+// 2. 具体异常类
+public class EncryptionException extends SecurtKitException {
+    public EncryptionException(String message, String tableName, String fieldName) {
+        super("ENCRYPTION_FAILED", message, 
+              Map.of("tableName", tableName, "fieldName", fieldName));
+    }
+}
+
+// 3. 异常处理器增强
+public class EncryptionHandler {
+    public static <T> T handleException(Supplier<T> operation, 
+                                        String tableName, 
+                                        String fieldName,
+                                        FailurePolicy policy) {
         try {
-            // 重新执行加密/解密操作
-            if (isEncrypt) {
-                return encryptor.get();
-            } else {
-                return decryptor.get();
-            }
-        } catch (Exception retryEx) {
-            lastException = retryEx;
-            retryCount++;
-            if (retryCount < maxRetries) {
-                // 指数退避
-                try {
-                    Thread.sleep((long) Math.pow(2, retryCount) * 10);
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    break;
-                }
-            }
+            return operation.get();
+        } catch (Exception e) {
+            EncryptionException ex = new EncryptionException(
+                e.getMessage(), tableName, fieldName);
+            return handleFailure(ex, policy);
         }
     }
-    // 重试失败，降级处理
-    log.warn("Retry failed after {} attempts for {}", retryCount, context);
-    return handleFailure(value, tableName, fieldName, lastException, 
-                        FailurePolicy.FALLBACK, isEncrypt);
+}
 ```
 
-**预期收益**：
-- 提供真正的重试机制，提高成功率
-- 支持指数退避，避免频繁重试
+**优先级**: ⭐⭐ (中)
 
 ---
 
-### 6. 日志安全性增强
-
-**问题位置**：
-- 所有拦截器类的日志输出
+### 5. 日志记录可以进一步优化
 
 **问题描述**：
-虽然 SQL 预览已截断到 100 字符，但仍可能包含敏感信息（如部分加密值）。
+- 已统一使用 `SqlLogger`，但可以添加更多上下文信息
+- 某些关键操作缺少日志
 
-**优化方案**：
-1. 添加日志脱敏配置
-2. 对于包含加密字段的 SQL，进一步脱敏
-3. 提供配置选项控制日志详细程度
+**优化建议**：
+```java
+// 1. 添加结构化日志
+public class SqlLogger {
+    public static void logEncryption(String tableName, String fieldName, 
+                                     String datasourceId, 
+                                     int originalLength, int encryptedLength,
+                                     long duration) {
+        if (log.isDebugEnabled()) {
+            log.debug("{} [ENCRYPTION] table={}, field={}, datasource={}, " +
+                     "originalLength={}, encryptedLength={}, duration={}ms",
+                     LOG_PREFIX, tableName, fieldName, datasourceId,
+                     originalLength, encryptedLength, duration);
+        }
+    }
+}
 
-**预期收益**：
-- 提升安全性
-- 符合数据保护规范
+// 2. 添加性能监控日志
+public class PerformanceLogger {
+    public static void logSlowQuery(String sql, long duration, int threshold) {
+        if (duration > threshold) {
+            log.warn("{} [SLOW_QUERY] sql={}, duration={}ms, threshold={}ms",
+                    LOG_PREFIX, sql, duration, threshold);
+        }
+    }
+}
+```
+
+**优先级**: ⭐ (低)
 
 ---
 
-## 🟢 低优先级优化
+## 🔍 Starter 模块优化建议
 
-### 7. 缓存预热机制
+### 1. 自动配置可以更完善
 
 **问题描述**：
-SQL 解析缓存和策略缓存都是懒加载，首次请求会有延迟。
+- `SecurtKitAutoConfiguration` 类非常简单，只有配置属性启用
+- 缺少条件配置和 Bean 创建逻辑
 
-**优化方案**：
-1. 在应用启动时预热常用 SQL 的解析缓存
-2. 预加载所有配置的加密策略实例
-3. 提供配置选项控制是否启用预热
+**优化建议**：
+```java
+@Configuration
+@ConditionalOnProperty(prefix = "securtkit.encryptor", name = "enable", havingValue = "true", matchIfMissing = true)
+@EnableConfigurationProperties(FieldEncryptorProperties.class)
+@AutoConfigureAfter(DataSourceAutoConfiguration.class)
+public class SecurtKitAutoConfiguration {
+    
+    @Bean
+    @ConditionalOnMissingBean
+    public ConfigInitializer configInitializer(FieldEncryptorProperties properties) {
+        return ConfigInitializer.getInstance();
+    }
+    
+    @Bean
+    @ConditionalOnMissingBean
+    public DataSourceConfigManager dataSourceConfigManager(FieldEncryptorProperties properties) {
+        return new DataSourceConfigManager(properties);
+    }
+    
+    @Bean
+    @ConditionalOnProperty(prefix = "securtkit.encryptor.sql-parse-cache", name = "enable", havingValue = "true")
+    public SqlParseCache sqlParseCache(FieldEncryptorProperties properties) {
+        // 初始化 SQL 解析缓存
+        return SqlParseCache.getInstance();
+    }
+}
+```
 
-**预期收益**：
-- 减少首次请求延迟
-- 提升用户体验
+**优先级**: ⭐⭐ (中)
 
 ---
 
-### 8. 批量操作优化
+### 2. 添加配置验证
 
 **问题描述**：
-批量 INSERT/UPDATE 时，每个字段都单独加密，可以考虑并行处理。
+- 配置属性缺少验证逻辑
+- 配置错误时缺少明确的错误提示
 
-**优化方案**：
-1. 对于批量操作，收集所有需要加密的值
-2. 使用并行流或线程池并行加密
-3. 注意线程安全
+**优化建议**：
+```java
+@ConfigurationProperties(prefix = "securtkit.encryptor")
+@Validated
+public class FieldEncryptorProperties {
+    
+    @NotNull(message = "enable 属性不能为 null")
+    private Boolean enable = true;
+    
+    @Valid
+    @NotEmpty(message = "tables 配置不能为空")
+    private List<TableConfig> tables;
+    
+    // 自定义验证方法
+    @PostConstruct
+    public void validate() {
+        if (enable && (tables == null || tables.isEmpty())) {
+            throw new ConfigurationException(
+                "启用加密时，tables 配置不能为空");
+        }
+    }
+}
+```
 
-**预期收益**：
-- 提升批量操作性能
-- 充分利用多核 CPU
+**优先级**: ⭐⭐ (中)
 
 ---
 
-### 9. 代码重复消除
+## 🔍 UI 模块优化建议
 
-**问题位置**：
-- `SimpleInterceptorStatement.java` 和 `SimpleInterceptorPreparedStatement.java` 中有相似的日志代码
-- `ResultSetDecryptingProxy.java` 中有两个相似的解密方法
-
-**优化方案**：
-1. 提取公共的日志工具方法
-2. 统一解密逻辑，避免重复代码
-
-**预期收益**：
-- 提升代码可维护性
-- 减少代码重复
-
----
-
-### 10. 添加性能监控指标
+### 1. MonitorController 类过大，需要拆分
 
 **问题描述**：
-当前缺少性能监控指标，无法了解加密/解密操作的性能影响。
+- `MonitorController` 类包含 1300+ 行代码
+- 包含多个职责：
+  - 登录管理
+  - 加密/解密接口
+  - SQL 解析接口
+  - SQL 加密接口
+  - SQL 查询接口
+  - 配置信息接口
 
-**优化方案**：
-1. 添加 Micrometer 或类似的指标收集
-2. 监控加密/解密耗时、缓存命中率、异常率等
-3. 提供 JMX 接口查看指标
+**优化建议**：
+```java
+// 1. 拆分 Controller
+@RestController
+@RequestMapping("${securtkit.monitor.path:/monitor}/api/crypto")
+public class CryptoController {
+    // 加密/解密相关接口
+}
 
-**预期收益**：
-- 便于性能分析和优化
-- 及时发现性能问题
+@RestController
+@RequestMapping("${securtkit.monitor.path:/monitor}/api/sql")
+public class SqlController {
+    // SQL 解析、加密、查询相关接口
+}
+
+@RestController
+@RequestMapping("${securtkit.monitor.path:/monitor}/api/config")
+public class ConfigController {
+    // 配置信息相关接口
+}
+
+// 2. 提取 Service 层
+@Service
+public class CryptoService {
+    public EncryptResponse encrypt(EncryptRequest request) { ... }
+    public DecryptResponse decrypt(DecryptRequest request) { ... }
+}
+
+@Service
+public class SqlService {
+    public ParseSqlResponse parseSql(ParseSqlRequest request) { ... }
+    public EncryptSqlResponse encryptSql(EncryptSqlRequest request) { ... }
+    public QuerySqlResponse querySql(QuerySqlRequest request) { ... }
+}
+
+// 3. 提取公共逻辑
+@Component
+public class MonitorAuthService {
+    public boolean checkLogin(HttpSession session) { ... }
+    public void setLogin(HttpSession session) { ... }
+    public void clearLogin(HttpSession session) { ... }
+}
+```
+
+**优先级**: ⭐⭐⭐ (高)
 
 ---
 
-### 11. 配置热更新支持
+### 2. 代码重复：登录检查
 
 **问题描述**：
-当前配置变更需要重启应用才能生效。
+- 每个接口方法都重复登录检查逻辑
+- 可以使用 AOP 或拦截器统一处理
 
-**优化方案**：
-1. 支持配置热更新（通过配置中心或 API）
-2. 配置变更时自动刷新缓存
-3. 提供配置变更通知机制
+**优化建议**：
+```java
+// 1. 使用 AOP
+@Aspect
+@Component
+public class MonitorAuthAspect {
+    
+    @Autowired
+    private MonitorAuthService authService;
+    
+    @Around("@annotation(RequireLogin)")
+    public Object checkLogin(ProceedingJoinPoint joinPoint) throws Throwable {
+        HttpSession session = getSession(joinPoint);
+        if (!authService.checkLogin(session)) {
+            return ApiResponse.error(401, "未登录");
+        }
+        return joinPoint.proceed();
+    }
+}
 
-**预期收益**：
-- 提升运维灵活性
-- 减少停机时间
+// 2. 使用注解
+@Target(ElementType.METHOD)
+@Retention(RetentionPolicy.RUNTIME)
+public @interface RequireLogin {
+}
+
+// 3. 使用方式
+@PostMapping("/api/encrypt.json")
+@RequireLogin
+public ApiResponse<EncryptResponse> encrypt(@Valid @RequestBody EncryptRequest request) {
+    // 不需要手动检查登录
+}
+```
+
+**优先级**: ⭐⭐⭐ (高)
 
 ---
 
-### 12. 单元测试覆盖率提升
+### 3. 异常处理可以更统一
 
 **问题描述**：
-部分关键代码可能缺少单元测试。
+- 每个接口方法都有 try-catch，代码重复
+- 异常处理逻辑不统一
 
-**优化方案**：
-1. 为关键路径添加单元测试
-2. 使用覆盖率工具（如 JaCoCo）检查覆盖率
-3. 目标覆盖率：80%+
+**优化建议**：
+```java
+// 1. 使用全局异常处理器
+@RestControllerAdvice
+public class MonitorExceptionHandler {
+    
+    @ExceptionHandler(IllegalArgumentException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ApiResponse<?> handleIllegalArgument(IllegalArgumentException e) {
+        log.warn("参数错误: {}", e.getMessage());
+        return ApiResponse.error(400, "参数错误: " + e.getMessage());
+    }
+    
+    @ExceptionHandler(SQLException.class)
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+    public ApiResponse<?> handleSqlException(SQLException e) {
+        log.error("SQL 执行失败", e);
+        return ApiResponse.error(500, "SQL 执行失败: " + e.getMessage());
+    }
+    
+    @ExceptionHandler(Exception.class)
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+    public ApiResponse<?> handleException(Exception e) {
+        log.error("未知错误", e);
+        return ApiResponse.error(500, "系统错误: " + e.getMessage());
+    }
+}
 
-**预期收益**：
-- 提升代码质量
-- 减少回归问题
+// 2. Controller 方法简化
+@PostMapping("/api/encrypt.json")
+@RequireLogin
+public ApiResponse<EncryptResponse> encrypt(@Valid @RequestBody EncryptRequest request) {
+    // 不需要 try-catch，由全局异常处理器处理
+    EncryptResponse response = cryptoService.encrypt(request);
+    return ApiResponse.success(response);
+}
+```
+
+**优先级**: ⭐⭐⭐ (高)
 
 ---
 
-## 📝 代码质量改进
-
-### 13. 改进 JavaDoc 注释
+### 4. SQL 查询逻辑可以提取
 
 **问题描述**：
-部分方法缺少完整的 JavaDoc，特别是参数说明和返回值说明。
+- SQL 查询逻辑在 Controller 中，应该提取到 Service 层
+- 查询逻辑可以复用
 
-**优化方案**：
-1. 为所有公共方法添加完整的 JavaDoc
-2. 添加使用示例
-3. 标注可能的异常
+**优化建议**：
+```java
+@Service
+public class SqlQueryService {
+    
+    @Autowired(required = false)
+    private DataSource dataSource;
+    
+    public QuerySqlResponse querySql(String sql, String datasourceId, 
+                                     int pageSize, int pageNum) {
+        // 1. 验证 SQL
+        SqlValidator.ValidationResult validation = SqlValidator.validateSelectSql(sql);
+        if (!validation.isValid()) {
+            throw new IllegalArgumentException(validation.getErrorMessage());
+        }
+        
+        // 2. 执行查询
+        try (Connection conn = getConnection(datasourceId);
+             PreparedStatement stmt = conn.prepareStatement(sql);
+             ResultSet rs = stmt.executeQuery()) {
+            
+            // 3. 处理结果
+            return buildResponse(rs, pageSize, pageNum);
+        }
+    }
+    
+    private Connection getConnection(String datasourceId) {
+        // 根据 datasourceId 获取对应的连接
+    }
+    
+    private QuerySqlResponse buildResponse(ResultSet rs, int pageSize, int pageNum) {
+        // 构建响应对象
+    }
+}
+```
+
+**优先级**: ⭐⭐ (中)
 
 ---
 
-### 14. 添加空值检查注解
+### 5. 前端代码可以优化
 
 **问题描述**：
-可以使用 `@Nullable` 和 `@NonNull` 注解明确参数和返回值的空值语义。
+- `app.js` 文件较大（1100+ 行）
+- 可以拆分为多个模块
 
-**优化方案**：
-1. 使用 JSR-305 注解（`javax.annotation.Nullable`）
-2. 或使用 JetBrains 注解（`org.jetbrains.annotations.NotNull`）
+**优化建议**：
+```javascript
+// 1. 拆分为多个模块
+// datasource-manager.js
+export class DatasourceManager {
+    // 数据源管理逻辑
+}
 
----
+// crypto-service.js
+export class CryptoService {
+    // 加密解密逻辑
+}
 
-## 🎯 优化优先级建议
+// sql-service.js
+export class SqlService {
+    // SQL 相关逻辑
+}
 
-### 立即优化（高优先级）
-1. ✅ Stream 操作性能优化（建立索引映射）
-2. ✅ 清理注释代码和未使用方法
-3. ✅ 改进异常处理中的静默吞异常
+// config-service.js
+export class ConfigService {
+    // 配置信息逻辑
+}
 
-### 近期优化（中优先级）
-4. 对象创建优化
-5. 实现真正的 RETRY 策略
-6. 日志安全性增强
+// app.js - 主入口
+import { DatasourceManager } from './datasource-manager.js';
+import { CryptoService } from './crypto-service.js';
+// ...
+```
 
-### 长期优化（低优先级）
-7. 缓存预热机制
-8. 批量操作优化
-9. 代码重复消除
-10. 添加性能监控指标
-
----
-
-## 📊 性能影响评估
-
-| 优化项 | 性能提升 | 实现难度 | 优先级 |
-|--------|---------|---------|--------|
-| Stream 操作优化 | ⭐⭐⭐⭐⭐ | 中 | 高 |
-| 对象创建优化 | ⭐⭐⭐ | 低 | 中 |
-| RETRY 策略实现 | ⭐⭐ | 中 | 中 |
-| 批量操作优化 | ⭐⭐⭐⭐ | 高 | 低 |
-| 缓存预热 | ⭐⭐ | 低 | 低 |
+**优先级**: ⭐ (低)
 
 ---
 
-## 🔗 相关文档
+## 📊 优化优先级总结
 
-- [ARCHITECTURE.md](./ARCHITECTURE.md) - 架构文档
-- [securt-kit-core/USAGE.md](./securt-kit-core/USAGE.md) - 使用文档
+### 高优先级 (⭐⭐⭐)
+
+1. **Core**: 静态方法改为实例方法
+2. **Core**: 拆分 `SecurtkitUtils` 类
+3. **UI**: 拆分 `MonitorController` 类
+4. **UI**: 使用 AOP 统一登录检查
+5. **UI**: 统一异常处理
+
+### 中优先级 (⭐⭐)
+
+1. **Core**: 使用 Hutool 替代自定义工具类
+2. **Core**: 细化异常处理
+3. **Starter**: 完善自动配置
+4. **Starter**: 添加配置验证
+5. **UI**: 提取 SQL 查询逻辑到 Service 层
+
+### 低优先级 (⭐)
+
+1. **Core**: 进一步优化日志记录
+2. **UI**: 前端代码模块化
 
 ---
 
-## 📌 总结
+## 🎯 实施建议
 
-本次分析发现了 **14 个优化点**，其中：
-- **高优先级**：3 项
-- **中优先级**：3 项
-- **低优先级**：8 项
+### 第一阶段（立即实施）
+1. UI 模块：拆分 `MonitorController`，提取 Service 层
+2. UI 模块：使用 AOP 统一登录检查
+3. UI 模块：统一异常处理
 
-建议优先实施高优先级的优化，特别是 **Stream 操作性能优化**，这将显著提升高频调用场景下的性能。
+### 第二阶段（近期实施）
+1. Core 模块：拆分 `SecurtkitUtils` 类
+2. Core 模块：使用 Hutool 替代自定义工具类
+3. Starter 模块：完善自动配置
 
+### 第三阶段（长期规划）
+1. Core 模块：静态方法改为实例方法
+2. Core 模块：细化异常处理
+3. UI 模块：前端代码模块化
+
+---
+
+## 📝 注意事项
+
+1. **向后兼容性**: 所有优化都要保持向后兼容，特别是公共 API
+2. **测试覆盖**: 优化后需要补充单元测试和集成测试
+3. **文档更新**: 优化后需要更新相关文档
+4. **性能影响**: 优化时要考虑性能影响，避免引入性能问题
+
+---
+
+**报告生成时间**: 2025-11-07  
+**下次审查时间**: 建议 1 个月后再次审查
