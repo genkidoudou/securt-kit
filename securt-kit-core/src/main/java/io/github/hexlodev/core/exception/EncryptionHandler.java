@@ -160,14 +160,19 @@ public class EncryptionHandler {
 
     /**
      * 处理失败情况
+     * <p>
+     * 根据失败策略统一处理加密/解密失败的情况，提供一致的异常信息和日志格式。
+     * </p>
      *
      * @param value      原始值（加密时为明文，解密时为密文）
-     * @param tableName  表名
-     * @param fieldName  字段名
-     * @param e          异常
-     * @param policy     失败策略
+     * @param tableName  表名，不能为 null
+     * @param fieldName  字段名，不能为 null
+     * @param e          异常，不能为 null
+     * @param policy     失败策略，不能为 null
      * @param isEncrypt  是否为加密操作（true=加密，false=解密）
-     * @return 根据策略返回的值
+     * @return 根据策略返回的值（FALLBACK 返回原值，SKIP 返回 null）
+     * @throws EncryptionException 如果策略为 FAIL_FAST 且是加密操作
+     * @throws DecryptionException 如果策略为 FAIL_FAST 且是解密操作
      */
     private static String handleFailure(
             String value, String tableName, String fieldName,
@@ -175,10 +180,14 @@ public class EncryptionHandler {
         
         String operation = isEncrypt ? "encryption" : "decryption";
         String context = String.format("table=%s, field=%s", tableName, fieldName);
+        int valueLength = value != null ? value.length() : 0;
+        String errorClass = e.getClass().getSimpleName();
+        String errorMessage = e.getMessage();
 
         switch (policy) {
             case FAIL_FAST:
-                String errorMsg = String.format("%s failed for %s", operation, context);
+                // 快速失败：抛出异常，中断操作
+                String errorMsg = String.format("%s failed for %s: %s", operation, context, errorMessage);
                 if (isEncrypt) {
                     throw new EncryptionException(errorMsg, e, tableName, fieldName, value);
                 } else {
@@ -186,42 +195,43 @@ public class EncryptionHandler {
                 }
 
             case FALLBACK:
-                log.warn("{} failed for {}, using original value [valueLength={}, errorClass={}]. Error: {}", 
-                        operation, context,
-                        value != null ? value.length() : 0,
-                        e.getClass().getSimpleName(),
-                        e.getMessage(), e);
+                // 降级处理：使用原始值，记录警告日志
+                log.warn("[{} FAILED] {} for {}, using original value [valueLength={}, errorClass={}]. Error: {}", 
+                        operation.toUpperCase(), operation, context, valueLength, errorClass, errorMessage, e);
                 if (log.isDebugEnabled()) {
-                    log.debug("Full exception stack for {} failed on {}: {}", operation, context, e);
+                    log.debug("[{} FAILED] Full exception stack for {} on {}: {}", 
+                            operation.toUpperCase(), operation, context, e);
                 }
                 return value;
 
             case RETRY:
-                // 当前实现：重试一次后降级处理
-                // TODO: 未来版本可以添加真正的重试逻辑（如指数退避、最大重试次数等）
-                log.warn("{} failed for {}, retrying once...", operation, context);
+                // 重试：当前实现为降级处理，未来可以添加真正的重试逻辑
+                log.warn("[{} RETRY] {} failed for {}, retrying once...", 
+                        operation.toUpperCase(), operation, context);
                 try {
-                    // 这里可以添加重试逻辑，目前简单返回原值
-                    // 未来可以：重新执行加密/解密操作，支持指数退避等
+                    // TODO: 未来版本可以添加真正的重试逻辑（如指数退避、最大重试次数等）
+                    // 当前实现：简单返回原值
                     return value;
                 } catch (Exception retryEx) {
-                    log.warn("Retry failed for {}, falling back to original value", context);
+                    log.warn("[{} RETRY FAILED] Retry failed for {}, falling back to original value. Error: {}", 
+                            operation.toUpperCase(), context, retryEx.getMessage(), retryEx);
                     return value;
                 }
 
             case SKIP:
-                log.warn("{} failed for {}, skipping field [valueLength={}, errorClass={}]. Error: {}", 
-                        operation, context,
-                        value != null ? value.length() : 0,
-                        e.getClass().getSimpleName(),
-                        e.getMessage(), e);
+                // 跳过：返回 null，跳过该字段
+                log.warn("[{} SKIP] {} failed for {}, skipping field [valueLength={}, errorClass={}]. Error: {}", 
+                        operation.toUpperCase(), operation, context, valueLength, errorClass, errorMessage, e);
                 if (log.isDebugEnabled()) {
-                    log.debug("Full exception stack for {} failed on {}: {}", operation, context, e);
+                    log.debug("[{} SKIP] Full exception stack for {} on {}: {}", 
+                            operation.toUpperCase(), operation, context, e);
                 }
                 return null;
 
             default:
-                log.warn("Unknown failure policy: {}, using FALLBACK", policy);
+                // 未知策略：使用 FALLBACK 作为默认策略
+                log.warn("[{} UNKNOWN POLICY] Unknown failure policy: {}, using FALLBACK", 
+                        operation.toUpperCase(), policy);
                 return value;
         }
     }

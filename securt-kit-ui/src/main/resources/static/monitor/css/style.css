@@ -70,6 +70,62 @@ body {
     font-family: monospace;
 }
 
+/* 数据源单选框按钮组样式 */
+.datasource-radio-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.datasource-radio-item {
+    position: relative;
+    display: inline-block;
+    cursor: pointer;
+}
+
+.datasource-radio-item input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    margin: 0;
+    padding: 0;
+    pointer-events: none;
+}
+
+.datasource-radio-item label {
+    display: block;
+    padding: 8px 16px;
+    border: 2px solid #ddd;
+    border-radius: 4px;
+    background-color: #fff;
+    color: #333;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-weight: normal;
+    user-select: none;
+    text-align: center;
+    min-width: 80px;
+}
+
+.datasource-radio-item label:hover {
+    border-color: #1890ff;
+    background-color: #f0f7ff;
+}
+
+.datasource-radio-item input[type="radio"]:checked + label {
+    border-color: #1890ff;
+    background-color: #1890ff;
+    color: #fff;
+    font-weight: 500;
+}
+
+.datasource-radio-item input[type="radio"]:focus + label {
+    outline: 2px solid #40a9ff;
+    outline-offset: 2px;
+}
+
 /* 按钮样式 */
 .btn {
     padding: 10px 20px;

@@ -21,11 +21,20 @@ const datasourceManager = {
      */
     async fetchDatasources() {
         try {
+            console.log('开始获取数据源列表...');
             const response = await utils.request(`${CONFIG.apiPath}/datasources.json`);
+            console.log('数据源列表响应:', response);
+            
             if (response.success && response.data) {
                 this.datasourceIds = response.data.datasourceIds || [];
                 this.defaultDatasourceId = response.data.defaultDatasourceId || 'default';
+                console.log('数据源列表:', this.datasourceIds);
+                console.log('默认数据源ID:', this.defaultDatasourceId);
                 this.populateSelects();
+            } else {
+                console.warn('获取数据源列表失败，响应:', response);
+                this.datasourceIds = [];
+                this.defaultDatasourceId = 'default';
             }
         } catch (error) {
             console.error('获取数据源列表失败:', error);
@@ -36,47 +45,171 @@ const datasourceManager = {
     },
 
     /**
-     * 填充所有数据源下拉框
+     * 填充所有数据源单选框按钮组
+     * 
+     * <p>说明：</p>
+     * <ul>
+     *   <li>显示所有数据源（包括 "default"）</li>
+     *   <li>使用单选框按钮样式，必须选择一个数据源</li>
+     *   <li>默认选中第一个数据源</li>
+     * </ul>
      */
     populateSelects() {
-        const selectIds = [
+        const groupIds = [
             'cryptoDatasourceId',
             'sqlParseDatasourceId',
             'sqlEncryptDatasourceId',
             'sqlQueryDatasourceId'
         ];
 
-        selectIds.forEach(selectId => {
-            const select = document.getElementById(selectId);
-            if (select) {
-                // 保留第一个选项（默认数据源）
-                const firstOption = select.firstElementChild;
-                select.innerHTML = '';
-                if (firstOption) {
-                    select.appendChild(firstOption);
+        // 如果没有数据源，显示提示
+        if (!this.datasourceIds || this.datasourceIds.length === 0) {
+            groupIds.forEach(groupId => {
+                const group = document.getElementById(groupId);
+                if (group) {
+                    group.innerHTML = '<div style="color: #999; padding: 8px;">暂无可用数据源</div>';
                 }
+            });
+            return;
+        }
 
-                // 添加其他数据源选项
-                this.datasourceIds.forEach(dsId => {
-                    const option = document.createElement('option');
-                    option.value = dsId;
-                    option.textContent = dsId;
-                    select.appendChild(option);
-                });
+        groupIds.forEach((groupId, groupIndex) => {
+            const group = document.getElementById(groupId);
+            if (!group) {
+                console.warn(`数据源组元素未找到: ${groupId}`);
+                return;
             }
+            
+            group.innerHTML = '';
+            console.log(`填充数据源组: ${groupId}, 数据源数量: ${this.datasourceIds.length}`);
+            
+            // 添加所有数据源选项
+            this.datasourceIds.forEach((dsId, index) => {
+                const radioItem = document.createElement('div');
+                radioItem.className = 'datasource-radio-item';
+                
+                const radio = document.createElement('input');
+                radio.type = 'radio';
+                radio.name = groupId; // 同一组内的单选框使用相同的 name
+                radio.id = `${groupId}_${dsId}`;
+                radio.value = dsId;
+                // 每个组的第一个选项默认选中
+                if (index === 0) {
+                    radio.checked = true;
+                }
+                
+                const label = document.createElement('label');
+                label.setAttribute('for', `${groupId}_${dsId}`);
+                label.textContent = dsId;
+                
+                // 将 label 和 radio 都添加到 radioItem 中
+                radioItem.appendChild(radio);
+                radioItem.appendChild(label);
+                
+                // 添加点击事件到 label，确保可以点击
+                // 使用箭头函数保持 this 上下文
+                const handleClick = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log(`点击数据源按钮: ${dsId} (组: ${groupId})`);
+                    
+                    // 取消同组其他单选框的选中状态
+                    const allRadios = group.querySelectorAll('input[type="radio"]');
+                    allRadios.forEach(r => {
+                        if (r !== radio) {
+                            r.checked = false;
+                        }
+                    });
+                    
+                    // 选中当前单选框
+                    radio.checked = true;
+                    
+                    // 触发 change 事件
+                    const changeEvent = new Event('change', { bubbles: true });
+                    radio.dispatchEvent(changeEvent);
+                    
+                    console.log(`已选中数据源: ${dsId} (组: ${groupId}), checked: ${radio.checked}`);
+                };
+                
+                label.addEventListener('click', handleClick);
+                
+                // 也添加点击事件到整个 radioItem 作为备用
+                radioItem.addEventListener('click', function(e) {
+                    // 如果点击的不是 label 或 radio，触发 label 的点击
+                    if (e.target === radioItem || (e.target !== label && e.target !== radio)) {
+                        handleClick(e);
+                    }
+                });
+                
+                group.appendChild(radioItem);
+            });
+            
+            console.log(`数据源组 ${groupId} 填充完成，共 ${this.datasourceIds.length} 个选项`);
         });
     },
 
     /**
-     * 获取选中的数据源ID（如果为空则返回null，不传参）
+     * 获取选中的数据源ID
+     * 
+     * <p>说明：</p>
+     * <ul>
+     *   <li>从单选框按钮组中获取选中的数据源ID</li>
+     *   <li>必须选择一个数据源，如果没有选中则返回 null</li>
+     * </ul>
+     * 
+     * @param {string} groupId 单选框按钮组ID
+     * @returns {string|null} 数据源ID，如果没有选中则返回 null
      */
-    getSelectedDatasourceId(selectId) {
-        const select = document.getElementById(selectId);
-        if (!select) {
+    getSelectedDatasourceId(groupId) {
+        const group = document.getElementById(groupId);
+        if (!group) {
+            console.warn(`数据源组未找到: ${groupId}`);
             return null;
         }
-        const value = select.value.trim();
-        return value === '' ? null : value;
+        
+        // 查找选中的单选框
+        const checkedRadio = group.querySelector('input[type="radio"]:checked');
+        if (checkedRadio) {
+            const value = checkedRadio.value;
+            console.log(`获取选中的数据源: ${value} (组: ${groupId})`);
+            return value;
+        }
+        
+        console.warn(`未找到选中的数据源 (组: ${groupId})`);
+        // 如果没有选中的，尝试选择第一个
+        const firstRadio = group.querySelector('input[type="radio"]');
+        if (firstRadio) {
+            firstRadio.checked = true;
+            console.log(`自动选中第一个数据源: ${firstRadio.value} (组: ${groupId})`);
+            return firstRadio.value;
+        }
+        
+        return null;
+    },
+    
+    /**
+     * 验证数据源是否已选择
+     * 
+     * @param {string} groupId 单选框按钮组ID
+     * @param {string} errorElementId 错误提示元素ID
+     * @returns {boolean} 如果已选择返回 true，否则返回 false
+     */
+    validateDatasource(groupId, errorElementId) {
+        const datasourceId = this.getSelectedDatasourceId(groupId);
+        const errorElement = document.getElementById(errorElementId);
+        
+        if (!datasourceId) {
+            if (errorElement) {
+                errorElement.textContent = '请选择数据源';
+                errorElement.style.display = 'block';
+            }
+            return false;
+        }
+        
+        if (errorElement) {
+            errorElement.style.display = 'none';
+        }
+        return true;
     }
 };
 
@@ -313,16 +446,19 @@ const crypto = {
                 return;
             }
 
+            // 验证数据源是否已选择
+            if (!datasourceManager.validateDatasource('cryptoDatasourceId', 'cryptoDatasourceError')) {
+                return;
+            }
+
             const requestBody = { text };
             if (tableName) requestBody.tableName = tableName;
             if (fieldName) requestBody.fieldName = fieldName;
             if (strategy) requestBody.strategy = strategy;
             
-            // 添加数据源ID
+            // 添加数据源ID（必选）
             const datasourceId = datasourceManager.getSelectedDatasourceId('cryptoDatasourceId');
-            if (datasourceId) {
-                requestBody.datasourceId = datasourceId;
-            }
+            requestBody.datasourceId = datasourceId;
 
             const response = await utils.request(`${CONFIG.apiPath}/encrypt.json`, {
                 method: 'POST',
@@ -357,16 +493,19 @@ const crypto = {
                 return;
             }
 
+            // 验证数据源是否已选择
+            if (!datasourceManager.validateDatasource('cryptoDatasourceId', 'cryptoDatasourceError')) {
+                return;
+            }
+
             const requestBody = { text };
             if (tableName) requestBody.tableName = tableName;
             if (fieldName) requestBody.fieldName = fieldName;
             if (strategy) requestBody.strategy = strategy;
             
-            // 添加数据源ID
+            // 添加数据源ID（必选）
             const datasourceId = datasourceManager.getSelectedDatasourceId('cryptoDatasourceId');
-            if (datasourceId) {
-                requestBody.datasourceId = datasourceId;
-            }
+            requestBody.datasourceId = datasourceId;
 
             const response = await utils.request(`${CONFIG.apiPath}/decrypt.json`, {
                 method: 'POST',
@@ -479,12 +618,15 @@ const sqlParser = {
                 return;
             }
 
-            const requestBody = { sql };
-            // 添加数据源ID
-            const datasourceId = datasourceManager.getSelectedDatasourceId('sqlParseDatasourceId');
-            if (datasourceId) {
-                requestBody.datasourceId = datasourceId;
+            // 验证数据源是否已选择
+            if (!datasourceManager.validateDatasource('sqlParseDatasourceId', 'sqlParseDatasourceError')) {
+                return;
             }
+
+            const requestBody = { sql };
+            // 添加数据源ID（必选）
+            const datasourceId = datasourceManager.getSelectedDatasourceId('sqlParseDatasourceId');
+            requestBody.datasourceId = datasourceId;
 
             const response = await utils.request(`${CONFIG.apiPath}/parse-sql.json`, {
                 method: 'POST',
@@ -634,12 +776,15 @@ const sqlEncrypt = {
                 return;
             }
 
-            const requestBody = { sql };
-            // 添加数据源ID
-            const datasourceId = datasourceManager.getSelectedDatasourceId('sqlEncryptDatasourceId');
-            if (datasourceId) {
-                requestBody.datasourceId = datasourceId;
+            // 验证数据源是否已选择
+            if (!datasourceManager.validateDatasource('sqlEncryptDatasourceId', 'sqlEncryptDatasourceError')) {
+                return;
             }
+
+            const requestBody = { sql };
+            // 添加数据源ID（必选）
+            const datasourceId = datasourceManager.getSelectedDatasourceId('sqlEncryptDatasourceId');
+            requestBody.datasourceId = datasourceId;
 
             const response = await utils.request(`${CONFIG.apiPath}/encrypt-sql.json`, {
                 method: 'POST',
@@ -773,6 +918,11 @@ const sqlQuery = {
                 return;
             }
 
+            // 验证数据源是否已选择
+            if (!datasourceManager.validateDatasource('sqlQueryDatasourceId', 'sqlQueryDatasourceError')) {
+                return;
+            }
+
             const pageSize = pageSizeInput ? parseInt(pageSizeInput.value) || 10 : 10;
             const pageNum = pageNumInput ? parseInt(pageNumInput.value) || 1 : 1;
 
@@ -781,11 +931,9 @@ const sqlQuery = {
                 pageSize: pageSize,
                 pageNum: pageNum
             };
-            // 添加数据源ID
+            // 添加数据源ID（必选）
             const datasourceId = datasourceManager.getSelectedDatasourceId('sqlQueryDatasourceId');
-            if (datasourceId) {
-                requestBody.datasourceId = datasourceId;
-            }
+            requestBody.datasourceId = datasourceId;
 
             const response = await utils.request(`${CONFIG.apiPath}/query-sql.json`, {
                 method: 'POST',

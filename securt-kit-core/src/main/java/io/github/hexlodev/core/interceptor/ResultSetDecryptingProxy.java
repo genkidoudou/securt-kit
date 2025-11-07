@@ -4,6 +4,7 @@ import cn.hutool.core.lang.Pair;
 import io.github.hexlodev.core.TableCache;
 import io.github.hexlodev.core.cache.StrategyCache;
 import io.github.hexlodev.core.exception.EncryptionHandler;
+import io.github.hexlodev.core.logging.SqlLogger;
 import io.github.hexlodev.core.parser.SecurtkitUtils;
 import io.github.hexlodev.core.parser.dto.ColumnTableDto;
 import io.github.hexlodev.core.parser.dto.FieldEncryptorInfoDto;
@@ -280,7 +281,19 @@ final class ResultSetDecryptingProxy implements InvocationHandler {
                         value,
                         fieldEncryptorInfoDto.getSourceTableName(),
                         fieldEncryptorInfoDto.getSourceColumn(),
-                        () -> strategy.decryption(value),
+                        () -> {
+                            String dec = strategy.decryption(value);
+                            // 使用统一的日志记录器
+                            SqlLogger.logDecryption(
+                                    fieldEncryptorInfoDto.getSourceTableName(),
+                                    fieldEncryptorInfoDto.getSourceColumn(),
+                                    columnLabel,
+                                    datasourceId,
+                                    value,
+                                    dec
+                            );
+                            return dec;
+                        },
                         null // 使用默认策略
                 );
                 // 如果解密失败且策略为 SKIP，返回 null；否则返回原值或解密后的值

@@ -107,4 +107,7 @@ securtkit:
           - field-name: name
       
       # 第三方数据源不配置（等于关闭加密）
-
+  monitor:
+    username: admin
+    password: admin
+    enabled: true

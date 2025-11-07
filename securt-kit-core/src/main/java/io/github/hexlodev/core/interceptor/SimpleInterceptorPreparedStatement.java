@@ -2,8 +2,6 @@ package io.github.hexlodev.core.interceptor;
 
 import cn.hutool.core.lang.Pair;
 import cn.hutool.core.util.StrUtil;
-import io.github.hexlodev.core.TableCache;
-import io.github.hexlodev.core.cache.StrategyCache;
 import io.github.hexlodev.core.parser.SecurtkitUtils;
 import io.github.hexlodev.core.parser.dto.ColumnTableDto;
 import io.github.hexlodev.core.parser.dto.FieldEncryptorInfoDto;
@@ -11,9 +9,6 @@ import io.github.hexlodev.core.strategy.FieldEncryptorStrategy;
 import lombok.extern.slf4j.Slf4j;
 import net.sf.jsqlparser.JSQLParserException;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.sql.*;
 import java.sql.Date;
 import java.util.*;
@@ -67,11 +62,6 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
     private final String datasourceId;
 
     /**
-     * 是否为更新类操作（INSERT/UPDATE/DELETE）
-     */
-    private boolean isUpdate;
-
-    /**
      * SQL语句中涉及的表名集合
      *
      * @since 1.0.0
@@ -92,15 +82,14 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
     private Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> pair;
 
     /**
-     * 参数索引到字段信息的映射（优化查找性能）
-     * key: 参数索引（从1开始，对应JDBC规范）
-     * value: 字段信息DTO
-     * 
-     * <p>在构造函数中初始化，用于将 O(n) 的 Stream 查找优化为 O(1) 的 Map 查找</p>
-     * 
-     * @since 1.0.0
+     * 参数加密器
      */
-    private Map<Integer, ColumnTableDto> parameterIndexToFieldMap;
+    private final ParameterEncryptor parameterEncryptor;
+
+    /**
+     * SQL 执行器
+     */
+    private final SqlExecutor sqlExecutor;
 
     /**
      * 构造函数（向后兼容）
@@ -156,10 +145,6 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
             log.debug("PreparedStatement created with datasource-id: {} for SQL: {}", datasourceId, sql);
         }
 
-        // 判断是否为更新类操作（INSERT/UPDATE/DELETE）
-        String lowerSql = this.sql.toLowerCase();
-        this.isUpdate = lowerSql.startsWith("update") || lowerSql.startsWith("insert") || lowerSql.startsWith("delete");
-
         // 解析SQL中的表名（使用缓存优化）
         try {
             // 使用 SqlParseCache 的表名解析方法，优先从缓存获取
@@ -179,16 +164,12 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
             try {
                 this.pair = SecurtkitUtils.parseSql(this.sql, this.datasourceId);
                 
-                // 构建参数索引到字段信息的映射（优化性能：O(n) -> O(1)）
-                this.parameterIndexToFieldMap = buildParameterIndexMap(this.pair);
-                
                 if (log.isInfoEnabled()) {
-                    log.info("SQL requires encryption [sql={}, tables={}, datasource-id={}, fieldsCount={}, parameterMappings={}]", 
+                    log.info("SQL requires encryption [sql={}, tables={}, datasource-id={}, fieldsCount={}]", 
                             this.sql != null ? this.sql : "null",
                             this.tables,
                             this.datasourceId,
-                            this.pair != null ? this.pair.getValue().size() : 0,
-                            this.parameterIndexToFieldMap != null ? this.parameterIndexToFieldMap.size() : 0);
+                            this.pair != null ? this.pair.getValue().size() : 0);
                 }
             } catch (JSQLParserException e) {
                 log.error("Failed to parse SQL for encryption [sql={}, sqlLength={}, tables={}, datasource-id={}], error: {}", 
@@ -201,65 +182,13 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
             }
         } else {
             log.debug("Tables do not require encryption: {} (datasource-id: {})", this.tables, this.datasourceId);
-            this.parameterIndexToFieldMap = Collections.emptyMap();
+            this.pair = null;
         }
+
+        // 初始化参数加密器和 SQL 执行器
+        this.parameterEncryptor = new ParameterEncryptor(this.datasourceId, this.tables, this.pair);
+        this.sqlExecutor = new SqlExecutor(this.delegate, this.sql, this.datasourceId, this.tables, this.pair);
     }
-
-    /**
-     * 生成最终执行的SQL（将占位符替换为实际参数值）
-     */
-    private String buildFinalSql() {
-        if (parameterValues.isEmpty()) {
-            return sql;
-        }
-
-        StringBuilder finalSql = new StringBuilder();
-        int paramIndex = 0; // 占位符索引（从1开始，对应JDBC参数索引）
-
-        for (int i = 0; i < sql.length(); i++) {
-            char c = sql.charAt(i);
-            if (c == '?') {
-                paramIndex++;
-                Object value = parameterValues.get(paramIndex);
-                if (value != null) {
-                    finalSql.append(formatSqlValue(value));
-                } else {
-                    // 如果没有设置该参数，保留?占位符
-                    finalSql.append('?');
-                }
-            } else {
-                finalSql.append(c);
-            }
-        }
-
-        return finalSql.toString();
-    }
-
-    /**
-     * 格式化SQL值（添加引号等）
-     */
-    private String formatSqlValue(Object value) {
-        if (value == null) {
-            return "NULL";
-        }
-        if (value instanceof String) {
-            // 转义单引号，使用 StringBuilder 优化字符串拼接
-            String str = ((String) value).replace("'", "''");
-            StringBuilder sb = new StringBuilder(str.length() + 2);
-            sb.append('\'').append(str).append('\'');
-            return sb.toString();
-        }
-        if (value instanceof Number || value instanceof Boolean) {
-            return String.valueOf(value);
-        }
-        // 其他类型转为字符串并转义
-        String str = String.valueOf(value);
-        String escaped = str.replace("'", "''");
-        StringBuilder sb = new StringBuilder(escaped.length() + 2);
-        sb.append('\'').append(escaped).append('\'');
-        return sb.toString();
-    }
-
 
     /**
      * 执行查询SQL - 拦截方法
@@ -271,38 +200,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
      */
     @Override
     public ResultSet executeQuery() throws SQLException {
-        String finalSql = buildFinalSql();
-        if (log.isInfoEnabled()) {
-            log.info("[PREPARED QUERY] [sql={}, sqlLength={}]", 
-                    sql != null ? sql : "null",
-                    sql != null ? sql.length() : 0);
-        }
-        if (!sql.equals(finalSql)) {
-            log.debug("[FINAL SQL] " + finalSql);
-        }
-
-        long startTime = System.currentTimeMillis();
-        try {
-            ResultSet resultSet = delegate.executeQuery();
-            long endTime = System.currentTimeMillis();
-            if (log.isInfoEnabled()) {
-                log.info("[PREPARED QUERY RESULT] Executed in {}ms [sql={}]", 
-                        (endTime - startTime),
-                        sql != null ? sql : "null");
-            }
-
-            // 包装结果集以实现自动解密
-            return ResultSetDecryptingProxy.wrap(resultSet, this.tables, this.pair, this.sql, this.datasourceId);
-        } catch (SQLException e) {
-            long endTime = System.currentTimeMillis();
-            log.error("[PREPARED QUERY ERROR] Failed after {}ms [sql={}, sqlLength={}, tables={}], error: {}", 
-                    (endTime - startTime),
-                    sql != null ? sql : "null",
-                    sql != null ? sql.length() : 0,
-                    tables,
-                    e.getMessage(), e);
-            throw e;
-        }
+        return sqlExecutor.executeQuery(parameterValues);
     }
 
     /**
@@ -315,37 +213,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
      */
     @Override
     public int executeUpdate() throws SQLException {
-        String finalSql = buildFinalSql();
-        if (log.isInfoEnabled()) {
-            log.info("[PREPARED UPDATE] [sql={}, sqlLength={}]", 
-                    sql != null ? sql : "null",
-                    sql != null ? sql.length() : 0);
-        }
-        if (!sql.equals(finalSql)) {
-            log.debug("[FINAL SQL] " + finalSql);
-        }
-
-        long startTime = System.currentTimeMillis();
-        try {
-            int result = delegate.executeUpdate();
-            long endTime = System.currentTimeMillis();
-            if (log.isInfoEnabled()) {
-                log.info("[PREPARED UPDATE RESULT] Executed in {}ms [sql={}, affectedRows={}]", 
-                        (endTime - startTime),
-                        sql != null ? sql : "null",
-                        result);
-            }
-            return result;
-        } catch (SQLException e) {
-            long endTime = System.currentTimeMillis();
-            log.error("[PREPARED UPDATE ERROR] Failed after {}ms [sql={}, sqlLength={}, tables={}, affectedRows=unknown], error: {}", 
-                    (endTime - startTime),
-                    sql != null ? sql : "null",
-                    sql != null ? sql.length() : 0,
-                    tables,
-                    e.getMessage(), e);
-            throw e;
-        }
+        return sqlExecutor.executeUpdate(parameterValues);
     }
 
     /**
@@ -358,80 +226,9 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
      */
     @Override
     public boolean execute() throws SQLException {
-        String finalSql = buildFinalSql();
-        if (log.isInfoEnabled()) {
-            log.info("[PREPARED EXECUTE] [sql={}, sqlLength={}]", 
-                    sql != null ? sql : "null",
-                    sql != null ? sql.length() : 0);
-        }
-        if (!sql.equals(finalSql)) {
-            log.debug("[FINAL SQL] " + finalSql);
-        }
-
-        long startTime = System.currentTimeMillis();
-        try {
-            boolean result = delegate.execute();
-            long endTime = System.currentTimeMillis();
-            if (log.isInfoEnabled()) {
-                log.info("[PREPARED EXECUTE RESULT] Executed in {}ms [sql={}, result={}]", 
-                        (endTime - startTime),
-                        sql != null ? sql : "null",
-                        result);
-            }
-            return result;
-        } catch (SQLException e) {
-            long endTime = System.currentTimeMillis();
-            log.error("[PREPARED EXECUTE ERROR] Failed after {}ms [sql={}, sqlLength={}, tables={}], error: {}", 
-                    (endTime - startTime),
-                    sql != null ? sql : "null",
-                    sql != null ? sql.length() : 0,
-                    tables,
-                    e.getMessage(), e);
-            throw e;
-        }
+        return sqlExecutor.execute(parameterValues);
     }
 
-    /**
-     * 构建参数索引到字段信息的映射
-     * 
-     * <p>将 O(n) 的 Stream 查找优化为 O(1) 的 Map 查找，提升性能。
-     * 在构造函数中调用一次，后续所有 setString 调用都使用此映射。</p>
-     *
-     * @param pair SQL解析结果对
-     * @return 参数索引到字段信息的映射，如果不需要加密则返回空Map
-     */
-    private Map<Integer, ColumnTableDto> buildParameterIndexMap(Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> pair) {
-        if (pair == null || pair.getKey() == null) {
-            log.debug("buildParameterIndexMap: pair or key is null");
-            return Collections.emptyMap();
-        }
-        
-        Map<Integer, ColumnTableDto> indexMap = new HashMap<>();
-        for (Map.Entry<String, ColumnTableDto> entry : pair.getKey().entrySet()) {
-            String key = entry.getKey();
-            ColumnTableDto dto = entry.getValue();
-            Integer index = dto.getInsertFieldIndex();
-            if (index != null && index > 0) {
-                // 如果同一个索引对应多个字段，保留第一个（通常不会发生）
-                indexMap.putIfAbsent(index, dto);
-                if (log.isDebugEnabled()) {
-                    log.debug("Mapped parameterIndex {} -> table: {}, column: {} (placeholder: {})",
-                            index, dto.getSourceTableName(), dto.getSourceColumn(), key);
-                }
-            } else {
-                if (log.isDebugEnabled()) {
-                    log.debug("Skipping placeholder {}: insertFieldIndex is null or <= 0 (index: {})",
-                            key, index);
-                }
-            }
-        }
-        
-        if (log.isDebugEnabled()) {
-            log.debug("buildParameterIndexMap: built {} mappings from {} placeholders (datasource-id: {})",
-                    indexMap.size(), pair.getKey().size(), this.datasourceId);
-        }
-        return indexMap;
-    }
 
     /**
      * 设置字符串参数 - 拦截方法
@@ -439,75 +236,13 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
      * <p>如果该参数对应需要加密的字段，则会在设置前进行加密处理。
      * 加密后的值会被缓存，用于后续的SQL日志输出。</p>
      *
-     * <p>性能优化：使用预构建的参数索引映射（O(1)查找）替代 Stream 遍历（O(n)查找），
-     * 在高频调用场景下显著提升性能。</p>
-     *
      * @param parameterIndex 参数索引，从1开始
      * @param x              参数值
      * @throws SQLException 如果设置参数失败
      */
     @Override
     public void setString(int parameterIndex, String x) throws SQLException {
-        String newValue = x;
-
-        // 使用预构建的映射进行 O(1) 查找，替代原来的 O(n) Stream 查找
-        if (SecurtkitUtils.needEncrypt(this.tables, this.datasourceId) && this.parameterIndexToFieldMap != null) {
-            if (log.isDebugEnabled()) {
-                log.debug("setString called for parameterIndex: {} (datasource-id: {}, mapSize: {}, needEncrypt: {})",
-                        parameterIndex, this.datasourceId, 
-                        this.parameterIndexToFieldMap != null ? this.parameterIndexToFieldMap.size() : 0,
-                        SecurtkitUtils.needEncrypt(this.tables, this.datasourceId));
-            }
-            
-            ColumnTableDto columnTableDto = this.parameterIndexToFieldMap.get(parameterIndex);
-            
-            if (columnTableDto != null) {
-                String sourceColumn = columnTableDto.getSourceColumn();
-                if (StrUtil.isNotBlank(columnTableDto.getSourceTableName()) && StrUtil.isNotBlank(sourceColumn)) {
-                    Class<? extends FieldEncryptorStrategy> fieldEncryptorStrategy =
-                            TableCache.getTableFieldEncryptStrategy(columnTableDto.getSourceTableName(), sourceColumn, this.datasourceId);
-
-                    if (fieldEncryptorStrategy != null) {
-                        // 使用策略缓存获取策略实例
-                        FieldEncryptorStrategy strategy = StrategyCache.getStrategy(fieldEncryptorStrategy);
-                        // 使用统一的异常处理器
-                        newValue = io.github.hexlodev.core.exception.EncryptionHandler.handleEncryption(
-                                x,
-                                columnTableDto.getSourceTableName(),
-                                sourceColumn,
-                                () -> {
-                                    String encrypted = strategy.encryption(x);
-                                    log.info("Encrypted field: {} in table: {} (parameterIndex: {}, datasource-id: {}, original: {}, encrypted: {})",
-                                            sourceColumn, columnTableDto.getSourceTableName(), parameterIndex, this.datasourceId,
-                                            x, encrypted);
-                                    return encrypted;
-                                },
-                                null // 使用默认策略
-                        );
-                    } else {
-                        log.warn("No encryption strategy found for field: {} in table: {} (parameterIndex: {}, datasource-id: {})",
-                                sourceColumn, columnTableDto.getSourceTableName(), parameterIndex, this.datasourceId);
-                    }
-                } else {
-                    log.warn("ColumnTableDto missing table/column info (parameterIndex: {}, datasource-id: {}, tableName: {}, column: {})",
-                            parameterIndex, this.datasourceId, 
-                            columnTableDto.getSourceTableName(), sourceColumn);
-                }
-            } else {
-                log.warn("No ColumnTableDto found for parameterIndex: {} (datasource-id: {}, mapSize: {}, mapKeys: {})",
-                        parameterIndex, this.datasourceId, 
-                        this.parameterIndexToFieldMap != null ? this.parameterIndexToFieldMap.size() : 0,
-                        this.parameterIndexToFieldMap != null ? this.parameterIndexToFieldMap.keySet() : "null");
-            }
-        } else {
-            if (log.isDebugEnabled()) {
-                log.debug("setString skipped encryption for parameterIndex: {} (needEncrypt: {}, mapNull: {})",
-                        parameterIndex, 
-                        SecurtkitUtils.needEncrypt(this.tables, this.datasourceId),
-                        this.parameterIndexToFieldMap == null);
-            }
-        }
-
+        String newValue = parameterEncryptor.encryptString(parameterIndex, x);
         delegate.setString(parameterIndex, newValue);
         parameterValues.put(parameterIndex, newValue);
     }
@@ -634,14 +369,16 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     @Override
     public void setObject(int parameterIndex, Object x, int targetSqlType) throws SQLException {
-        delegate.setObject(parameterIndex, x, targetSqlType);
-        parameterValues.put(parameterIndex, x);
+        Object newValue = parameterEncryptor.encryptObject(parameterIndex, x);
+        delegate.setObject(parameterIndex, newValue, targetSqlType);
+        parameterValues.put(parameterIndex, newValue);
     }
 
     @Override
     public void setObject(int parameterIndex, Object x) throws SQLException {
-        delegate.setObject(parameterIndex, x);
-        parameterValues.put(parameterIndex, x);
+        Object newValue = parameterEncryptor.encryptObject(parameterIndex, x);
+        delegate.setObject(parameterIndex, newValue);
+        parameterValues.put(parameterIndex, newValue);
     }
 
     /**
@@ -657,26 +394,15 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     @Override
     public void setCharacterStream(int parameterIndex, java.io.Reader reader, int length) throws SQLException {
-        if (reader != null && SecurtkitUtils.needEncrypt(this.tables, this.datasourceId) && null != this.pair) {
-            try {
-                // 读取 Reader 内容
-                String value = readerToString(reader, length);
-                if (value != null) {
-                    // 尝试加密
-                    String encrypted = maybeEncryptValue(parameterIndex, value);
-                    if (encrypted != null && !encrypted.equals(value)) {
-                        // 如果加密成功，使用加密后的值创建新的 Reader
-                        delegate.setCharacterStream(parameterIndex, new java.io.StringReader(encrypted), encrypted.length());
-                        parameterValues.put(parameterIndex, encrypted);
-                        return;
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("Failed to encrypt CharacterStream at parameter index {}, using original value", parameterIndex, e);
+        if (reader != null) {
+            String encrypted = parameterEncryptor.encryptReader(parameterIndex, reader, length);
+            if (encrypted != null) {
+                delegate.setCharacterStream(parameterIndex, new java.io.StringReader(encrypted), encrypted.length());
+                parameterValues.put(parameterIndex, encrypted);
+                return;
             }
         }
         delegate.setCharacterStream(parameterIndex, reader, length);
-        // 注意：如果 Reader 在加密逻辑中已被读取，这里无法再次读取，所以不缓存值
     }
 
     @Override
@@ -691,29 +417,22 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     @Override
     public void setClob(int parameterIndex, Clob x) throws SQLException {
-        if (x != null && SecurtkitUtils.needEncrypt(this.tables, this.datasourceId) && null != this.pair) {
-            try {
-                // 读取 Clob 内容
-                String value = clobToString(x);
-                if (value != null) {
-                    // 尝试加密
-                    String encrypted = maybeEncryptValue(parameterIndex, value);
-                    if (encrypted != null && !encrypted.equals(value)) {
-                        // 如果加密成功，使用加密后的值创建新的 Clob
-                        Clob encryptedClob = delegate.getConnection().createClob();
-                        encryptedClob.setString(1, encrypted);
-                        delegate.setClob(parameterIndex, encryptedClob);
-                        parameterValues.put(parameterIndex, encrypted);
-                        return;
-                    }
+        if (x != null) {
+            String encrypted = parameterEncryptor.encryptClob(parameterIndex, x);
+            if (encrypted != null && !encrypted.equals(clobToString(x))) {
+                try {
+                    Clob encryptedClob = delegate.getConnection().createClob();
+                    encryptedClob.setString(1, encrypted);
+                    delegate.setClob(parameterIndex, encryptedClob);
+                    parameterValues.put(parameterIndex, encrypted);
+                    return;
+                } catch (Exception e) {
+                    log.warn("Failed to create encrypted Clob at parameter index {}, using original value", parameterIndex, e);
                 }
-            } catch (Exception e) {
-                log.warn("Failed to encrypt Clob at parameter index {}, using original value", parameterIndex, e);
             }
         }
         delegate.setClob(parameterIndex, x);
         if (x != null) {
-            // 尝试读取并缓存值（用于日志）
             try {
                 String value = clobToString(x);
                 if (value != null) {
@@ -777,53 +496,35 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     @Override
     public void setNCharacterStream(int parameterIndex, java.io.Reader value, long length) throws SQLException {
-        if (value != null && SecurtkitUtils.needEncrypt(this.tables, this.datasourceId) && null != this.pair) {
-            try {
-                // 读取 Reader 内容
-                String strValue = readerToString(value, length);
-                if (strValue != null) {
-                    // 尝试加密
-                    String encrypted = maybeEncryptValue(parameterIndex, strValue);
-                    if (encrypted != null && !encrypted.equals(strValue)) {
-                        // 如果加密成功，使用加密后的值创建新的 Reader
-                        delegate.setNCharacterStream(parameterIndex, new java.io.StringReader(encrypted), encrypted.length());
-                        parameterValues.put(parameterIndex, encrypted);
-                        return;
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("Failed to encrypt NCharacterStream at parameter index {}, using original value", parameterIndex, e);
+        if (value != null) {
+            String encrypted = parameterEncryptor.encryptReader(parameterIndex, value, length);
+            if (encrypted != null) {
+                delegate.setNCharacterStream(parameterIndex, new java.io.StringReader(encrypted), encrypted.length());
+                parameterValues.put(parameterIndex, encrypted);
+                return;
             }
         }
         delegate.setNCharacterStream(parameterIndex, value, length);
-        // 注意：如果 Reader 在加密逻辑中已被读取，这里无法再次读取，所以不缓存值
     }
 
     @Override
     public void setNClob(int parameterIndex, NClob value) throws SQLException {
-        if (value != null && SecurtkitUtils.needEncrypt(this.tables, this.datasourceId) && null != this.pair) {
-            try {
-                // 读取 NClob 内容
-                String strValue = nClobToString(value);
-                if (strValue != null) {
-                    // 尝试加密
-                    String encrypted = maybeEncryptValue(parameterIndex, strValue);
-                    if (encrypted != null && !encrypted.equals(strValue)) {
-                        // 如果加密成功，使用加密后的值创建新的 NClob
-                        NClob encryptedNClob = delegate.getConnection().createNClob();
-                        encryptedNClob.setString(1, encrypted);
-                        delegate.setNClob(parameterIndex, encryptedNClob);
-                        parameterValues.put(parameterIndex, encrypted);
-                        return;
-                    }
+        if (value != null) {
+            String encrypted = parameterEncryptor.encryptNClob(parameterIndex, value);
+            if (encrypted != null && !encrypted.equals(nClobToString(value))) {
+                try {
+                    NClob encryptedNClob = delegate.getConnection().createNClob();
+                    encryptedNClob.setString(1, encrypted);
+                    delegate.setNClob(parameterIndex, encryptedNClob);
+                    parameterValues.put(parameterIndex, encrypted);
+                    return;
+                } catch (Exception e) {
+                    log.warn("Failed to create encrypted NClob at parameter index {}, using original value", parameterIndex, e);
                 }
-            } catch (Exception e) {
-                log.warn("Failed to encrypt NClob at parameter index {}, using original value", parameterIndex, e);
             }
         }
         delegate.setNClob(parameterIndex, value);
         if (value != null) {
-            // 尝试读取并缓存值（用于日志）
             try {
                 String strValue = nClobToString(value);
                 if (strValue != null) {
@@ -837,28 +538,21 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     @Override
     public void setClob(int parameterIndex, java.io.Reader reader, long length) throws SQLException {
-        if (reader != null && SecurtkitUtils.needEncrypt(this.tables, this.datasourceId) && null != this.pair) {
-            try {
-                // 读取 Reader 内容
-                String value = readerToString(reader, length);
-                if (value != null) {
-                    // 尝试加密
-                    String encrypted = maybeEncryptValue(parameterIndex, value);
-                    if (encrypted != null && !encrypted.equals(value)) {
-                        // 如果加密成功，使用加密后的值创建新的 Clob
-                        Clob encryptedClob = delegate.getConnection().createClob();
-                        encryptedClob.setString(1, encrypted);
-                        delegate.setClob(parameterIndex, encryptedClob);
-                        parameterValues.put(parameterIndex, encrypted);
-                        return;
-                    }
+        if (reader != null) {
+            String encrypted = parameterEncryptor.encryptReader(parameterIndex, reader, length);
+            if (encrypted != null) {
+                try {
+                    Clob encryptedClob = delegate.getConnection().createClob();
+                    encryptedClob.setString(1, encrypted);
+                    delegate.setClob(parameterIndex, encryptedClob);
+                    parameterValues.put(parameterIndex, encrypted);
+                    return;
+                } catch (Exception e) {
+                    log.warn("Failed to create encrypted Clob at parameter index {}, using original value", parameterIndex, e);
                 }
-            } catch (Exception e) {
-                log.warn("Failed to encrypt Clob(Reader) at parameter index {}, using original value", parameterIndex, e);
             }
         }
         delegate.setClob(parameterIndex, reader, length);
-        // 注意：如果 Reader 在加密逻辑中已被读取，这里无法再次读取，所以不缓存值
     }
 
     @Override
@@ -868,28 +562,21 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     @Override
     public void setNClob(int parameterIndex, java.io.Reader reader, long length) throws SQLException {
-        if (reader != null && SecurtkitUtils.needEncrypt(this.tables, this.datasourceId) && null != this.pair) {
-            try {
-                // 读取 Reader 内容
-                String value = readerToString(reader, length);
-                if (value != null) {
-                    // 尝试加密
-                    String encrypted = maybeEncryptValue(parameterIndex, value);
-                    if (encrypted != null && !encrypted.equals(value)) {
-                        // 如果加密成功，使用加密后的值创建新的 NClob
-                        NClob encryptedNClob = delegate.getConnection().createNClob();
-                        encryptedNClob.setString(1, encrypted);
-                        delegate.setNClob(parameterIndex, encryptedNClob);
-                        parameterValues.put(parameterIndex, encrypted);
-                        return;
-                    }
+        if (reader != null) {
+            String encrypted = parameterEncryptor.encryptReader(parameterIndex, reader, length);
+            if (encrypted != null) {
+                try {
+                    NClob encryptedNClob = delegate.getConnection().createNClob();
+                    encryptedNClob.setString(1, encrypted);
+                    delegate.setNClob(parameterIndex, encryptedNClob);
+                    parameterValues.put(parameterIndex, encrypted);
+                    return;
+                } catch (Exception e) {
+                    log.warn("Failed to create encrypted NClob at parameter index {}, using original value", parameterIndex, e);
                 }
-            } catch (Exception e) {
-                log.warn("Failed to encrypt NClob(Reader) at parameter index {}, using original value", parameterIndex, e);
             }
         }
         delegate.setNClob(parameterIndex, reader, length);
-        // 注意：如果 Reader 在加密逻辑中已被读取，这里无法再次读取，所以不缓存值
     }
 
     @Override
@@ -915,26 +602,15 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     @Override
     public void setCharacterStream(int parameterIndex, java.io.Reader reader, long length) throws SQLException {
-        if (reader != null && SecurtkitUtils.needEncrypt(this.tables, this.datasourceId) && null != this.pair) {
-            try {
-                // 读取 Reader 内容
-                String value = readerToString(reader, length);
-                if (value != null) {
-                    // 尝试加密
-                    String encrypted = maybeEncryptValue(parameterIndex, value);
-                    if (encrypted != null && !encrypted.equals(value)) {
-                        // 如果加密成功，使用加密后的值创建新的 Reader
-                        delegate.setCharacterStream(parameterIndex, new java.io.StringReader(encrypted), encrypted.length());
-                        parameterValues.put(parameterIndex, encrypted);
-                        return;
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("Failed to encrypt CharacterStream(long) at parameter index {}, using original value", parameterIndex, e);
+        if (reader != null) {
+            String encrypted = parameterEncryptor.encryptReader(parameterIndex, reader, length);
+            if (encrypted != null) {
+                delegate.setCharacterStream(parameterIndex, new java.io.StringReader(encrypted), encrypted.length());
+                parameterValues.put(parameterIndex, encrypted);
+                return;
             }
         }
         delegate.setCharacterStream(parameterIndex, reader, length);
-        // 注意：如果 Reader 在加密逻辑中已被读取，这里无法再次读取，所以不缓存值
     }
 
     @Override
@@ -949,76 +625,47 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     @Override
     public void setCharacterStream(int parameterIndex, java.io.Reader reader) throws SQLException {
-        if (reader != null && SecurtkitUtils.needEncrypt(this.tables, this.datasourceId) && null != this.pair) {
-            try {
-                // 读取 Reader 内容（无长度限制，读取全部）
-                String value = readerToString(reader, Long.MAX_VALUE);
-                if (value != null) {
-                    // 尝试加密
-                    String encrypted = maybeEncryptValue(parameterIndex, value);
-                    if (encrypted != null && !encrypted.equals(value)) {
-                        // 如果加密成功，使用加密后的值创建新的 Reader
-                        delegate.setCharacterStream(parameterIndex, new java.io.StringReader(encrypted));
-                        parameterValues.put(parameterIndex, encrypted);
-                        return;
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("Failed to encrypt CharacterStream() at parameter index {}, using original value", parameterIndex, e);
+        if (reader != null) {
+            String encrypted = parameterEncryptor.encryptReader(parameterIndex, reader, Long.MAX_VALUE);
+            if (encrypted != null) {
+                delegate.setCharacterStream(parameterIndex, new java.io.StringReader(encrypted));
+                parameterValues.put(parameterIndex, encrypted);
+                return;
             }
         }
         delegate.setCharacterStream(parameterIndex, reader);
-        // 注意：如果 Reader 在加密逻辑中已被读取，这里无法再次读取，所以不缓存值
     }
 
     @Override
     public void setNCharacterStream(int parameterIndex, java.io.Reader value) throws SQLException {
-        if (value != null && SecurtkitUtils.needEncrypt(this.tables, this.datasourceId) && null != this.pair) {
-            try {
-                // 读取 Reader 内容（无长度限制，读取全部）
-                String strValue = readerToString(value, Long.MAX_VALUE);
-                if (strValue != null) {
-                    // 尝试加密
-                    String encrypted = maybeEncryptValue(parameterIndex, strValue);
-                    if (encrypted != null && !encrypted.equals(strValue)) {
-                        // 如果加密成功，使用加密后的值创建新的 Reader
-                        delegate.setNCharacterStream(parameterIndex, new java.io.StringReader(encrypted));
-                        parameterValues.put(parameterIndex, encrypted);
-                        return;
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("Failed to encrypt NCharacterStream() at parameter index {}, using original value", parameterIndex, e);
+        if (value != null) {
+            String encrypted = parameterEncryptor.encryptReader(parameterIndex, value, Long.MAX_VALUE);
+            if (encrypted != null) {
+                delegate.setNCharacterStream(parameterIndex, new java.io.StringReader(encrypted));
+                parameterValues.put(parameterIndex, encrypted);
+                return;
             }
         }
         delegate.setNCharacterStream(parameterIndex, value);
-        // 注意：如果 Reader 在加密逻辑中已被读取，这里无法再次读取，所以不缓存值
     }
 
     @Override
     public void setClob(int parameterIndex, java.io.Reader reader) throws SQLException {
-        if (reader != null && SecurtkitUtils.needEncrypt(this.tables, this.datasourceId) && null != this.pair) {
-            try {
-                // 读取 Reader 内容（无长度限制，读取全部）
-                String value = readerToString(reader, Long.MAX_VALUE);
-                if (value != null) {
-                    // 尝试加密
-                    String encrypted = maybeEncryptValue(parameterIndex, value);
-                    if (encrypted != null && !encrypted.equals(value)) {
-                        // 如果加密成功，使用加密后的值创建新的 Clob
-                        Clob encryptedClob = delegate.getConnection().createClob();
-                        encryptedClob.setString(1, encrypted);
-                        delegate.setClob(parameterIndex, encryptedClob);
-                        parameterValues.put(parameterIndex, encrypted);
-                        return;
-                    }
+        if (reader != null) {
+            String encrypted = parameterEncryptor.encryptReader(parameterIndex, reader, Long.MAX_VALUE);
+            if (encrypted != null) {
+                try {
+                    Clob encryptedClob = delegate.getConnection().createClob();
+                    encryptedClob.setString(1, encrypted);
+                    delegate.setClob(parameterIndex, encryptedClob);
+                    parameterValues.put(parameterIndex, encrypted);
+                    return;
+                } catch (Exception e) {
+                    log.warn("Failed to create encrypted Clob at parameter index {}, using original value", parameterIndex, e);
                 }
-            } catch (Exception e) {
-                log.warn("Failed to encrypt Clob(Reader) at parameter index {}, using original value", parameterIndex, e);
             }
         }
         delegate.setClob(parameterIndex, reader);
-        // 注意：如果 Reader 在加密逻辑中已被读取，这里无法再次读取，所以不缓存值
     }
 
     @Override
@@ -1028,101 +675,21 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     @Override
     public void setNClob(int parameterIndex, java.io.Reader reader) throws SQLException {
-        if (reader != null && SecurtkitUtils.needEncrypt(this.tables, this.datasourceId) && null != this.pair) {
-            try {
-                // 读取 Reader 内容（无长度限制，读取全部）
-                String value = readerToString(reader, Long.MAX_VALUE);
-                if (value != null) {
-                    // 尝试加密
-                    String encrypted = maybeEncryptValue(parameterIndex, value);
-                    if (encrypted != null && !encrypted.equals(value)) {
-                        // 如果加密成功，使用加密后的值创建新的 NClob
-                        NClob encryptedNClob = delegate.getConnection().createNClob();
-                        encryptedNClob.setString(1, encrypted);
-                        delegate.setNClob(parameterIndex, encryptedNClob);
-                        parameterValues.put(parameterIndex, encrypted);
-                        return;
-                    }
+        if (reader != null) {
+            String encrypted = parameterEncryptor.encryptReader(parameterIndex, reader, Long.MAX_VALUE);
+            if (encrypted != null) {
+                try {
+                    NClob encryptedNClob = delegate.getConnection().createNClob();
+                    encryptedNClob.setString(1, encrypted);
+                    delegate.setNClob(parameterIndex, encryptedNClob);
+                    parameterValues.put(parameterIndex, encrypted);
+                    return;
+                } catch (Exception e) {
+                    log.warn("Failed to create encrypted NClob at parameter index {}, using original value", parameterIndex, e);
                 }
-            } catch (Exception e) {
-                log.warn("Failed to encrypt NClob(Reader) at parameter index {}, using original value", parameterIndex, e);
             }
         }
         delegate.setNClob(parameterIndex, reader);
-        // 注意：如果 Reader 在加密逻辑中已被读取，这里无法再次读取，所以不缓存值
-    }
-
-    /**
-     * 对字符串进行MD5十六进制编码
-     */
-    private static String md5Hex(String input) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("MD5");
-            byte[] digest = md.digest(input.getBytes(StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder(digest.length * 2);
-            for (byte b : digest) {
-                String hex = Integer.toHexString((b & 0xFF) | 0x100).substring(1);
-                sb.append(hex);
-            }
-            return sb.toString();
-        } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("MD5 algorithm not available", e);
-        }
-    }
-
-    /**
-     * 尝试对参数值进行加密
-     * 
-     * <p>该方法会根据参数索引查找对应的字段配置，如果字段需要加密则进行加密处理。</p>
-     * 
-     * <p>性能优化：使用预构建的参数索引映射（O(1)查找）替代 Stream 遍历（O(n)查找）。</p>
-     *
-     * @param parameterIndex 参数索引（从1开始）
-     * @param value          原始值
-     * @return 加密后的值，如果不需要加密或加密失败则返回原值
-     */
-    private String maybeEncryptValue(int parameterIndex, String value) {
-        if (value == null || !SecurtkitUtils.needEncrypt(this.tables, this.datasourceId) || this.parameterIndexToFieldMap == null) {
-            return value;
-        }
-
-        try {
-            // 使用预构建的映射进行 O(1) 查找
-            ColumnTableDto dto = this.parameterIndexToFieldMap.get(parameterIndex);
-            
-            if (dto != null) {
-                String sourceColumn = dto.getSourceColumn();
-                if (StrUtil.isNotBlank(dto.getSourceTableName()) && StrUtil.isNotBlank(sourceColumn)) {
-                    Class<? extends FieldEncryptorStrategy> fieldEncryptorStrategy =
-                            TableCache.getTableFieldEncryptStrategy(dto.getSourceTableName(), sourceColumn, this.datasourceId);
-
-                    if (fieldEncryptorStrategy != null) {
-                        // 使用策略缓存获取策略实例
-                        FieldEncryptorStrategy strategy = StrategyCache.getStrategy(fieldEncryptorStrategy);
-                        // 使用统一的异常处理器
-                        String encrypted = io.github.hexlodev.core.exception.EncryptionHandler.handleEncryption(
-                                value,
-                                dto.getSourceTableName(),
-                                sourceColumn,
-                                () -> {
-                                    String enc = strategy.encryption(value);
-                                    if (log.isDebugEnabled()) {
-                                        log.debug("Encrypted TEXT field: {} in table: {}",
-                                                sourceColumn, dto.getSourceTableName());
-                                    }
-                                    return enc;
-                                },
-                                null // 使用默认策略
-                        );
-                        return encrypted != null ? encrypted : value;
-                    }
-                }
-            }
-        } catch (Exception e) {
-            log.warn("Failed to encrypt value at parameter index {}", parameterIndex, e);
-        }
-
-        return value;
     }
 
     /**
@@ -1161,40 +728,6 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
             return nClob.getSubString(1, (int) length);
         } catch (SQLException e) {
             log.error("Failed to convert NClob to String", e);
-            return null;
-        }
-    }
-
-    /**
-     * 将 Reader 转换为 String
-     *
-     * @param reader Reader 对象
-     * @param length 最大读取长度（如果为 Long.MAX_VALUE 则读取全部）
-     * @return 字符串内容，如果转换失败返回 null
-     */
-    private String readerToString(java.io.Reader reader, long length) {
-        try {
-            StringBuilder sb = new StringBuilder();
-            char[] buffer = new char[8192];
-            long totalRead = 0;
-            int read;
-            while ((read = reader.read(buffer)) != -1) {
-                if (length != Long.MAX_VALUE && totalRead + read > length) {
-                    // 只读取指定长度的内容
-                    int remaining = (int) (length - totalRead);
-                    sb.append(buffer, 0, remaining);
-                    totalRead += remaining;
-                    break;
-                }
-                sb.append(buffer, 0, read);
-                totalRead += read;
-                if (length != Long.MAX_VALUE && totalRead >= length) {
-                    break;
-                }
-            }
-            return sb.toString();
-        } catch (Exception e) {
-            log.error("Failed to convert Reader to String", e);
             return null;
         }
     }

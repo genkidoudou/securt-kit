@@ -62,12 +62,17 @@ public class DataSourceConfigManager {
     private void buildConfigFromTables(FieldEncryptorProperties properties) {
         // 按 datasourceId 分组 tables
         Map<String, List<FieldEncryptorProperties.TableConfig>> tablesByDatasource = new HashMap<>();
+        boolean hasDefaultConfig = false; // 标记是否有未指定 datasource-id 的配置
         
         if (CollectionUtil.isNotEmpty(properties.getTables())) {
             for (FieldEncryptorProperties.TableConfig table : properties.getTables()) {
-                String datasourceId = StrUtil.isBlank(table.getDatasourceId()) 
-                    ? DEFAULT_DATASOURCE_ID 
-                    : table.getDatasourceId();
+                String datasourceId = table.getDatasourceId();
+                
+                // 如果未指定 datasource-id，则使用 default
+                if (StrUtil.isBlank(datasourceId)) {
+                    datasourceId = DEFAULT_DATASOURCE_ID;
+                    hasDefaultConfig = true;
+                }
                 
                 tablesByDatasource.computeIfAbsent(datasourceId, k -> new ArrayList<>()).add(table);
             }
@@ -84,14 +89,19 @@ public class DataSourceConfigManager {
             configCache.put(datasourceId, merged);
         }
         
-        // 确保默认数据源存在
-        if (!configCache.containsKey(DEFAULT_DATASOURCE_ID)) {
-            MergedConfig defaultConfig = new MergedConfig();
-            defaultConfig.setEnable(properties.isEnable());
-            defaultConfig.setFailurePolicy(properties.getFailurePolicy());
-            defaultConfig.setSqlParseCache(properties.getSqlParseCache());
-            defaultConfig.setTables(new ArrayList<>());
-            configCache.put(DEFAULT_DATASOURCE_ID, defaultConfig);
+        // 只有在以下情况才添加 default 数据源：
+        // 1. 有未指定 datasource-id 的配置（单数据源场景）
+        // 2. 或者没有任何配置（空配置场景）
+        // 如果所有配置都指定了 datasource-id（多数据源场景），则不添加 default
+        if (hasDefaultConfig || configCache.isEmpty()) {
+            if (!configCache.containsKey(DEFAULT_DATASOURCE_ID)) {
+                MergedConfig defaultConfig = new MergedConfig();
+                defaultConfig.setEnable(properties.isEnable());
+                defaultConfig.setFailurePolicy(properties.getFailurePolicy());
+                defaultConfig.setSqlParseCache(properties.getSqlParseCache());
+                defaultConfig.setTables(new ArrayList<>());
+                configCache.put(DEFAULT_DATASOURCE_ID, defaultConfig);
+            }
         }
     }
 

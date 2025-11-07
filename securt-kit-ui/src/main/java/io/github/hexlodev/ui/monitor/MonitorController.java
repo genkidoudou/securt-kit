@@ -3,6 +3,7 @@ package io.github.hexlodev.ui.monitor;
 import cn.hutool.core.lang.Pair;
 import io.github.hexlodev.core.TableCache;
 import io.github.hexlodev.core.cache.StrategyCache;
+import io.github.hexlodev.core.config.ConfigInitializer;
 import io.github.hexlodev.core.config.DataSourceConfigManager;
 import io.github.hexlodev.core.parser.SecurtkitUtils;
 import io.github.hexlodev.core.parser.dto.ColumnTableDto;
@@ -10,7 +11,6 @@ import io.github.hexlodev.core.parser.dto.FieldEncryptorInfoDto;
 import io.github.hexlodev.core.strategy.FieldEncryptorStrategy;
 import io.github.hexlodev.ui.monitor.dto.*;
 import io.github.hexlodev.ui.monitor.security.SqlValidator;
-import io.github.hexlodev.ui.monitor.security.SafeInput;
 import lombok.extern.slf4j.Slf4j;
 import net.sf.jsqlparser.JSQLParserException;
 import net.sf.jsqlparser.expression.*;
@@ -34,7 +34,6 @@ import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 import javax.sql.DataSource;
 import java.io.IOException;
-import java.lang.reflect.Method;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -43,7 +42,6 @@ import java.sql.SQLException;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 /**
  * 监控页面 Controller
@@ -276,38 +274,25 @@ public class MonitorController {
         }
 
         try {
-            // 通过反射获取 TableCache 中的 configManager
-            // 然后调用 getDatasourceIds() 方法
             DatasourceListResponse response = new DatasourceListResponse();
             
-            try {
-                // 使用反射获取 configManager
-                java.lang.reflect.Field configManagerField = TableCache.class.getDeclaredField("configManager");
-                configManagerField.setAccessible(true);
-                Object configManager = configManagerField.get(null);
+            // 通过 ConfigInitializer 获取配置管理器
+            DataSourceConfigManager configManager = ConfigInitializer.getConfigManager();
+            
+            if (configManager != null) {
+                // 调用 getDatasourceIds() 方法获取数据源列表
+                Set<String> datasourceIds = configManager.getDatasourceIds();
                 
-                if (configManager != null) {
-                    // 调用 getDatasourceIds() 方法
-                    java.lang.reflect.Method getDatasourceIdsMethod = 
-                        configManager.getClass().getMethod("getDatasourceIds");
-                    @SuppressWarnings("unchecked")
-                    Set<String> datasourceIds = (Set<String>) getDatasourceIdsMethod.invoke(configManager);
-                    
-                    List<String> datasourceIdList = new ArrayList<>(datasourceIds);
-                    Collections.sort(datasourceIdList); // 排序以便前端显示
-                    
-                    response.setDatasourceIds(datasourceIdList);
-                    response.setDefaultDatasourceId(DataSourceConfigManager.DEFAULT_DATASOURCE_ID);
-                    
-                    log.debug("获取数据源列表: {}", datasourceIdList);
-                } else {
-                    // 如果没有配置管理器，返回默认数据源
-                    response.setDatasourceIds(Collections.singletonList(DataSourceConfigManager.DEFAULT_DATASOURCE_ID));
-                    response.setDefaultDatasourceId(DataSourceConfigManager.DEFAULT_DATASOURCE_ID);
-                }
-            } catch (Exception e) {
-                log.warn("无法获取数据源列表，返回默认数据源: {}", e.getMessage());
-                // 如果反射失败，返回默认数据源
+                List<String> datasourceIdList = new ArrayList<>(datasourceIds);
+                Collections.sort(datasourceIdList); // 排序以便前端显示
+                
+                response.setDatasourceIds(datasourceIdList);
+                response.setDefaultDatasourceId(DataSourceConfigManager.DEFAULT_DATASOURCE_ID);
+                
+                log.debug("获取数据源列表: {}", datasourceIdList);
+            } else {
+                // 如果没有配置管理器，返回默认数据源
+                log.warn("配置管理器未初始化，返回默认数据源");
                 response.setDatasourceIds(Collections.singletonList(DataSourceConfigManager.DEFAULT_DATASOURCE_ID));
                 response.setDefaultDatasourceId(DataSourceConfigManager.DEFAULT_DATASOURCE_ID);
             }
