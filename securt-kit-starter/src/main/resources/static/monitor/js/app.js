@@ -59,7 +59,8 @@ const datasourceManager = {
             'cryptoDatasourceId',
             'sqlParseDatasourceId',
             'sqlEncryptDatasourceId',
-            'sqlQueryDatasourceId'
+            'sqlQueryDatasourceId',
+            'dataInitDatasourceId'
         ];
 
         // 如果没有数据源，显示提示
@@ -567,6 +568,7 @@ const tabs = {
      * 切换标签页
      */
     switchTab(tabName) {
+        console.log('switchTab 被调用，tabName:', tabName);
         // 移除所有活动状态
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.classList.remove('active');
@@ -588,12 +590,28 @@ const tabs = {
 
         // 如果切换到配置信息标签页，自动加载配置
         if (tabName === 'config') {
-            // 延迟一下，确保DOM已经更新
-            setTimeout(() => {
-                if (typeof configInfo !== 'undefined' && configInfo && typeof configInfo.loadConfig === 'function') {
+            console.log('检测到切换到配置信息标签页，准备加载配置信息');
+            console.log('configInfo 对象:', configInfo);
+            console.log('configInfo.loadConfig 类型:', typeof configInfo?.loadConfig);
+            
+            // 确保 configInfo 已定义
+            if (typeof configInfo === 'undefined') {
+                console.error('configInfo 未定义！');
+                return;
+            }
+            
+            if (configInfo && typeof configInfo.loadConfig === 'function') {
+                console.log('立即调用 loadConfig 方法');
+                // 使用 setTimeout 确保 DOM 已更新
+                setTimeout(() => {
                     configInfo.loadConfig();
-                }
-            }, 100);
+                }, 50);
+            } else {
+                console.error('configInfo.loadConfig 不是函数', {
+                    configInfo: configInfo,
+                    loadConfigType: typeof configInfo?.loadConfig
+                });
+            }
         }
     },
 
@@ -601,9 +619,14 @@ const tabs = {
      * 初始化标签页
      */
     init() {
-        document.querySelectorAll('.tab-btn').forEach(btn => {
+        console.log('初始化标签页功能');
+        const tabButtons = document.querySelectorAll('.tab-btn');
+        console.log('找到标签页按钮数量:', tabButtons.length);
+        tabButtons.forEach((btn, index) => {
+            const tabName = btn.getAttribute('data-tab');
+            console.log(`标签页 ${index}: data-tab="${tabName}"`);
             btn.addEventListener('click', () => {
-                const tabName = btn.getAttribute('data-tab');
+                console.log('标签页按钮被点击，data-tab:', tabName);
                 this.switchTab(tabName);
             });
         });
@@ -1077,11 +1100,28 @@ const dataInit = {
      */
     async handleEncrypt() {
         try {
+            const datasourceId = datasourceManager.getSelectedDatasourceId('dataInitDatasourceId');
             const tableName = document.getElementById('dataInitTableName').value.trim();
             const whereCondition = document.getElementById('dataInitWhereCondition').value.trim();
             const primaryKeyField = document.getElementById('dataInitPrimaryKeyField').value.trim();
 
             // 验证必填字段
+            if (!datasourceId) {
+                const errorDiv = document.getElementById('dataInitDatasourceError');
+                if (errorDiv) {
+                    errorDiv.textContent = '请选择数据源';
+                    errorDiv.style.display = 'block';
+                }
+                utils.showNotification('请选择数据源', 'error');
+                return;
+            }
+            
+            // 清除错误提示
+            const errorDiv = document.getElementById('dataInitDatasourceError');
+            if (errorDiv) {
+                errorDiv.style.display = 'none';
+            }
+            
             if (!tableName) {
                 utils.showNotification('表名不能为空', 'error');
                 return;
@@ -1104,6 +1144,7 @@ const dataInit = {
 
             try {
                 const requestBody = {
+                    datasourceId: datasourceId,
                     tableName: tableName,
                     primaryKeyField: primaryKeyField
                 };
@@ -1153,11 +1194,28 @@ const dataInit = {
      */
     async handleDecrypt() {
         try {
+            const datasourceId = datasourceManager.getSelectedDatasourceId('dataInitDatasourceId');
             const tableName = document.getElementById('dataInitTableName').value.trim();
             const whereCondition = document.getElementById('dataInitWhereCondition').value.trim();
             const primaryKeyField = document.getElementById('dataInitPrimaryKeyField').value.trim();
 
             // 验证必填字段
+            if (!datasourceId) {
+                const errorDiv = document.getElementById('dataInitDatasourceError');
+                if (errorDiv) {
+                    errorDiv.textContent = '请选择数据源';
+                    errorDiv.style.display = 'block';
+                }
+                utils.showNotification('请选择数据源', 'error');
+                return;
+            }
+            
+            // 清除错误提示
+            const errorDiv = document.getElementById('dataInitDatasourceError');
+            if (errorDiv) {
+                errorDiv.style.display = 'none';
+            }
+            
             if (!tableName) {
                 utils.showNotification('表名不能为空', 'error');
                 return;
@@ -1180,6 +1238,7 @@ const dataInit = {
 
             try {
                 const requestBody = {
+                    datasourceId: datasourceId,
                     tableName: tableName,
                     primaryKeyField: primaryKeyField
                 };
@@ -1272,6 +1331,7 @@ const dataInit = {
      * 清空输入和结果
      */
     clear() {
+        const datasourceGroup = document.getElementById('dataInitDatasourceId');
         const tableNameInput = document.getElementById('dataInitTableName');
         const whereConditionInput = document.getElementById('dataInitWhereCondition');
         const primaryKeyFieldInput = document.getElementById('dataInitPrimaryKeyField');
@@ -1279,7 +1339,20 @@ const dataInit = {
         const statsDiv = document.getElementById('dataInitStats');
         const sqlOutput = document.getElementById('dataInitSqlOutput');
         const copyBtn = document.getElementById('copyDataInitSqlBtn');
+        const errorDiv = document.getElementById('dataInitDatasourceError');
 
+        // 重置数据源选择为第一个选项
+        if (datasourceGroup) {
+            const firstRadio = datasourceGroup.querySelector('input[type="radio"]');
+            if (firstRadio) {
+                firstRadio.checked = true;
+            }
+        }
+        
+        // 清除错误提示
+        if (errorDiv) {
+            errorDiv.style.display = 'none';
+        }
         if (tableNameInput) {
             tableNameInput.value = '';
         }
@@ -1327,16 +1400,36 @@ const dataInit = {
 
 // 配置信息功能
 const configInfo = {
+    // 测试方法：可以在浏览器控制台直接调用 configInfo.test()
+    test() {
+        console.log('configInfo 测试:', {
+            configInfo: this,
+            hasLoadConfig: typeof this.loadConfig === 'function',
+            CONFIG: CONFIG
+        });
+        if (typeof this.loadConfig === 'function') {
+            console.log('调用 loadConfig');
+            this.loadConfig();
+        }
+    },
     /**
      * 加载配置信息
      */
     async loadConfig() {
+        console.log('loadConfig 方法被调用');
         try {
             const loadingDiv = document.getElementById('configLoading');
             const resultDiv = document.getElementById('configResult');
             
+            console.log('DOM 元素检查:', {
+                loadingDiv: loadingDiv !== null,
+                resultDiv: resultDiv !== null
+            });
+            
             if (loadingDiv) {
                 loadingDiv.style.display = 'block';
+                loadingDiv.textContent = '正在加载配置信息...';
+                console.log('显示加载提示');
             }
             if (resultDiv) {
                 resultDiv.style.display = 'none';
@@ -1344,9 +1437,13 @@ const configInfo = {
 
             try {
                 const apiUrl = `${CONFIG.apiPath}/config.json`;
+                console.log('开始加载配置信息，请求URL:', apiUrl);
+                console.log('CONFIG.apiPath:', CONFIG.apiPath);
                 const response = await utils.request(apiUrl);
+                console.log('配置信息响应:', response);
 
                 if (response.success) {
+                    console.log('配置信息数据:', response.data);
                     this.displayConfig(response.data);
                 } else {
                     if (loadingDiv) {
@@ -1411,41 +1508,76 @@ const configInfo = {
             cacheConfigDiv.innerHTML = '<div class="empty-message">未配置SQL解析缓存</div>';
         }
 
-        // 显示表配置 - 紧凑形式
+        // 显示表配置 - 按数据源分组显示
         if (data.tables && data.tables.length > 0) {
-            let tablesHtml = '<table class="compact-table"><thead><tr>';
-            tablesHtml += '<th style="width: 150px;">表名</th>';
-            tablesHtml += '<th>字段配置</th>';
-            tablesHtml += '</tr></thead><tbody>';
-            
+            // 按数据源分组
+            const tablesByDatasource = {};
             for (let i = 0; i < data.tables.length; i++) {
                 const table = data.tables[i];
-                tablesHtml += '<tr>';
-                tablesHtml += `<td class="table-name-cell"><strong>${utils.escapeHtml(table.tableName || '未知')}</strong></td>`;
-                
-                if (table.fields && table.fields.length > 0) {
-                    let fieldsHtml = '<div class="fields-list">';
-                    for (let j = 0; j < table.fields.length; j++) {
-                        const field = table.fields[j];
-                        fieldsHtml += '<span class="field-tag">';
-                        fieldsHtml += `<span class="field-name">${utils.escapeHtml(field.fieldName || '-')}</span>`;
-                        if (field.strategy) {
-                            fieldsHtml += `<span class="field-strategy" title="${utils.escapeHtml(field.strategy)}">(${utils.escapeHtml(field.strategy.length > 30 ? field.strategy.substring(0, 30) + '...' : field.strategy)})</span>`;
-                        } else {
-                            fieldsHtml += '<span class="field-strategy default">(默认)</span>';
-                        }
-                        fieldsHtml += '</span>';
-                    }
-                    fieldsHtml += '</div>';
-                    tablesHtml += `<td>${fieldsHtml}</td>`;
-                } else {
-                    tablesHtml += '<td><span class="empty-message">无加密字段</span></td>';
+                const datasourceId = table.datasourceId || 'default';
+                if (!tablesByDatasource[datasourceId]) {
+                    tablesByDatasource[datasourceId] = [];
                 }
-                
-                tablesHtml += '</tr>';
+                tablesByDatasource[datasourceId].push(table);
             }
             
-            tablesHtml += '</tbody></table>';
+            // 按数据源分组显示
+            let tablesHtml = '';
+            const datasourceIds = Object.keys(tablesByDatasource).sort();
+            
+            for (let dsIndex = 0; dsIndex < datasourceIds.length; dsIndex++) {
+                const datasourceId = datasourceIds[dsIndex];
+                const tables = tablesByDatasource[datasourceId];
+                
+                // 数据源分组标题
+                tablesHtml += `<div class="datasource-group">`;
+                tablesHtml += `<div class="datasource-group-header">`;
+                tablesHtml += `<span class="datasource-badge large">${utils.escapeHtml(datasourceId)}</span>`;
+                tablesHtml += `<span class="datasource-group-count">(${tables.length} 个表)</span>`;
+                tablesHtml += `</div>`;
+                
+                // 该数据源下的表配置
+                tablesHtml += '<table class="compact-table"><thead><tr>';
+                tablesHtml += '<th style="width: 200px;">表名</th>';
+                tablesHtml += '<th>字段配置</th>';
+                tablesHtml += '</tr></thead><tbody>';
+                
+                for (let i = 0; i < tables.length; i++) {
+                    const table = tables[i];
+                    tablesHtml += '<tr>';
+                    tablesHtml += `<td class="table-name-cell"><strong>${utils.escapeHtml(table.tableName || '未知')}</strong></td>`;
+                    
+                    if (table.fields && table.fields.length > 0) {
+                        let fieldsHtml = '<div class="fields-list">';
+                        for (let j = 0; j < table.fields.length; j++) {
+                            const field = table.fields[j];
+                            const strategyText = field.strategy || '默认策略';
+                            const strategyDisplay = field.strategy 
+                                ? (field.strategy.length > 25 ? field.strategy.substring(0, 25) + '...' : field.strategy)
+                                : '默认';
+                            
+                            fieldsHtml += '<span class="field-tag" title="字段: ' + utils.escapeHtml(field.fieldName || '-') + '\n策略: ' + utils.escapeHtml(strategyText) + '">';
+                            fieldsHtml += `<span class="field-name">${utils.escapeHtml(field.fieldName || '-')}</span>`;
+                            if (field.strategy) {
+                                fieldsHtml += `<span class="field-strategy" title="加密策略: ${utils.escapeHtml(field.strategy)}">(${utils.escapeHtml(strategyDisplay)})</span>`;
+                            } else {
+                                fieldsHtml += '<span class="field-strategy default" title="使用默认加密策略">(默认)</span>';
+                            }
+                            fieldsHtml += '</span>';
+                        }
+                        fieldsHtml += '</div>';
+                        tablesHtml += `<td>${fieldsHtml}</td>`;
+                    } else {
+                        tablesHtml += '<td><span class="empty-message">无加密字段</span></td>';
+                    }
+                    
+                    tablesHtml += '</tr>';
+                }
+                
+                tablesHtml += '</tbody></table>';
+                tablesHtml += `</div>`; // 结束数据源分组
+            }
+            
             tablesConfigDiv.innerHTML = tablesHtml;
         } else {
             tablesConfigDiv.innerHTML = '<div class="empty-message">未配置表加密规则</div>';
@@ -1578,9 +1710,26 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 初始化标签页
-    tabs.init();
+    console.log('准备初始化标签页');
+    try {
+        tabs.init();
+        console.log('标签页初始化完成');
+    } catch (error) {
+        console.error('标签页初始化失败:', error);
+    }
 
     // 检查登录状态
     login.checkLoginStatus();
+    
+    // 如果配置信息标签页是活动的，自动加载配置
+    const configTab = document.getElementById('configTab');
+    if (configTab && configTab.classList.contains('active')) {
+        console.log('检测到配置信息标签页是活动的，自动加载配置');
+        setTimeout(() => {
+            if (typeof configInfo !== 'undefined' && configInfo && typeof configInfo.loadConfig === 'function') {
+                configInfo.loadConfig();
+            }
+        }, 500);
+    }
 });
 

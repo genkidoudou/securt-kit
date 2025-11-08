@@ -530,3 +530,77 @@ textarea[readonly] {
     background-color: #f0f7ff;
 }
 
+/* 数据源分组样式 */
+.datasource-group {
+    margin-bottom: 24px;
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.datasource-group-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+}
+
+.datasource-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    background-color: #1890ff;
+    color: white;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.datasource-badge.large {
+    padding: 6px 14px;
+    font-size: 14px;
+    background-color: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.datasource-group-count {
+    font-size: 13px;
+    opacity: 0.9;
+    font-weight: normal;
+}
+
+.datasource-group .compact-table {
+    margin: 0;
+    border: none;
+}
+
+.datasource-group .compact-table thead th {
+    background-color: #f8f9fa;
+    border-top: none;
+}
+
+/* 字段标签悬浮提示优化 */
+.field-tag {
+    cursor: help;
+    transition: all 0.2s;
+}
+
+.field-tag:hover {
+    background-color: #bae7ff;
+    border-color: #1890ff;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(24, 144, 255, 0.2);
+}
+
+.field-name {
+    cursor: help;
+}
+
+.field-strategy {
+    cursor: help;
+    position: relative;
+}
+

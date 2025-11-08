@@ -200,6 +200,13 @@
                 <div class="card">
                     <h2>数据初始化</h2>
                     <div class="form-group">
+                        <label>数据源 <span style="color: red;">*</span>:</label>
+                        <div id="dataInitDatasourceId" class="datasource-radio-group" role="radiogroup">
+                            <!-- 数据源选项将通过 JavaScript 动态生成 -->
+                        </div>
+                        <div id="dataInitDatasourceError" class="error-message" style="display: none;"></div>
+                    </div>
+                    <div class="form-group">
                         <label>表名（必填）:</label>
                         <input type="text" id="dataInitTableName" placeholder="例如: user" required>
                     </div>

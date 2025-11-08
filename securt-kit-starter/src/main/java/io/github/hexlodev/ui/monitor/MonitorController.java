@@ -56,7 +56,7 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("${securtkit.monitor.path:/monitor}")
 @ConditionalOnProperty(prefix = "securtkit.monitor", name = "enabled", havingValue = "true", matchIfMissing = false)
-@EnableConfigurationProperties(MonitorProperties.class)
+@EnableConfigurationProperties({MonitorProperties.class, FieldEncryptorProperties.class})
 public class MonitorController {
 
     @Autowired
@@ -65,7 +65,7 @@ public class MonitorController {
     @Autowired(required = false)
     private DataSource dataSource;
 
-    @Autowired(required = false)
+    @Autowired
     private FieldEncryptorProperties fieldEncryptorProperties;
 
     /**
@@ -263,6 +263,57 @@ public class MonitorController {
     }
 
     /**
+     * 获取数据源列表
+     */
+    @GetMapping("/api/datasources.json")
+    public ApiResponse<DatasourceListResponse> getDatasources(HttpSession session) {
+        // 检查登录
+        if (!checkLogin(session)) {
+            return ApiResponse.error(401, "未登录");
+        }
+
+        try {
+            DatasourceListResponse response = new DatasourceListResponse();
+            List<String> datasourceIds = new ArrayList<>();
+            String defaultDatasourceId = "default";
+
+            // 从配置中提取数据源标识
+            if (fieldEncryptorProperties != null && 
+                fieldEncryptorProperties.getTables() != null) {
+                Set<String> uniqueDatasourceIds = new HashSet<>();
+                
+                for (FieldEncryptorProperties.TableConfig tableConfig : 
+                     fieldEncryptorProperties.getTables()) {
+                    String datasourceId = tableConfig.getDatasourceId();
+                    if (datasourceId == null || datasourceId.trim().isEmpty()) {
+                        datasourceId = "default";
+                    }
+                    uniqueDatasourceIds.add(datasourceId);
+                }
+                
+                datasourceIds.addAll(uniqueDatasourceIds);
+                
+                // 如果没有找到任何数据源，使用默认值
+                if (datasourceIds.isEmpty()) {
+                    datasourceIds.add("default");
+                }
+            } else {
+                // 如果没有配置，返回默认数据源
+                datasourceIds.add("default");
+            }
+
+            response.setDatasourceIds(datasourceIds);
+            response.setDefaultDatasourceId(defaultDatasourceId);
+
+            return ApiResponse.success(response);
+
+        } catch (Exception e) {
+            log.error("获取数据源列表失败", e);
+            return ApiResponse.error("获取数据源列表失败: " + e.getMessage());
+        }
+    }
+
+    /**
      * 确定使用的策略
      */
     private FieldEncryptorStrategy determineStrategy(Object request) {
@@ -299,7 +350,11 @@ public class MonitorController {
         // 优先级2: 通过表名和字段名获取策略
         else if (tableName != null && !tableName.trim().isEmpty() &&
                 fieldName != null && !fieldName.trim().isEmpty()) {
-            strategyClass = TableCache.getTableFieldEncryptInfo(tableName, fieldName);
+            Map<String, Class<? extends FieldEncryptorStrategy>> fieldMap = 
+                    TableCache.getTableFieldEncryptInfo(tableName, null);
+            if (fieldMap != null) {
+                strategyClass = fieldMap.get(fieldName);
+            }
         }
         // 优先级3: 使用默认策略
         else {
@@ -731,8 +786,12 @@ public class MonitorController {
         log.debug("检查字段: {} (表: {})", fieldName, tableName);
         
         // 检查该字段是否需要加密
-        Class<? extends FieldEncryptorStrategy> strategyClass = 
-            TableCache.getTableFieldEncryptInfo(tableName, fieldName);
+        Map<String, Class<? extends FieldEncryptorStrategy>> fieldMap = 
+            TableCache.getTableFieldEncryptInfo(tableName, null);
+        Class<? extends FieldEncryptorStrategy> strategyClass = null;
+        if (fieldMap != null) {
+            strategyClass = fieldMap.get(fieldName);
+        }
         
         if (strategyClass != null) {
             log.debug("字段 {} 需要加密，策略: {}", fieldName, strategyClass.getName());
@@ -1091,8 +1150,12 @@ public class MonitorController {
                         String fieldName = columnDto.getSourceColumn();
                         
                         // 检查是否需要加密
-                        Class<? extends FieldEncryptorStrategy> strategyClass = 
-                            TableCache.getTableFieldEncryptInfo(tableName, fieldName);
+                        Map<String, Class<? extends FieldEncryptorStrategy>> fieldMap = 
+                            TableCache.getTableFieldEncryptInfo(tableName, null);
+                        Class<? extends FieldEncryptorStrategy> strategyClass = null;
+                        if (fieldMap != null) {
+                            strategyClass = fieldMap.get(fieldName);
+                        }
                         
                         if (strategyClass != null) {
                             try {
@@ -1339,16 +1402,22 @@ public class MonitorController {
         String tableName = request.getTableName().trim();
         String whereCondition = request.getWhereCondition() != null ? request.getWhereCondition().trim() : "";
         String primaryKeyField = request.getPrimaryKeyField().trim();
+        String datasourceId = request.getDatasourceId() != null ? request.getDatasourceId().trim() : null;
+        
+        // 如果未指定数据源，使用默认值
+        if (datasourceId == null || datasourceId.isEmpty()) {
+            datasourceId = "default";
+        }
 
         DataInitResponse response = new DataInitResponse();
         response.setTableName(tableName);
         response.setPrimaryKeyField(primaryKeyField);
         response.setOperationType(isEncrypt ? "encrypt" : "decrypt");
 
-        // 获取表需要加密的字段
-        Map<String, Class<? extends FieldEncryptorStrategy>> encryptFields = TableCache.getTableFieldEncryptInfo(tableName);
+        // 获取表需要加密的字段（支持多数据源）
+        Map<String, Class<? extends FieldEncryptorStrategy>> encryptFields = TableCache.getTableFieldEncryptInfo(tableName, datasourceId);
         if (encryptFields == null || encryptFields.isEmpty()) {
-            throw new IllegalArgumentException("表 " + tableName + " 没有配置需要加密的字段");
+            throw new IllegalArgumentException("表 " + tableName + " 在数据源 " + datasourceId + " 中没有配置需要加密的字段");
         }
 
         List<String> sqlStatements = new ArrayList<>();
@@ -1461,7 +1530,7 @@ public class MonitorController {
 
     /**
      * 获取配置信息接口
-     * 返回 FieldEncryptorProperties 的配置信息
+     * 返回 FieldEncryptorProperties 的配置信息（支持多数据源）
      */
     @GetMapping("/api/config.json")
     public ApiResponse<ConfigResponse> getConfig(HttpSession session) {
@@ -1471,11 +1540,23 @@ public class MonitorController {
         }
 
         try {
+            log.debug("获取配置信息 - fieldEncryptorProperties: {}", fieldEncryptorProperties != null ? "已注入" : "未注入");
+            
             ConfigResponse response = new ConfigResponse();
 
             if (fieldEncryptorProperties == null) {
-                return ApiResponse.error("配置信息不可用");
+                log.warn("fieldEncryptorProperties 为 null，返回空配置");
+                // 返回空配置而不是错误，确保前端能正常显示
+                response.setEnable(false);
+                response.setFailurePolicy("FALLBACK");
+                response.setTables(new ArrayList<>());
+                return ApiResponse.success(response);
             }
+            
+            log.debug("获取配置信息 - enable: {}, failurePolicy: {}, tables size: {}", 
+                    fieldEncryptorProperties.isEnable(), 
+                    fieldEncryptorProperties.getFailurePolicy(),
+                    fieldEncryptorProperties.getTables() != null ? fieldEncryptorProperties.getTables().size() : 0);
 
             // 设置基本配置
             response.setEnable(fieldEncryptorProperties.isEnable());
@@ -1491,13 +1572,19 @@ public class MonitorController {
                 response.setSqlParseCache(cacheConfig);
             }
 
-            // 设置表配置
+            // 设置表配置（支持多数据源）
+            List<ConfigResponse.TableConfigInfo> tableConfigs = new ArrayList<>();
             if (fieldEncryptorProperties.getTables() != null && !fieldEncryptorProperties.getTables().isEmpty()) {
-                List<ConfigResponse.TableConfigInfo> tableConfigs = new ArrayList<>();
-                
                 for (FieldEncryptorProperties.TableConfig tableConfig : fieldEncryptorProperties.getTables()) {
                     ConfigResponse.TableConfigInfo tableInfo = new ConfigResponse.TableConfigInfo();
                     tableInfo.setTableName(tableConfig.getTableName());
+                    
+                    // 多数据源逻辑：设置数据源标识
+                    // 如果 datasourceId 为空或空白，表示应用到所有数据源（单数据源场景），设置为 "default"
+                    // 如果指定了 datasourceId，则使用指定的值（多数据源场景）
+                    String datasourceId = tableConfig.getDatasourceId();
+                    tableInfo.setDatasourceId(datasourceId == null || datasourceId.trim().isEmpty() 
+                            ? "default" : datasourceId);
                     
                     if (tableConfig.getFields() != null && !tableConfig.getFields().isEmpty()) {
                         List<ConfigResponse.FieldConfigInfo> fieldConfigs = new ArrayList<>();
@@ -1514,9 +1601,9 @@ public class MonitorController {
                     
                     tableConfigs.add(tableInfo);
                 }
-                
-                response.setTables(tableConfigs);
             }
+            
+            response.setTables(tableConfigs);
 
             return ApiResponse.success(response);
 

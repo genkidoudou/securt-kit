@@ -92,21 +92,89 @@ securtkit:
       enable: true
       max-size: 1000
     tables:
-      # 主数据源配置（primary）：加密 name 和 phone
-      # 注意：配置中的表名不需要双引号，系统会自动处理
+      # ========== 主数据源（primary）配置 ==========
+      # 用户表：加密 name 和 phone
       - table-name: user
         datasource-id: primary
         fields:
           - field-name: name
           - field-name: phone
       
-      # 从数据源配置（secondary）：只加密 name
+      # 订单表：加密收货地址和订单编号
+      - table-name: order
+        datasource-id: primary
+        fields:
+          - field-name: address
+          - field-name: orderNo
+      
+      # 产品表：加密产品名称和描述
+      - table-name: product
+        datasource-id: primary
+        fields:
+          - field-name: productName
+          - field-name: description
+      
+      # 客户表：加密客户姓名和联系方式
+      - table-name: customer
+        datasource-id: primary
+        fields:
+          - field-name: customerName
+          - field-name: contactPhone
+          - field-name: email
+      
+      # ========== 从数据源（secondary）配置 ==========
+      # 用户表：只加密 name（phone 保持明文）
       - table-name: user
         datasource-id: secondary
         fields:
           - field-name: name
       
-      # 第三方数据源不配置（等于关闭加密）
+      # 订单表：只加密收货地址
+      - table-name: order
+        datasource-id: secondary
+        fields:
+          - field-name: address
+      
+      # 产品表：加密产品名称（使用自定义策略）
+      - table-name: product
+        datasource-id: secondary
+        fields:
+          - field-name: productName
+            strategy: io.github.test.MyFieldEncryptorStrategy
+      
+      # 分类表：加密分类名称
+      - table-name: category
+        datasource-id: secondary
+        fields:
+          - field-name: categoryName
+          - field-name: description
+      
+      # ========== 第三方数据源（third）配置 ==========
+      # 用户表：加密邮箱
+      - table-name: user
+        datasource-id: third
+        fields:
+          - field-name: email
+      
+      # 订单表：加密订单金额
+      - table-name: order
+        datasource-id: third
+        fields:
+          - field-name: amount
+      
+      # 日志表：加密日志内容
+      - table-name: log
+        datasource-id: third
+        fields:
+          - field-name: logContent
+          - field-name: operatorName
+      
+      # ========== 默认数据源（不指定 datasource-id）配置 ==========
+      # 配置表：加密配置值
+      - table-name: config
+        fields:
+          - field-name: configValue
+          - field-name: secretKey
   monitor:
     username: admin
     password: admin

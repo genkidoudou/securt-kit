@@ -59,6 +59,11 @@ public class ConfigResponse {
         private String tableName;
 
         /**
+         * 数据源标识（可选）
+         */
+        private String datasourceId;
+
+        /**
          * 字段配置列表
          */
         private List<FieldConfigInfo> fields;
