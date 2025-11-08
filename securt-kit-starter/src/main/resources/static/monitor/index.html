@@ -40,6 +40,8 @@
                 <button class="tab-btn" data-tab="sqlParse">SQL 解析</button>
                 <button class="tab-btn" data-tab="sqlEncrypt">SQL参数加密</button>
                 <button class="tab-btn" data-tab="sqlQuery">SQL 查询</button>
+                <button class="tab-btn" data-tab="dataInit">数据初始化</button>
+                <button class="tab-btn" data-tab="config">配置信息</button>
             </div>
 
             <!-- 加密解密标签页 -->
@@ -189,6 +191,65 @@
                             <div id="sqlQueryStats" style="margin-bottom: 10px; color: #666; font-size: 14px;"></div>
                             <div id="sqlQueryTable" class="result-table"></div>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 数据初始化标签页 -->
+            <div id="dataInitTab" class="tab-content">
+                <div class="card">
+                    <h2>数据初始化</h2>
+                    <div class="form-group">
+                        <label>表名（必填）:</label>
+                        <input type="text" id="dataInitTableName" placeholder="例如: user" required>
+                    </div>
+                    <div class="form-group">
+                        <label>WHERE条件（可选）:</label>
+                        <textarea id="dataInitWhereCondition" rows="2" placeholder="例如: id > 100 AND status = 1"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>主键字段（必填）:</label>
+                        <input type="text" id="dataInitPrimaryKeyField" placeholder="例如: id" required>
+                    </div>
+                    <div class="button-group">
+                        <button id="dataInitEncryptBtn" class="btn btn-primary">加密</button>
+                        <button id="dataInitDecryptBtn" class="btn btn-primary">解密</button>
+                        <button id="clearDataInitBtn" class="btn btn-secondary">清空</button>
+                    </div>
+                    <div id="dataInitResult" style="display: none;">
+                        <div class="form-group">
+                            <label>操作结果:</label>
+                            <div id="dataInitStats" style="margin-bottom: 10px; color: #666; font-size: 14px;"></div>
+                        </div>
+                        <div class="form-group">
+                            <label>生成的SQL语句:</label>
+                            <textarea id="dataInitSqlOutput" rows="10" readonly style="background-color: #f5f5f5; font-family: monospace; font-size: 12px;"></textarea>
+                        </div>
+                        <button id="copyDataInitSqlBtn" class="btn btn-secondary" style="display: none;">复制SQL</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 配置信息标签页 -->
+            <div id="configTab" class="tab-content">
+                <div class="card">
+                    <h2>配置信息</h2>
+                    <div id="configResult" style="display: none;">
+                        <div class="form-group">
+                            <label>基本配置:</label>
+                            <div id="basicConfig" class="config-section"></div>
+                        </div>
+                        <div class="form-group">
+                            <label>SQL解析缓存配置:</label>
+                            <div id="cacheConfig" class="config-section"></div>
+                        </div>
+                        <div class="form-group">
+                            <label>表配置:</label>
+                            <div id="tablesConfig" class="config-section"></div>
+                        </div>
+                    </div>
+                    <div id="configLoading" style="text-align: center; padding: 20px; color: #999;">
+                        正在加载配置信息...
                     </div>
                 </div>
             </div>
