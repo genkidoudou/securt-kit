@@ -1,2 +1,3 @@
 org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
-  io.github.hexlodev.config.SecurtKitAutoConfiguration
+  io.github.hexlodev.config.SecurtKitAutoConfiguration,\
+  io.github.hexlodev.ui.monitor.MonitorAutoConfiguration

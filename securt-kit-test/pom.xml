@@ -14,17 +14,10 @@
         <spring-boot.version>2.6.13</spring-boot.version>
     </properties>
     <dependencies>
-        <!-- 添加securt-kit-core依赖 -->
-
+        <!-- add securt-kit-core dependency -->
         <dependency>
             <groupId>io.github.hexlodev</groupId>
             <artifactId>securt-kit-starter</artifactId>
-            <version>1.0-SNAPSHOT</version>
-        </dependency>
-
-        <dependency>
-            <groupId>io.github.hexlodev.ui</groupId>
-            <artifactId>securt-kit-ui</artifactId>
             <version>1.0-SNAPSHOT</version>
         </dependency>
 

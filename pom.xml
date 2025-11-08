@@ -11,7 +11,6 @@
     <modules>
         <module>securt-kit-core</module>
         <module>securt-kit-starter</module>
-        <module>securt-kit-ui</module>
         <module>securt-kit-dy-datasource-test</module>
         <!--        <module>securt-kit-test</module>-->
     </modules>
@@ -33,7 +32,7 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
-            <!-- 统一管理 jsqlparser 版本，确保所有模块使用相同版本 -->
+            <!-- Manage jsqlparser version centrally to keep modules aligned -->
             <dependency>
                 <groupId>com.github.jsqlparser</groupId>
                 <artifactId>jsqlparser</artifactId>
