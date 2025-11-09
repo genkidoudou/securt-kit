@@ -89,7 +89,8 @@ public final class TableNameParser {
     private static final String KEYWORD_DUPLICATE = "duplicate";
 
     private static final List<String> concerned = Arrays.asList(KEYWORD_TABLE, KEYWORD_INTO, KEYWORD_JOIN, KEYWORD_USING, KEYWORD_UPDATE);
-    private static final List<String> ignored = Arrays.asList(StringPool.LEFT_BRACKET, TOKEN_SET, TOKEN_OF, TOKEN_DUAL);
+    private static final List<String> ignored = Arrays.asList(StringPool.LEFT_BRACKET, TOKEN_SET, TOKEN_OF, TOKEN_DUAL, 
+            "if", "not", "exists", "current", "timestamp", "default", "on", "update", "references", "foreign", "key");
 
     /**
      * 该表达式会匹配 SQL 中不是 SQL TOKEN 的部分，比如换行符，注释信息，结尾的 {@code ;} 等。
@@ -130,7 +131,11 @@ public final class TableNameParser {
         if (isOracleSpecialDelete(first, tokens, index)) {
             visitNameToken(tokens.get(index + 1), visitor);
         } else if (isCreateIndex(first, tokens, index)) {
-            visitNameToken(tokens.get(index + 4), visitor);
+            // 处理 CREATE INDEX 语句，跳过 IF NOT EXISTS
+            index = processCreateIndex(tokens, index, visitor);
+        } else if (isCreateTable(first, tokens, index)) {
+            // 处理 CREATE TABLE 语句
+            index = processCreateTable(tokens, index, visitor);
         } else {
             while (hasMoreTokens(tokens, index)) {
                 String current = tokens.get(index++).getValue();
@@ -206,6 +211,82 @@ public final class TableNameParser {
             return TOKEN_INDEX.equalsIgnoreCase(next);
         }
         return false;
+    }
+
+    /**
+     * 判断是否是 CREATE TABLE 语句
+     */
+    private boolean isCreateTable(String current, List<SqlToken> tokens, int index) {
+        if (TOKEN_CREATE.equalsIgnoreCase(current) && hasMoreTokens(tokens, index + 1)) {
+            String next = tokens.get(index + 1).getValue();
+            return KEYWORD_TABLE.equalsIgnoreCase(next);
+        }
+        return false;
+    }
+
+    /**
+     * 处理 CREATE TABLE 语句，跳过 IF NOT EXISTS 等关键字
+     */
+    private int processCreateTable(List<SqlToken> tokens, int index, TableNameVisitor visitor) {
+        // CREATE TABLE 已经处理，index 指向 CREATE
+        index += 2; // 跳过 CREATE TABLE
+        
+        // 跳过 IF NOT EXISTS
+        index = skipIfNotExists(tokens, index);
+        
+        // 现在 index 应该指向表名
+        if (hasMoreTokens(tokens, index)) {
+            visitNameToken(tokens.get(index), visitor);
+        }
+        
+        return index + 1;
+    }
+
+    /**
+     * 处理 CREATE INDEX 语句，跳过 IF NOT EXISTS
+     */
+    private int processCreateIndex(List<SqlToken> tokens, int index, TableNameVisitor visitor) {
+        // CREATE INDEX 已经处理，index 指向 CREATE
+        index += 2; // 跳过 CREATE INDEX
+        
+        // 跳过 IF NOT EXISTS
+        index = skipIfNotExists(tokens, index);
+        
+        // 跳过索引名
+        if (hasMoreTokens(tokens, index)) {
+            index++; // 跳过索引名
+        }
+        
+        // 跳过 ON
+        if (hasMoreTokens(tokens, index) && "on".equalsIgnoreCase(tokens.get(index).getValue())) {
+            index++; // 跳过 ON
+        }
+        
+        // 现在 index 应该指向表名
+        if (hasMoreTokens(tokens, index)) {
+            visitNameToken(tokens.get(index), visitor);
+        }
+        
+        return index + 1;
+    }
+
+    /**
+     * 跳过 IF NOT EXISTS 关键字
+     */
+    private int skipIfNotExists(List<SqlToken> tokens, int index) {
+        if (hasMoreTokens(tokens, index)) {
+            String token = tokens.get(index).getValue();
+            if ("if".equalsIgnoreCase(token)) {
+                index++; // 跳过 IF
+                if (hasMoreTokens(tokens, index) && "not".equalsIgnoreCase(tokens.get(index).getValue())) {
+                    index++; // 跳过 NOT
+                    if (hasMoreTokens(tokens, index) && "exists".equalsIgnoreCase(tokens.get(index).getValue())) {
+                        index++; // 跳过 EXISTS
+                    }
+                }
+            }
+        }
+        return index;
     }
 
     /**

@@ -1,0 +1,606 @@
+/* Securt-Kit 监控页面样式 */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background-color: #f5f5f5;
+    color: #333;
+    line-height: 1.6;
+}
+
+.page {
+    min-height: 100vh;
+}
+
+/* 登录页面样式 */
+.login-container {
+    max-width: 400px;
+    margin: 100px auto;
+    padding: 30px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.login-container h1 {
+    text-align: center;
+    margin-bottom: 30px;
+    color: #1890ff;
+}
+
+.login-form {
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: #666;
+}
+
+.form-group input,
+.form-group textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    transition: border-color 0.3s;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: #1890ff;
+}
+
+.form-group textarea {
+    resize: vertical;
+    font-family: monospace;
+}
+
+/* 数据源单选框按钮组样式 */
+.datasource-radio-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.datasource-radio-item {
+    position: relative;
+    display: inline-block;
+    cursor: pointer;
+}
+
+.datasource-radio-item input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    margin: 0;
+    padding: 0;
+    pointer-events: none;
+}
+
+.datasource-radio-item label {
+    display: block;
+    padding: 8px 16px;
+    border: 2px solid #ddd;
+    border-radius: 4px;
+    background-color: #fff;
+    color: #333;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-weight: normal;
+    user-select: none;
+    text-align: center;
+    min-width: 80px;
+}
+
+.datasource-radio-item label:hover {
+    border-color: #1890ff;
+    background-color: #f0f7ff;
+}
+
+.datasource-radio-item input[type="radio"]:checked + label {
+    border-color: #1890ff;
+    background-color: #1890ff;
+    color: #fff;
+    font-weight: 500;
+}
+
+.datasource-radio-item input[type="radio"]:focus + label {
+    outline: 2px solid #40a9ff;
+    outline-offset: 2px;
+}
+
+/* 按钮样式 */
+.btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.btn-primary {
+    background-color: #1890ff;
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: #40a9ff;
+}
+
+.btn-secondary {
+    background-color: #f0f0f0;
+    color: #333;
+}
+
+.btn-secondary:hover {
+    background-color: #e0e0e0;
+}
+
+.error-message {
+    color: #ff4d4f;
+    font-size: 14px;
+    margin-bottom: 15px;
+    display: none;
+}
+
+.error-message.show {
+    display: block;
+}
+
+/* 主页面样式 */
+.header {
+    background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%);
+    color: white;
+    padding: 20px 30px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.header h1 {
+    color: white;
+    font-size: 24px;
+    margin: 0;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.header .btn-secondary {
+    background-color: rgba(255, 255, 255, 0.2);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.header .btn-secondary:hover {
+    background-color: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.5);
+}
+
+.container {
+    max-width: 1200px;
+    margin: 30px auto;
+    padding: 0 20px;
+}
+
+.card {
+    background: white;
+    padding: 30px;
+    margin-bottom: 30px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* 菜单导航样式 */
+.tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #e0e0e0;
+    background: white;
+    padding: 0 20px;
+    border-radius: 8px 8px 0 0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.tab-btn {
+    padding: 15px 30px;
+    border: none;
+    background: transparent;
+    color: #666;
+    font-size: 16px;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    transition: all 0.3s;
+    position: relative;
+    top: 2px;
+    white-space: nowrap;
+    font-weight: 500;
+}
+
+.tab-btn:hover {
+    color: #1890ff;
+    background-color: #f0f7ff;
+    border-bottom-color: #91d5ff;
+}
+
+.tab-btn.active {
+    color: #1890ff;
+    border-bottom-color: #1890ff;
+    font-weight: 600;
+    background-color: #e6f7ff;
+}
+
+.tab-btn.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background-color: #1890ff;
+}
+
+/* 响应式菜单 */
+@media (max-width: 768px) {
+    .tabs {
+        flex-wrap: wrap;
+        padding: 10px;
+    }
+    
+    .tab-btn {
+        padding: 12px 20px;
+        font-size: 14px;
+        flex: 1 1 auto;
+        min-width: 120px;
+    }
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+.form-row {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+}
+
+.form-row .form-group {
+    flex: 1;
+    min-width: 200px;
+    margin-bottom: 15px;
+}
+
+.button-group {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .login-container {
+        margin: 50px 20px;
+    }
+
+    .header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+    }
+
+    .form-row {
+        flex-direction: column;
+    }
+
+    .form-row .form-group {
+        min-width: 100%;
+    }
+}
+
+/* 只读文本框样式 */
+textarea[readonly] {
+    background-color: #f5f5f5;
+    cursor: not-allowed;
+}
+
+/* 加载状态 */
+.loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+/* 结果表格样式 */
+.result-table {
+    margin-top: 10px;
+    overflow-x: auto;
+}
+
+.result-table table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    font-size: 14px;
+}
+
+.result-table table th,
+.result-table table td {
+    padding: 10px;
+    text-align: left;
+    border: 1px solid #ddd;
+}
+
+.result-table table th {
+    background-color: #f5f5f5;
+    font-weight: 600;
+    color: #333;
+}
+
+.result-table table tr:nth-child(even) {
+    background-color: #fafafa;
+}
+
+.result-table table tr:hover {
+    background-color: #f0f0f0;
+}
+
+.result-table .empty-message {
+    padding: 20px;
+    text-align: center;
+    color: #999;
+    font-style: italic;
+}
+
+/* 按钮禁用状态 */
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+/* 配置信息样式 */
+.config-section {
+    margin-top: 10px;
+    padding: 12px;
+    background-color: #fafafa;
+    border-radius: 4px;
+    border: 1px solid #e0e0e0;
+}
+
+.config-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    font-size: 14px;
+}
+
+.config-table td {
+    padding: 10px;
+    border: 1px solid #e0e0e0;
+}
+
+.config-table td:first-child {
+    width: 200px;
+    background-color: #f5f5f5;
+    font-weight: 500;
+}
+
+/* 紧凑型配置列表样式 */
+.compact-config-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    padding: 8px 0;
+}
+
+.config-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.config-label {
+    color: #666;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.config-value {
+    color: #333;
+    font-size: 13px;
+    padding: 2px 8px;
+    background-color: #f5f5f5;
+    border-radius: 3px;
+}
+
+.config-value.enabled {
+    color: #52c41a;
+    background-color: #f6ffed;
+    border: 1px solid #b7eb8f;
+}
+
+.config-value.disabled {
+    color: #ff4d4f;
+    background-color: #fff1f0;
+    border: 1px solid #ffccc7;
+}
+
+/* 紧凑型表配置样式 */
+.compact-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    font-size: 13px;
+}
+
+.compact-table th {
+    background-color: #f5f5f5;
+    font-weight: 600;
+    color: #333;
+    padding: 8px 10px;
+    text-align: left;
+    border: 1px solid #e0e0e0;
+}
+
+.compact-table td {
+    padding: 8px 10px;
+    border: 1px solid #e0e0e0;
+    vertical-align: top;
+}
+
+.compact-table tbody tr:hover {
+    background-color: #f0f7ff;
+}
+
+.table-name-cell {
+    font-weight: 500;
+    color: #1890ff;
+}
+
+.fields-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.field-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    background-color: #e6f7ff;
+    border: 1px solid #91d5ff;
+    border-radius: 3px;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.field-name {
+    color: #1890ff;
+    font-weight: 500;
+    margin-right: 4px;
+}
+
+.field-strategy {
+    color: #666;
+    font-size: 11px;
+    font-style: italic;
+}
+
+.field-strategy.default {
+    color: #999;
+}
+
+.field-strategy:hover {
+    color: #1890ff;
+}
+
+.config-table th {
+    background-color: #f5f5f5;
+    font-weight: 600;
+    color: #333;
+    padding: 10px;
+    text-align: left;
+    border: 1px solid #e0e0e0;
+}
+
+.config-table tbody tr:hover {
+    background-color: #f0f7ff;
+}
+
+/* 数据源分组样式 */
+.datasource-group {
+    margin-bottom: 24px;
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.datasource-group-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+}
+
+.datasource-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    background-color: #1890ff;
+    color: white;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.datasource-badge.large {
+    padding: 6px 14px;
+    font-size: 14px;
+    background-color: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.datasource-group-count {
+    font-size: 13px;
+    opacity: 0.9;
+    font-weight: normal;
+}
+
+.datasource-group .compact-table {
+    margin: 0;
+    border: none;
+}
+
+.datasource-group .compact-table thead th {
+    background-color: #f8f9fa;
+    border-top: none;
+}
+
+/* 字段标签悬浮提示优化 */
+.field-tag {
+    cursor: help;
+    transition: all 0.2s;
+}
+
+.field-tag:hover {
+    background-color: #bae7ff;
+    border-color: #1890ff;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(24, 144, 255, 0.2);
+}
+
+.field-name {
+    cursor: help;
+}
+
+.field-strategy {
+    cursor: help;
+    position: relative;
+}
+

@@ -1,320 +1,169 @@
-# Securt-Kit Core - 数据库字段加密解密框架
+# Securt-Kit Core 模块
 
-## 项目简介
+## 简介
 
-Securt-Kit Core 是一个基于JDBC拦截技术的数据库字段加密解密框架，参考了P6Spy的设计理念，提供透明的数据库字段加密解密功能。该框架可以在不修改应用代码的情况下，对指定的数据库表和字段进行自动加密和解密。
+`securt-kit-core` 是 Securt-Kit 的核心模块，提供数据库字段加密解密的基础功能。该模块版本无关，支持 Java 8+，不依赖任何 Spring Boot 版本。
 
-## 核心特性
+## 核心组件
 
-- **透明加密解密**: 无需修改应用代码，自动对指定字段进行加密和解密
-- **JDBC驱动拦截**: 基于JDBC驱动代理技术，拦截数据库操作
-- **灵活配置**: 支持多种配置方式（配置文件、环境变量、系统属性）
-- **高性能**: 优化的加密算法和缓存机制
-- **易于集成**: 支持Spring Boot等主流框架
-- **安全可靠**: 使用AES等标准加密算法
+### 1. 拦截器层（interceptor）
 
-## 技术架构
+负责拦截 JDBC 操作，实现透明加密解密：
 
-### 核心组件
+- **SimpleInterceptorDriver**: JDBC 驱动拦截器，拦截数据库连接请求
+- **SimpleInterceptorConnection**: 连接包装器，包装真实的数据库连接
+- **SimpleInterceptorPreparedStatement**: 预编译语句包装器，处理参数加密
+- **SimpleInterceptorStatement**: 普通语句包装器
+- **SimpleInterceptorCallableStatement**: 存储过程语句包装器
+- **ResultSetDecryptingProxy**: 结果集解密代理，处理查询结果解密
 
-1. **CryptoJdbcDriver**: 加密JDBC驱动，拦截数据库连接请求
-2. **CryptoConnectionWrapper**: 连接包装器，包装真实的数据库连接
-3. **CryptoStatementWrapper**: 语句包装器，处理SQL语句的加密
-4. **CryptoPreparedStatementWrapper**: 预编译语句包装器
-5. **CryptoCallableStatementWrapper**: 存储过程语句包装器
-6. **CryptoResultSetWrapper**: 结果集包装器，处理查询结果的解密
-7. **FieldCryptoConfig**: 字段加密配置管理
-8. **CryptoUtils**: 加密解密工具类
-9. **SqlCryptoProcessor**: SQL处理器，解析和修改SQL语句
+### 2. 解析器层（parser）
 
-### 设计模式
+负责 SQL 解析和字段识别：
 
-- **装饰器模式**: 包装JDBC对象，添加加密解密功能
-- **代理模式**: JDBC驱动代理，拦截数据库操作
-- **工厂模式**: 创建加密解密处理器
-- **策略模式**: 支持多种加密算法
+- **SecurtkitUtils**: SQL 解析工具类，提供核心解析方法
+- **PoJoEncrtptorStatementVisitor**: SQL 访问者，提取表名和字段信息
+- **PlaceholderSelectVisitor**: 占位符选择访问者，处理 SELECT 语句
+- **SqlParseCache**: SQL 解析结果缓存，提升性能
 
-## 快速开始
+### 3. 配置层（config）
+
+负责配置管理和初始化：
+
+- **FieldEncryptorProperties**: 字段加密配置属性类
+- **ConfigInitializer**: 配置初始化器，初始化表配置缓存
+- **TableCache**: 表配置缓存，管理加密配置
+- **DataSourceConfigManager**: 数据源配置管理器（多数据源场景）
+
+### 4. 策略层（strategy）
+
+负责加密策略接口定义：
+
+- **FieldEncryptorStrategy**: 加密策略接口，定义加密和解密方法
+
+### 5. 异常处理（exception）
+
+提供统一的异常处理机制：
+
+- **SecurtKitException**: 基础异常类
+- **ConfigurationException**: 配置异常
+- **EncryptionException**: 加密异常
+- **DecryptionException**: 解密异常
+- **SqlParseException**: SQL 解析异常
+- **EncryptionHandler**: 异常处理器，支持多种失败策略
+
+## 使用方式
 
 ### 1. 添加依赖
 
 ```xml
 <dependency>
-    <groupId>io.github.hexlodev</groupId>
+    <groupId>io.github.hexlodev.core</groupId>
     <artifactId>securt-kit-core</artifactId>
-    <version>1.0.0</version>
+    <version>1.0-SNAPSHOT</version>
 </dependency>
 ```
 
-### 2. 配置加密字段
+### 2. 配置数据源
 
-```java
-// 创建字段加密配置
-FieldCryptoConfig config = new FieldCryptoConfig();
+修改数据源驱动为拦截驱动：
 
-// 配置需要加密的字段
-config.addEncryptField("users", "name");
-config.addEncryptField("users", "email");
-config.addEncryptField("users", "phone");
-
-// 配置需要解密的字段
-config.addDecryptField("users", "name");
-config.addDecryptField("users", "email");
-config.addDecryptField("users", "phone");
-
-// 设置加密算法和密钥
-config.setAlgorithm("AES");
-config.setKey("MySecretKey12345");
-config.setTransformation("AES/CBC/PKCS5Padding");
-
-// 初始化加密驱动
-CryptoJdbcDriver.initialize(config, config.getKey());
+```yaml
+spring:
+  datasource:
+    driver-class-name: io.github.hexlodev.core.interceptor.SimpleInterceptorDriver
+    url: jdbc:interceptor:mysql://localhost:3306/testdb
 ```
 
-### 3. 使用加密驱动
+### 3. 配置加密字段
+
+```yaml
+securtkit:
+  encryptor:
+    enable: true
+    tables:
+      - table-name: user
+        fields:
+          - field-name: name
+          - field-name: phone
+```
+
+### 4. 初始化配置（非 Spring Boot 环境）
 
 ```java
-// 使用加密驱动连接数据库
-String url = "jdbc:crypto:mysql://localhost:3306/test_db";
-String username = "root";
-String password = "password";
+FieldEncryptorProperties properties = new FieldEncryptorProperties();
+// 设置配置...
+TableCache.init(properties);
+```
 
-Connection connection = DriverManager.getConnection(url, username, password);
+## API 文档
 
-// 正常使用JDBC API
-PreparedStatement statement = connection.prepareStatement(
-    "INSERT INTO users (name, email, phone) VALUES (?, ?, ?)");
-statement.setString(1, "张三");
-statement.setString(2, "zhangsan@example.com");
-statement.setString(3, "13800138000");
-statement.executeUpdate();
+### SecurtkitUtils
 
-// 查询时自动解密
-ResultSet resultSet = statement.executeQuery("SELECT name, email, phone FROM users");
-while (resultSet.next()) {
-    String name = resultSet.getString("name"); // 自动解密
-    String email = resultSet.getString("email"); // 自动解密
-    String phone = resultSet.getString("phone"); // 自动解密
+核心工具类，提供 SQL 解析功能：
+
+```java
+public class SecurtkitUtils {
+    /**
+     * 解析 SQL 语句，获取占位符与表字段的映射关系
+     */
+    public static Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> parseSql(String sql)
+            throws JSQLParserException;
+    
+    /**
+     * 判断表是否需要加密处理
+     */
+    public static boolean needEncrypt(Collection<String> tables);
 }
 ```
 
-## 配置方式
+### TableCache
 
-### 1. 配置文件方式
-
-创建 `crypto-config.properties` 文件：
-
-```properties
-# 加密算法配置
-crypto.algorithm=AES
-crypto.key=MySecretKey12345
-crypto.transformation=AES/CBC/PKCS5Padding
-
-# 需要加密的字段配置
-crypto.encrypt.fields=users.name,users.email,users.phone,orders.customer_name
-
-# 需要解密的字段配置
-crypto.decrypt.fields=users.name,users.email,users.phone,orders.customer_name
-```
-
-### 2. 环境变量方式
-
-```bash
-export CRYPTO_ALGORITHM=AES
-export CRYPTO_KEY=MySecretKey12345
-export CRYPTO_ENCRYPT_FIELDS=users.name,users.email,users.phone
-export CRYPTO_DECRYPT_FIELDS=users.name,users.email,users.phone
-```
-
-### 3. 系统属性方式
-
-```bash
-java -Dcrypto.algorithm=AES \
-     -Dcrypto.key=MySecretKey12345 \
-     -Dcrypto.encrypt.fields=users.name,users.email,users.phone \
-     -Dcrypto.decrypt.fields=users.name,users.email,users.phone \
-     -jar your-application.jar
-```
-
-## Spring Boot 集成
-
-### 1. 配置数据源
+表配置缓存，管理加密配置：
 
 ```java
-@Configuration
-public class DataSourceConfig {
+public class TableCache {
+    /**
+     * 初始化缓存
+     */
+    public static void init(FieldEncryptorProperties properties);
     
-    @Bean
-    public DataSource dataSource() {
-        // 初始化加密配置
-        initializeCryptoConfig();
-        
-        // 创建数据源
-        DriverManagerDataSource dataSource = new DriverManagerDataSource();
-        dataSource.setDriverClassName("io.github.hexlodev.core.crypto.CryptoJdbcDriver");
-        dataSource.setUrl("jdbc:crypto:mysql://localhost:3306/test_db");
-        dataSource.setUsername("root");
-        dataSource.setPassword("password");
-        
-        return dataSource;
-    }
-    
-    private void initializeCryptoConfig() {
-        FieldCryptoConfig config = new FieldCryptoConfig();
-        config.addEncryptField("users", "name");
-        config.addEncryptField("users", "email");
-        config.addDecryptField("users", "name");
-        config.addDecryptField("users", "email");
-        config.setAlgorithm("AES");
-        config.setKey("MySecretKey12345");
-        
-        CryptoJdbcDriver.initialize(config, config.getKey());
-    }
+    /**
+     * 获取表的加密字段信息
+     */
+    public static Map<String, Class<? extends FieldEncryptorStrategy>> getTableFieldEncryptInfo(
+            String tableName, String datasourceId);
 }
 ```
 
-### 2. 使用JdbcTemplate
+### FieldEncryptorStrategy
+
+加密策略接口：
 
 ```java
-@Service
-public class UserService {
+public interface FieldEncryptorStrategy {
+    /**
+     * 加密方法
+     */
+    String encryption(String oldValue);
     
-    @Autowired
-    private JdbcTemplate jdbcTemplate;
-    
-    public void createUser(String name, String email, String phone) {
-        String sql = "INSERT INTO users (name, email, phone) VALUES (?, ?, ?)";
-        jdbcTemplate.update(sql, name, email, phone);
-    }
-    
-    public List<Map<String, Object>> findUserByName(String name) {
-        String sql = "SELECT id, name, email, phone FROM users WHERE name = ?";
-        return jdbcTemplate.queryForList(sql, name);
-    }
+    /**
+     * 解密方法
+     */
+    String decryption(String oldValue);
 }
 ```
 
-## 高级功能
+## 技术特性
 
-### 1. 自定义加密算法
+- ✅ 版本无关：支持 Java 8+，不依赖 Spring Boot 版本
+- ✅ 高性能：SQL 解析缓存、优化的字符串操作
+- ✅ 线程安全：所有组件都经过线程安全设计
+- ✅ 异常处理：完善的异常处理机制，支持多种失败策略
+- ✅ 多数据源：支持多数据源场景下的差异化配置
 
-```java
-// 实现自定义加密算法
-public class CustomCryptoUtils {
-    public static String encrypt(String plainText, String key) {
-        // 自定义加密逻辑
-        return customEncrypt(plainText, key);
-    }
-    
-    public static String decrypt(String encryptedText, String key) {
-        // 自定义解密逻辑
-        return customDecrypt(encryptedText, key);
-    }
-}
-```
+## 注意事项
 
-### 2. 动态配置
-
-```java
-// 动态添加加密字段
-FieldCryptoConfig config = CryptoJdbcDriver.getConfig();
-config.addEncryptField("new_table", "new_field");
-config.addDecryptField("new_table", "new_field");
-```
-
-### 3. 性能优化
-
-```java
-// 启用缓存
-config.setCacheEnabled(true);
-config.setCacheSize(1000);
-config.setCacheTtl(3600);
-```
-
-## 测试
-
-### 运行单元测试
-
-```bash
-mvn test
-```
-
-### 运行集成测试
-
-```bash
-mvn integration-test
-```
-
-### 性能测试
-
-```bash
-mvn test -Dtest=PerformanceTest
-```
-
-## 最佳实践
-
-### 1. 密钥管理
-
-- 使用环境变量或密钥管理服务存储加密密钥
-- 定期轮换加密密钥
-- 不要在代码中硬编码密钥
-
-### 2. 性能优化
-
-- 只对敏感字段进行加密
-- 使用索引优化查询性能
-- 考虑使用缓存减少重复计算
-
-### 3. 安全考虑
-
-- 使用强加密算法（AES-256）
-- 保护加密密钥的安全
-- 定期审计加密配置
-
-## 故障排除
-
-### 常见问题
-
-1. **驱动未初始化**
-   - 确保在创建连接前调用 `CryptoJdbcDriver.initialize()`
-
-2. **加密解密失败**
-   - 检查密钥是否正确
-   - 验证字段配置是否正确
-
-3. **性能问题**
-   - 检查是否对过多字段进行加密
-   - 考虑使用缓存优化
-
-### 日志配置
-
-```properties
-# 启用调试日志
-logging.level.io.github.hexlodev.core.crypto=DEBUG
-```
-
-## 贡献指南
-
-1. Fork 项目
-2. 创建特性分支
-3. 提交更改
-4. 推送到分支
-5. 创建 Pull Request
-
-## 许可证
-
-本项目采用 Apache License 2.0 许可证。
-
-## 联系方式
-
-- 项目主页: https://github.com/hexlodev/securt-kit
-- 问题反馈: https://github.com/hexlodev/securt-kit/issues
-- 邮箱: hexlodev@example.com
-
-## 更新日志
-
-### v1.0.0 (2024-01-01)
-- 初始版本发布
-- 支持基本的字段加密解密功能
-- 支持多种配置方式
-- 提供完整的测试用例
+1. **必须使用拦截驱动**：数据源 URL 必须使用 `jdbc:interceptor:` 前缀
+2. **配置初始化**：在 Spring Boot 环境中会自动初始化，非 Spring Boot 环境需要手动调用 `TableCache.init()`
+3. **加密策略**：必须实现 `FieldEncryptorStrategy` 接口，确保加密解密互逆

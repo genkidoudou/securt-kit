@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Securt-Kit 加密解密工具</title>
+    <link rel="stylesheet" href="/monitor/css/style.css">
+</head>
+<body>
+    <!-- 登录页面 -->
+    <div id="loginPage" class="page">
+        <div class="login-container">
+            <h1>Securt-Kit 监控页面</h1>
+            <form id="loginForm" class="login-form">
+                <div class="form-group">
+                    <label for="username">用户名:</label>
+                    <input type="text" id="username" name="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">密码:</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+                <div id="loginError" class="error-message"></div>
+                <button type="submit" class="btn btn-primary">登录</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 主功能页面 -->
+    <div id="mainPage" class="page" style="display: none;">
+        <header class="header">
+            <h1>Securt-Kit 加密解密工具</h1>
+            <button id="logoutBtn" class="btn btn-secondary">退出</button>
+        </header>
+
+        <div class="container">
+            <!-- 标签页导航 -->
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="crypto">加密解密</button>
+                <button class="tab-btn" data-tab="sqlParse">SQL 解析</button>
+                <button class="tab-btn" data-tab="sqlEncrypt">SQL参数加密</button>
+                <button class="tab-btn" data-tab="sqlQuery">SQL 查询</button>
+                <button class="tab-btn" data-tab="dataInit">数据初始化</button>
+                <button class="tab-btn" data-tab="config">配置信息</button>
+            </div>
+
+            <!-- 加密解密标签页 -->
+            <div id="cryptoTab" class="tab-content active">
+                <div class="card">
+                    <h2>字符串加密解密</h2>
+                    <div class="form-group">
+                        <label>输入内容:</label>
+                        <textarea id="cryptoInput" rows="4" placeholder="请输入要加密或解密的文本"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>数据源 <span style="color: red;">*</span>:</label>
+                        <div id="cryptoDatasourceId" class="datasource-radio-group" role="radiogroup">
+                            <!-- 数据源选项将通过 JavaScript 动态生成 -->
+                        </div>
+                        <div id="cryptoDatasourceError" class="error-message" style="display: none;"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>表名（可选）:</label>
+                            <input type="text" id="cryptoTableName" placeholder="例如: user">
+                        </div>
+                        <div class="form-group">
+                            <label>字段名（可选）:</label>
+                            <input type="text" id="cryptoFieldName" placeholder="例如: name">
+                        </div>
+                        <div class="form-group">
+                            <label>策略类名（可选）:</label>
+                            <input type="text" id="cryptoStrategy" placeholder="例如: com.example.Strategy">
+                        </div>
+                    </div>
+                    <div class="button-group">
+                        <button id="encryptBtn" class="btn btn-primary">加密</button>
+                        <button id="decryptBtn" class="btn btn-primary">解密</button>
+                        <button id="clearBtn" class="btn btn-secondary">清空</button>
+                    </div>
+                    <div class="form-group">
+                        <label>输出结果:</label>
+                        <textarea id="cryptoOutput" rows="4" readonly></textarea>
+                    </div>
+                    <button id="copyBtn" class="btn btn-secondary" style="display: none;">复制结果</button>
+                </div>
+            </div>
+
+            <!-- SQL 解析标签页 -->
+            <div id="sqlParseTab" class="tab-content">
+                <div class="card">
+                    <h2>SQL 解析</h2>
+                    <div class="form-group">
+                        <label>数据源 <span style="color: red;">*</span>:</label>
+                        <div id="sqlParseDatasourceId" class="datasource-radio-group" role="radiogroup">
+                            <!-- 数据源选项将通过 JavaScript 动态生成 -->
+                        </div>
+                        <div id="sqlParseDatasourceError" class="error-message" style="display: none;"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>输入 SQL:</label>
+                        <textarea id="sqlInput" rows="6" placeholder="请输入要解析的 SQL 语句，例如: UPDATE user SET name = ?, phone = ? WHERE id = ?"></textarea>
+                    </div>
+                    <div class="button-group">
+                        <button id="parseSqlBtn" class="btn btn-primary">解析</button>
+                        <button id="clearSqlBtn" class="btn btn-secondary">清空</button>
+                    </div>
+                    <div id="parseSqlResult" style="display: none;">
+                        <div class="form-group">
+                            <label>占位符映射:</label>
+                            <div id="placeholderTable" class="result-table"></div>
+                        </div>
+                        <div class="form-group">
+                            <label>需要加密的字段:</label>
+                            <div id="encryptFieldsTable" class="result-table"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SQL参数加密标签页 -->
+            <div id="sqlEncryptTab" class="tab-content">
+                <div class="card">
+                    <h2>SQL参数加密</h2>
+                    <div class="form-group">
+                        <label>数据源 <span style="color: red;">*</span>:</label>
+                        <div id="sqlEncryptDatasourceId" class="datasource-radio-group" role="radiogroup">
+                            <!-- 数据源选项将通过 JavaScript 动态生成 -->
+                        </div>
+                        <div id="sqlEncryptDatasourceError" class="error-message" style="display: none;"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>输入 SQL（包含实际值，支持 INSERT、UPDATE、DELETE、SELECT）:</label>
+                        <textarea id="sqlEncryptInput" rows="6" placeholder="请输入要加密的 SQL 语句，例如: UPDATE user SET name = '张三', phone = '13800138000' WHERE id = 1"></textarea>
+                    </div>
+                    <div class="button-group">
+                        <button id="encryptSqlBtn" class="btn btn-primary">加密</button>
+                        <button id="clearSqlEncryptBtn" class="btn btn-secondary">清空</button>
+                    </div>
+                    <div id="sqlEncryptResult" style="display: none;">
+                        <div class="form-group">
+                            <label>加密后的 SQL:</label>
+                            <textarea id="sqlEncryptOutput" rows="6" readonly></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>原始 SQL:</label>
+                            <textarea id="sqlEncryptOriginal" rows="4" readonly style="background-color: #f5f5f5;"></textarea>
+                        </div>
+                        <div id="sqlEncryptStats" style="margin-top: 10px; color: #666; font-size: 14px;"></div>
+                        <button id="copySqlEncryptBtn" class="btn btn-secondary" style="display: none;">复制加密后的 SQL</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SQL 查询标签页 -->
+            <div id="sqlQueryTab" class="tab-content">
+                <div class="card">
+                    <h2>SQL 查询</h2>
+                    <div class="form-group">
+                        <label>数据源 <span style="color: red;">*</span>:</label>
+                        <div id="sqlQueryDatasourceId" class="datasource-radio-group" role="radiogroup">
+                            <!-- 数据源选项将通过 JavaScript 动态生成 -->
+                        </div>
+                        <div id="sqlQueryDatasourceError" class="error-message" style="display: none;"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>输入查询 SQL（只支持 SELECT）:</label>
+                        <textarea id="sqlQueryInput" rows="6" placeholder="请输入 SELECT 查询语句，例如: SELECT * FROM user WHERE id = 1"></textarea>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>每页大小:</label>
+                            <input type="number" id="sqlQueryPageSize" value="10" min="1" max="100">
+                        </div>
+                        <div class="form-group">
+                            <label>页码:</label>
+                            <input type="number" id="sqlQueryPageNum" value="1" min="1">
+                        </div>
+                    </div>
+                    <div class="button-group">
+                        <button id="querySqlBtn" class="btn btn-primary">查询</button>
+                        <button id="clearSqlQueryBtn" class="btn btn-secondary">清空</button>
+                    </div>
+                    <div id="sqlQueryResult" style="display: none;">
+                        <div class="form-group">
+                            <label>执行的 SQL:</label>
+                            <textarea id="sqlQueryExecuted" rows="2" readonly style="background-color: #f5f5f5; font-size: 12px;"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>查询结果:</label>
+                            <div id="sqlQueryStats" style="margin-bottom: 10px; color: #666; font-size: 14px;"></div>
+                            <div id="sqlQueryTable" class="result-table"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 数据初始化标签页 -->
+            <div id="dataInitTab" class="tab-content">
+                <div class="card">
+                    <h2>数据初始化</h2>
+                    <div class="form-group">
+                        <label>数据源 <span style="color: red;">*</span>:</label>
+                        <div id="dataInitDatasourceId" class="datasource-radio-group" role="radiogroup">
+                            <!-- 数据源选项将通过 JavaScript 动态生成 -->
+                        </div>
+                        <div id="dataInitDatasourceError" class="error-message" style="display: none;"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>表名（必填）:</label>
+                        <input type="text" id="dataInitTableName" placeholder="例如: user" required>
+                    </div>
+                    <div class="form-group">
+                        <label>WHERE条件（可选）:</label>
+                        <textarea id="dataInitWhereCondition" rows="2" placeholder="例如: id > 100 AND status = 1"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>主键字段（必填）:</label>
+                        <input type="text" id="dataInitPrimaryKeyField" placeholder="例如: id" required>
+                    </div>
+                    <div class="button-group">
+                        <button id="dataInitEncryptBtn" class="btn btn-primary">加密</button>
+                        <button id="dataInitDecryptBtn" class="btn btn-primary">解密</button>
+                        <button id="clearDataInitBtn" class="btn btn-secondary">清空</button>
+                    </div>
+                    <div id="dataInitResult" style="display: none;">
+                        <div class="form-group">
+                            <label>操作结果:</label>
+                            <div id="dataInitStats" style="margin-bottom: 10px; color: #666; font-size: 14px;"></div>
+                        </div>
+                        <div class="form-group">
+                            <label>生成的SQL语句:</label>
+                            <textarea id="dataInitSqlOutput" rows="10" readonly style="background-color: #f5f5f5; font-family: monospace; font-size: 12px;"></textarea>
+                        </div>
+                        <button id="copyDataInitSqlBtn" class="btn btn-secondary" style="display: none;">复制SQL</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 配置信息标签页 -->
+            <div id="configTab" class="tab-content">
+                <div class="card">
+                    <h2>配置信息</h2>
+                    <div id="configResult" style="display: none;">
+                        <div class="form-group">
+                            <label>基本配置:</label>
+                            <div id="basicConfig" class="config-section"></div>
+                        </div>
+                        <div class="form-group">
+                            <label>SQL解析缓存配置:</label>
+                            <div id="cacheConfig" class="config-section"></div>
+                        </div>
+                        <div class="form-group">
+                            <label>表配置:</label>
+                            <div id="tablesConfig" class="config-section"></div>
+                        </div>
+                    </div>
+                    <div id="configLoading" style="text-align: center; padding: 20px; color: #999;">
+                        正在加载配置信息...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/monitor/js/app.js"></script>
+</body>
+</html>
+

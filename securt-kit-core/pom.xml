@@ -16,9 +16,6 @@
         <maven.compiler.source>8</maven.compiler.source>
         <maven.compiler.target>8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <jsqlparser.version>4.9</jsqlparser.version>
-        <hutool.version>5.8.20</hutool.version>
-
     </properties>
 
     <dependencies>
@@ -52,14 +49,9 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot</artifactId>
+            <optional>true</optional>
         </dependency>
-
-        <dependency>
-            <groupId>javax.validation</groupId>
-            <artifactId>validation-api</artifactId>
-        </dependency>
-
-
+        <!-- 不再包含 validation-api，由 starter 模块提供 -->
     </dependencies>
 
     <build>
@@ -105,6 +97,22 @@
                                         <exclude>META-INF/*.SF</exclude>
                                         <exclude>META-INF/*.DSA</exclude>
                                         <exclude>META-INF/*.RSA</exclude>
+                                        <!-- 排除 Java 21 的多版本类文件（class file major version 65） -->
+                                        <!-- 我们最高只支持到 Java 17，不需要 Java 21 的类文件 -->
+                                        <exclude>META-INF/versions/21/**</exclude>
+                                    </excludes>
+                                </filter>
+                                <!-- 排除 Spring 相关依赖，因为它们是 optional 的，不需要打包到最终 jar 中 -->
+                                <filter>
+                                    <artifact>org.springframework:*</artifact>
+                                    <excludes>
+                                        <exclude>**</exclude>
+                                    </excludes>
+                                </filter>
+                                <filter>
+                                    <artifact>org.springframework.boot:spring-boot</artifact>
+                                    <excludes>
+                                        <exclude>**</exclude>
                                     </excludes>
                                 </filter>
                                 <!-- 明确包含 jsqlparser（即使是 provided scope），因为我们要将其打包到最终 jar 中 -->

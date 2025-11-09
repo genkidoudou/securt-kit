@@ -4,7 +4,6 @@ import io.github.hexlodev.core.exception.EncryptionHandler;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
-import javax.validation.constraints.NotBlank;
 import java.util.List;
 
 /**
@@ -133,8 +132,6 @@ public class FieldEncryptorProperties {
          * 表名
          * @since 2025/10/8
          */
-
-        @NotBlank(message = "表名不能为空")
         private String tableName;
 
         /**

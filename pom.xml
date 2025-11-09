@@ -8,19 +8,82 @@
     <artifactId>securt-kit</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
+    <!-- 默认只包含 Boot 2.7 模块（Java 8 环境） -->
+    <!-- Boot 3 模块需要使用 -pl 参数单独构建（需要 Java 17+） -->
+    <!-- 注意：IDEA 可能无法识别未在 <modules> 中的模块，但这是 Maven 最可靠的模块排除方式 -->
     <modules>
         <module>securt-kit-core</module>
-        <module>securt-kit-starter</module>
-        <module>securt-kit-dy-datasource-test</module>
-        <!--        <module>securt-kit-test</module>-->
+        <module>securt-kit-starter-boot2</module>
+        <module>securt-kit-test-boot2</module>
+        <module>securt-kit-dy-datasource-test-boot2</module>
+        <!-- Boot 3 模块不包含在默认 modules 中，需要使用 -pl 参数构建 -->
+         <module>securt-kit-starter-boot3</module>
+         <module>securt-kit-test-boot3</module>
+         <module>securt-kit-dy-datasource-test-boot3</module>
     </modules>
 
     <properties>
         <maven.compiler.source>8</maven.compiler.source>
         <maven.compiler.target>8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <spring-boot.version>2.7.18</spring-boot.version>
+        <spring-boot-2.version>2.7.18</spring-boot-2.version>
+        <spring-boot-3.version>3.2.0</spring-boot-3.version>
+        <spring-boot.version>${spring-boot-2.version}</spring-boot.version>
+        <java.version>8</java.version>
+        <java.version.boot3>17</java.version.boot3>
+        <jsqlparser.version>4.9</jsqlparser.version>
+        <hutool.version>5.8.20</hutool.version>
+        <lombok.version>1.18.36</lombok.version>
+        <javax-validation.version>2.0.1.Final</javax-validation.version>
+        <jakarta-validation.version>3.0.2</jakarta-validation.version>
+        <javax-servlet.version>4.0.1</javax-servlet.version>
+        <jakarta-servlet.version>6.0.0</jakarta-servlet.version>
+        <!-- 这些属性已不再使用，保留用于向后兼容 -->
+        <!-- 现在使用 <modules> 列表来控制哪些模块被构建 -->
     </properties>
+
+    <profiles>
+        <!-- 构建所有模块（需要 Java 17+） -->
+        <!-- 注意：使用此 profile 时，需要使用 -pl 参数指定所有模块 -->
+        <profile>
+            <id>all</id>
+            <activation>
+                <activeByDefault>false</activeByDefault>
+            </activation>
+            <properties>
+                <spring-boot.version>${spring-boot-2.version}</spring-boot.version>
+                <build.profile.id>all</build.profile.id>
+                <!-- 跳过所有测试 -->
+                <maven.test.skip>true</maven.test.skip>
+            </properties>
+        </profile>
+
+        <!-- 仅构建 Boot 2.7 模块（默认，Java 8+） -->
+        <profile>
+            <id>boot2</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <properties>
+                <spring-boot.version>${spring-boot-2.version}</spring-boot.version>
+                <build.profile.id>boot2</build.profile.id>
+                <!-- 跳过所有测试 -->
+                <maven.test.skip>true</maven.test.skip>
+            </properties>
+        </profile>
+
+        <!-- 仅构建 Boot 3.x 模块（需要 Java 17+） -->
+        <!-- 注意：使用此 profile 时，需要使用 -pl 参数指定 Boot 3 模块 -->
+        <profile>
+            <id>boot3</id>
+            <properties>
+                <spring-boot.version>${spring-boot-3.version}</spring-boot.version>
+                <build.profile.id>boot3</build.profile.id>
+                <!-- 跳过所有测试 -->
+                <maven.test.skip>true</maven.test.skip>
+            </properties>
+        </profile>
+    </profiles>
 
     <dependencyManagement>
         <dependencies>
@@ -36,7 +99,43 @@
             <dependency>
                 <groupId>com.github.jsqlparser</groupId>
                 <artifactId>jsqlparser</artifactId>
-                <version>4.9</version>
+                <version>${jsqlparser.version}</version>
+            </dependency>
+            <!-- Manage hutool version -->
+            <dependency>
+                <groupId>cn.hutool</groupId>
+                <artifactId>hutool-all</artifactId>
+                <version>${hutool.version}</version>
+            </dependency>
+            <!-- Manage lombok version -->
+            <dependency>
+                <groupId>org.projectlombok</groupId>
+                <artifactId>lombok</artifactId>
+                <version>${lombok.version}</version>
+            </dependency>
+            <!-- javax validation (for Boot 2.7) -->
+            <dependency>
+                <groupId>javax.validation</groupId>
+                <artifactId>validation-api</artifactId>
+                <version>${javax-validation.version}</version>
+            </dependency>
+            <!-- jakarta validation (for Boot 3.x) -->
+            <dependency>
+                <groupId>jakarta.validation</groupId>
+                <artifactId>jakarta.validation-api</artifactId>
+                <version>${jakarta-validation.version}</version>
+            </dependency>
+            <!-- javax servlet (for Boot 2.7) -->
+            <dependency>
+                <groupId>javax.servlet</groupId>
+                <artifactId>javax.servlet-api</artifactId>
+                <version>${javax-servlet.version}</version>
+            </dependency>
+            <!-- jakarta servlet (for Boot 3.x) -->
+            <dependency>
+                <groupId>jakarta.servlet</groupId>
+                <artifactId>jakarta.servlet-api</artifactId>
+                <version>${jakarta-servlet.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
