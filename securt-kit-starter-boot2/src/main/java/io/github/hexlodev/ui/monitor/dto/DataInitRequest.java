@@ -17,7 +17,7 @@ public class DataInitRequest {
      * 表名（必填）
      */
     @NotBlank(message = "表名不能为空")
-    @SafeInput(maxLength = 64, pattern = "^[a-zA-Z_][a-zA-Z0-9_.]*$", message = "表名格式不正确")
+    @SafeInput(maxLength = 64, pattern = "^\"?[a-zA-Z_][a-zA-Z0-9_.]*\"?$", message = "表名格式不正确")
     private String tableName;
 
     /**

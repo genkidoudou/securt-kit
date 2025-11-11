@@ -13,7 +13,7 @@ import java.sql.Timestamp;
  * @author hexlodev
  * @since 1.0.0
  */
-@TableName("orders")
+@TableName("\"orders\"")
 public class OrderEntity {
     @TableId(type = IdType.AUTO)
     private Long id;

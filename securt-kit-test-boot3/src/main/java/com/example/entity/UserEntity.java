@@ -10,7 +10,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
  * @author hexlodev
  * @since 1.0.0
  */
-@TableName("user")
+@TableName("\"user\"")
 public class UserEntity {
     @TableId(type = IdType.AUTO)
     private Long id;

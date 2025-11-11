@@ -27,6 +27,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.util.StringUtils;
+
+// 可选：当引入了 dynamic-datasource 时用于切换数据源
+// 使用反射避免在未引入该依赖时编译/加载失败
 
 import jakarta.validation.Valid;
 
@@ -105,8 +109,8 @@ public class MonitorController {
      * 处理登录请求
      */
     @PostMapping("/login")
-    public ApiResponse<?> login(@RequestParam String username,
-                                @RequestParam String password,
+    public ApiResponse<?> login(@RequestParam("username") String username,
+                                @RequestParam("password") String password,
                                 HttpSession session) {
         // 验证用户名密码
         if (properties.getUsername().equals(username) &&
@@ -970,8 +974,34 @@ public class MonitorController {
             String encryptedSql = encryptWhereClauseValues(pagedSql);
             log.debug("加密后的 SQL: {}", encryptedSql);
 
-            // 执行查询
-            QuerySqlResponse response = executeQuery(encryptedSql, sql, pageNum, pageSize);
+            // 多数据源：根据请求的 datasourceId 切换数据源上下文（如果存在动态数据源）
+            String requestedDsId = request.getDatasourceId();
+            boolean switched = false;
+            if (StringUtils.hasText(requestedDsId)) {
+                try {
+                    Class<?> holder = Class.forName("com.baomidou.dynamic.datasource.toolkit.DynamicDataSourceContextHolder");
+                    holder.getMethod("push", String.class).invoke(null, requestedDsId);
+                    switched = true;
+                    log.debug("Switched datasource to '{}'", requestedDsId);
+                } catch (ClassNotFoundException ignore) {
+                    // 未引入 dynamic-datasource，忽略
+                }
+            }
+
+            QuerySqlResponse response;
+            try {
+                // 执行查询
+                response = executeQuery(encryptedSql, sql, pageNum, pageSize);
+            } finally {
+                if (switched) {
+                    try {
+                        Class<?> holder = Class.forName("com.baomidou.dynamic.datasource.toolkit.DynamicDataSourceContextHolder");
+                        holder.getMethod("clear").invoke(null);
+                        log.debug("Cleared datasource context for '{}'", requestedDsId);
+                    } catch (Throwable ignore) {
+                    }
+                }
+            }
             
             return ApiResponse.success(response);
 
@@ -1353,8 +1383,34 @@ public class MonitorController {
                 return ApiResponse.error("数据源不可用，无法执行操作");
             }
 
-            // 执行数据初始化
-            DataInitResponse response = processDataInit(request, true);
+            // 多数据源：根据请求的 datasourceId 切换数据源上下文（如果存在动态数据源）
+            String requestedDsId = request.getDatasourceId();
+            boolean switched = false;
+            if (StringUtils.hasText(requestedDsId)) {
+                try {
+                    Class<?> holder = Class.forName("com.baomidou.dynamic.datasource.toolkit.DynamicDataSourceContextHolder");
+                    holder.getMethod("push", String.class).invoke(null, requestedDsId);
+                    switched = true;
+                    log.debug("Switched datasource to '{}'", requestedDsId);
+                } catch (ClassNotFoundException ignore) {
+                    // 未引入 dynamic-datasource，忽略
+                }
+            }
+
+            DataInitResponse response;
+            try {
+                // 执行数据初始化
+                response = processDataInit(request, true);
+            } finally {
+                if (switched) {
+                    try {
+                        Class<?> holder = Class.forName("com.baomidou.dynamic.datasource.toolkit.DynamicDataSourceContextHolder");
+                        holder.getMethod("clear").invoke(null);
+                        log.debug("Cleared datasource context for '{}'", requestedDsId);
+                    } catch (Throwable ignore) {
+                    }
+                }
+            }
             return ApiResponse.success(response, "加密完成");
 
         } catch (Exception e) {
@@ -1381,8 +1437,34 @@ public class MonitorController {
                 return ApiResponse.error("数据源不可用，无法执行操作");
             }
 
-            // 执行数据初始化
-            DataInitResponse response = processDataInit(request, false);
+            // 多数据源：根据请求的 datasourceId 切换数据源上下文（如果存在动态数据源）
+            String requestedDsId = request.getDatasourceId();
+            boolean switched = false;
+            if (StringUtils.hasText(requestedDsId)) {
+                try {
+                    Class<?> holder = Class.forName("com.baomidou.dynamic.datasource.toolkit.DynamicDataSourceContextHolder");
+                    holder.getMethod("push", String.class).invoke(null, requestedDsId);
+                    switched = true;
+                    log.debug("Switched datasource to '{}'", requestedDsId);
+                } catch (ClassNotFoundException ignore) {
+                    // 未引入 dynamic-datasource，忽略
+                }
+            }
+
+            DataInitResponse response;
+            try {
+                // 执行数据初始化
+                response = processDataInit(request, false);
+            } finally {
+                if (switched) {
+                    try {
+                        Class<?> holder = Class.forName("com.baomidou.dynamic.datasource.toolkit.DynamicDataSourceContextHolder");
+                        holder.getMethod("clear").invoke(null);
+                        log.debug("Cleared datasource context for '{}'", requestedDsId);
+                    } catch (Throwable ignore) {
+                    }
+                }
+            }
             return ApiResponse.success(response, "解密完成");
 
         } catch (Exception e) {
@@ -1400,6 +1482,11 @@ public class MonitorController {
      */
     private DataInitResponse processDataInit(DataInitRequest request, boolean isEncrypt) throws SQLException {
         String tableName = request.getTableName().trim();
+        // 规范化表名用于配置匹配：去掉首尾双引号（若存在）
+        String normalizedTableName = tableName;
+        if (normalizedTableName.length() >= 2 && normalizedTableName.startsWith("\"") && normalizedTableName.endsWith("\"")) {
+            normalizedTableName = normalizedTableName.substring(1, normalizedTableName.length() - 1);
+        }
         String whereCondition = request.getWhereCondition() != null ? request.getWhereCondition().trim() : "";
         String primaryKeyField = request.getPrimaryKeyField().trim();
         String datasourceId = request.getDatasourceId() != null ? request.getDatasourceId().trim() : null;
@@ -1415,9 +1502,9 @@ public class MonitorController {
         response.setOperationType(isEncrypt ? "encrypt" : "decrypt");
 
         // 获取表需要加密的字段（支持多数据源）
-        Map<String, Class<? extends FieldEncryptorStrategy>> encryptFields = TableCache.getTableFieldEncryptInfo(tableName, datasourceId);
+        Map<String, Class<? extends FieldEncryptorStrategy>> encryptFields = TableCache.getTableFieldEncryptInfo(normalizedTableName, datasourceId);
         if (encryptFields == null || encryptFields.isEmpty()) {
-            throw new IllegalArgumentException("表 " + tableName + " 在数据源 " + datasourceId + " 中没有配置需要加密的字段");
+            throw new IllegalArgumentException("表 " + normalizedTableName + " 在数据源 " + datasourceId + " 中没有配置需要加密的字段");
         }
 
         List<String> sqlStatements = new ArrayList<>();

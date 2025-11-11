@@ -16,10 +16,7 @@
         <maven.compiler.source>8</maven.compiler.source>
         <maven.compiler.target>8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <!-- 本模块的开关属性：从父 POM 的 profile 读取 -->
-        <skip.module>${skip.module-starter-boot2}</skip.module>
-        <maven.compiler.skip>${skip.module}</maven.compiler.skip>
-        <!-- maven.test.skip 由父 POM 的 profile 统一控制，这里不设置 -->
+        <maven.build.skip>${skip.module-starter-boot2}</maven.build.skip>
     </properties>
 
     <dependencies>
@@ -107,7 +104,17 @@
                 </executions>
             </plugin>
 
-
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-install-plugin</artifactId>
+                <version>3.1.1</version>
+                <executions>
+                    <execution>
+                        <id>default-install</id>
+                        <phase>none</phase>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 </project>

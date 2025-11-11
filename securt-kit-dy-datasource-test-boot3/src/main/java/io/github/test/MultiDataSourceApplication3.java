@@ -29,10 +29,10 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  */
 @SpringBootApplication
 @MapperScan(basePackages = "io.github.test.mapper")
-public class MultiDataSourceApplication {
+public class MultiDataSourceApplication3 {
 
     public static void main(String[] args) {
-        SpringApplication.run(MultiDataSourceApplication.class, args);
+        SpringApplication.run(MultiDataSourceApplication3.class, args);
         System.out.println("\n========================================");
         System.out.println("多数据源测试应用启动成功！");
         System.out.println("访问地址：");

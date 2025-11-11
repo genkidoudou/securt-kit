@@ -36,8 +36,8 @@
       o.customer_phone,
       o.amount,
       o.status AS order_status
-    FROM user u
-    INNER JOIN orders o ON u.id = o.user_id
+    FROM "user" u
+    INNER JOIN "orders" o ON u.id = o.user_id
     WHERE u.id = #{userId}
     ORDER BY o.id DESC
   </select>
@@ -56,8 +56,8 @@
       o.customer_phone,
       o.amount,
       o.status AS order_status
-    FROM user u
-    LEFT JOIN orders o ON u.id = o.user_id
+    FROM "user" u
+    LEFT JOIN "orders" o ON u.id = o.user_id
     ORDER BY u.id, o.id DESC
   </select>
 
@@ -75,8 +75,8 @@
       o.customer_phone,
       o.amount,
       o.status AS order_status
-    FROM user u
-    INNER JOIN orders o ON u.id = o.user_id
+    FROM "user" u
+    INNER JOIN "orders" o ON u.id = o.user_id
     WHERE o.order_no = #{orderNo}
   </select>
 
@@ -94,8 +94,8 @@
       o.customer_phone,
       o.amount,
       o.status AS order_status
-    FROM orders o
-    INNER JOIN user u ON o.user_id = u.id
+    FROM "orders" o
+    INNER JOIN "user" u ON o.user_id = u.id
     ORDER BY o.id DESC
   </select>
 
@@ -109,8 +109,8 @@
       u.email AS user_email,
       COUNT(o.id) AS order_id,
       SUM(o.amount) AS amount
-    FROM user u
-    LEFT JOIN orders o ON u.id = o.user_id
+    FROM "user" u
+    LEFT JOIN "orders" o ON u.id = o.user_id
     GROUP BY u.id, u.name, u.phone, u.age, u.email
     ORDER BY u.id
   </select>

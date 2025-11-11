@@ -4,6 +4,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 
 /**
  * 安全配置类
@@ -18,8 +19,10 @@ public class SecurityConfig {
 
     /**
      * 注册安全头过滤器
+     * 使用 @Lazy 延迟初始化，避免在类加载时触发对 javax.servlet 的引用
      */
     @Bean
+    @Lazy
     public FilterRegistrationBean<SecurityHeadersFilter> securityHeadersFilter() {
         FilterRegistrationBean<SecurityHeadersFilter> registration = new FilterRegistrationBean<>();
         registration.setFilter(new SecurityHeadersFilter());

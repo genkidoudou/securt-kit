@@ -108,7 +108,7 @@ public class InterceptorSqlOperationTest {
             setUpTable(conn);
             // 先插入一条数据
             try (Statement st = conn.createStatement()) {
-                st.execute("INSERT INTO `user` (id,name,phone,age,email) VALUES (1,'','',0,'')");
+                st.execute("INSERT INTO "user" (id,name,phone,age,email) VALUES (1,'','',0,'')");
             }
         }
         // 加载MyBatis配置

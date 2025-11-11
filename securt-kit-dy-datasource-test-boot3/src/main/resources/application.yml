@@ -2,7 +2,7 @@ spring:
   # 应用名称
   application:
     name: securt-kit-multi-datasource-demo
-  
+
   # MyBatis-Plus 多数据源配置（使用 dynamic-datasource）
   datasource:
     # 动态数据源配置
