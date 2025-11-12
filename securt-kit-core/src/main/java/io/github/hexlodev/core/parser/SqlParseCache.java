@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.sf.jsqlparser.JSQLParserException;
 
 import java.util.*;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 /**
@@ -54,6 +55,11 @@ public class SqlParseCache {
      * 注意：此缓存同时服务于 SQL 完整解析和表名解析，合并缓存以减少内存占用
      */
     private static volatile Cache<String, ParseResult> SQL_PARSE_CACHE = CacheUtil.newLRUCache(DEFAULT_MAX_CACHE_SIZE);
+    
+    /**
+     * 是否忽略表名大小写，默认忽略
+     */
+    private static volatile boolean ignoreTableCase = true;
     
     /**
      * 表名解析缓存（轻量级，用于快速判断是否需要加密）
@@ -121,6 +127,19 @@ public class SqlParseCache {
      */
     public static boolean isEnabled() {
         return cacheEnabled;
+    }
+
+    /**
+     * 配置表名大小写是否忽略
+     *
+     * @param ignoreCase true 表示忽略大小写
+     */
+    public static void configureCaseSensitivity(boolean ignoreCase) {
+        ignoreTableCase = ignoreCase;
+        if (log.isDebugEnabled()) {
+            log.debug("SQL parse cache configured to {} table case",
+                    ignoreCase ? "ignore" : "respect");
+        }
     }
 
     /**
@@ -252,9 +271,10 @@ public class SqlParseCache {
         // 2. 将多个连续空白字符替换为单个空格
         normalized = normalized.replaceAll("\\s+", " ");
 
-        // 3. 转换为小写（注意：这可能会影响某些数据库的大小写敏感性）
-        // 为了安全起见，我们转换为小写，因为表名和字段名通常在配置中是小写的
-        normalized = normalized.toLowerCase();
+        // 3. 根据配置决定是否统一转小写
+        if (ignoreTableCase) {
+            normalized = normalized.toLowerCase(Locale.ROOT);
+        }
 
         return normalized;
     }
@@ -362,7 +382,14 @@ public class SqlParseCache {
             Set<String> tableNames = parser.tables();
             // 转换为小写并去重
             Set<String> normalizedTableNames = tableNames.stream()
-                    .map(String::toLowerCase)
+                    .map(name -> {
+                        if (name == null) {
+                            return null;
+                        }
+                        String trimmed = name.trim();
+                        return ignoreTableCase ? trimmed.toLowerCase(Locale.ROOT) : trimmed;
+                    })
+                    .filter(Objects::nonNull)
                     .collect(Collectors.toSet());
             
             // 缓存结果

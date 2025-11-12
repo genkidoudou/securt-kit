@@ -10,6 +10,7 @@ import java.sql.*;
 import java.util.Enumeration;
 import java.util.Properties;
 import java.util.logging.Logger;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 简化的JDBC拦截驱动 - 参考P6Spy实现
@@ -54,6 +55,11 @@ public class SimpleInterceptorDriver implements Driver {
     private static final String JDBC_INTERCEPTOR_PREFIX = "jdbc:interceptor:";
 
     /**
+     * 标记是否已经尝试从 Spring 上下文完成初始化
+     */
+    private static final AtomicBoolean INITIALIZATION_IN_PROGRESS = new AtomicBoolean(false);
+
+    /**
      * 静态初始化块 - 自动注册驱动
      *
      * <p>当类被加载时，自动将此驱动注册到 {@link DriverManager} 中。
@@ -64,13 +70,7 @@ public class SimpleInterceptorDriver implements Driver {
     static {
         try {
             DriverManager.registerDriver(new SimpleInterceptorDriver());
-            // 返回包装的连接，支持拦截功能
-
-            FieldEncryptorProperties bean = SpringUtil.getBean(FieldEncryptorProperties.class);
-            if (null != bean && bean.isEnable()) {
-                TableCache.init(bean);
-            }
-            log.info("SimpleInterceptorDriver registered successfully");
+            log.debug("SimpleInterceptorDriver registered successfully");
         } catch (SQLException e) {
             log.error("Failed to register SimpleInterceptorDriver: " + e.getMessage());
         }
@@ -107,7 +107,9 @@ public class SimpleInterceptorDriver implements Driver {
 
         // 提取真实的JDBC URL（去掉interceptor前缀和datasource-id参数）
         String realUrl = extractRealUrl(url);
-        log.info("Intercepting connection to: {} (datasource-id: {}) [original-url: {}]", realUrl, datasourceId, url);
+        if (log.isDebugEnabled()) {
+            log.debug("Intercepting connection to: {} (datasource-id: {}) [original-url: {}]", realUrl, datasourceId, url);
+        }
 
         // 查找底层的JDBC驱动
         Driver underlyingDriver = findUnderlyingDriver(realUrl);
@@ -120,6 +122,9 @@ public class SimpleInterceptorDriver implements Driver {
         if (realConnection == null) {
             return null;
         }
+
+        // 尝试在连接建立时初始化配置（懒加载，避免静态块提前触发）
+        ensureConfigurationInitialized();
 
         // 创建包装连接，传递数据源标识
         return new SimpleInterceptorConnection(realConnection, datasourceId);
@@ -285,6 +290,43 @@ public class SimpleInterceptorDriver implements Driver {
         }
 
         return url;
+    }
+
+    /**
+     * 确保表缓存初始化仅在 Spring 上下文准备就绪后执行
+     */
+    private void ensureConfigurationInitialized() {
+        if (TableCache.isInit()) {
+            return;
+        }
+
+        if (!INITIALIZATION_IN_PROGRESS.compareAndSet(false, true)) {
+            // 其他线程正在尝试初始化，直接返回等待下一次机会
+            return;
+        }
+
+        try {
+            FieldEncryptorProperties properties = null;
+            try {
+                properties = SpringUtil.getBean(FieldEncryptorProperties.class);
+            } catch (Exception ex) {
+                if (log.isDebugEnabled()) {
+                    log.debug("FieldEncryptorProperties bean not ready yet: {}", ex.getMessage());
+                }
+            }
+
+            if (properties != null && properties.isEnable()) {
+                TableCache.init(properties);
+                log.debug("TableCache initialized via SimpleInterceptorDriver");
+            } else if (log.isTraceEnabled()) {
+                log.trace("FieldEncryptorProperties bean unavailable or disabled, skip TableCache init");
+            }
+        } finally {
+            // 允许后续连接在未初始化成功时重试
+            if (!TableCache.isInit()) {
+                INITIALIZATION_IN_PROGRESS.set(false);
+            }
+        }
     }
 
     /**

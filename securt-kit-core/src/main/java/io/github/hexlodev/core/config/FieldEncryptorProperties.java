@@ -89,6 +89,17 @@ public class FieldEncryptorProperties {
     private FailurePolicy failurePolicy = FailurePolicy.FALLBACK;
 
     /**
+     * 是否忽略表名大小写
+     * <p>
+     * true: 表名统一转为小写进行匹配（默认值，向后兼容）；
+     * false: 按配置原样匹配，区分表名大小写。
+     * </p>
+     *
+     * @since 1.1.1
+     */
+    private boolean ignoreTableCase = true;
+
+    /**
      * 表配置列表
      * <p>
      * 单数据源场景：不指定 datasource-id，应用到所有数据源

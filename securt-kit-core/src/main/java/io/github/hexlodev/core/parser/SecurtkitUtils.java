@@ -4,6 +4,7 @@ import cn.hutool.core.collection.CollectionUtil;
 import cn.hutool.core.lang.Pair;
 import cn.hutool.core.util.StrUtil;
 import io.github.hexlodev.core.TableCache;
+import io.github.hexlodev.core.config.ConfigInitializer;
 import io.github.hexlodev.core.parser.dto.ColumnTableDto;
 import io.github.hexlodev.core.parser.dto.FieldEncryptorInfoDto;
 import io.github.hexlodev.core.parser.visitor.PoJoEncrtptorStatementVisitor;
@@ -136,8 +137,13 @@ public class SecurtkitUtils {
                 Class<? extends FieldEncryptorStrategy> strategy = TableCache.getTableFieldEncryptStrategy(
                     field.getSourceTableName(), field.getSourceColumn(), dsId);
                 if (strategy != null) {
-                    field.setFieldEncryptor(strategy);
-                    filteredFields.add(field);
+                    FieldEncryptorInfoDto rebuilt = FieldEncryptorInfoDto.builder()
+                            .columnName(field.getColumnName())
+                            .sourceColumn(field.getSourceColumn())
+                            .sourceTableName(field.getSourceTableName())
+                            .fieldEncryptor(strategy)
+                            .build();
+                    filteredFields.add(rebuilt);
                     if (log.isDebugEnabled()) {
                         log.debug("  Field matched: columnName={}, sourceTable={}, sourceColumn={}, strategy={}",
                                 field.getColumnName(), field.getSourceTableName(), field.getSourceColumn(), strategy.getName());
@@ -373,21 +379,7 @@ public class SecurtkitUtils {
      * @return 纯表名（小写），如果输入为空则返回原值
      */
     private static String extractPureTableName(String tableName) {
-        if (StrUtil.isBlank(tableName)) {
-            return tableName;
-        }
-        
-        // 转换为小写
-        String lowerTableName = tableName.toLowerCase().trim();
-        
-        // 如果包含点号，取最后一个点号后的部分作为表名
-        int lastDotIndex = lowerTableName.lastIndexOf('.');
-        if (lastDotIndex >= 0 && lastDotIndex < lowerTableName.length() - 1) {
-            return lowerTableName.substring(lastDotIndex + 1);
-        }
-        
-        // 如果没有点号，说明已经是纯表名
-        return lowerTableName;
+        return ConfigInitializer.extractPureTableName(tableName);
     }
 
     /**

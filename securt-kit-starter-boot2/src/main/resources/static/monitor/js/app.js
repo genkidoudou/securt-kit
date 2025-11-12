@@ -1492,6 +1492,9 @@ const configInfo = {
         const enableClass = data.enable === true ? 'config-value enabled' : data.enable === false ? 'config-value disabled' : 'config-value';
         basicHtml += `<span class="config-item"><span class="config-label">是否启用:</span><span class="${enableClass}">${enableText}</span></span>`;
         basicHtml += `<span class="config-item"><span class="config-label">失败处理策略:</span><span class="config-value">${utils.escapeHtml(data.failurePolicy || 'FALLBACK')}</span></span>`;
+        const ignoreCaseText = data.ignoreTableCase !== null && data.ignoreTableCase !== undefined ? (data.ignoreTableCase ? '是' : '否') : '未配置';
+        const ignoreCaseClass = data.ignoreTableCase === true ? 'config-value enabled' : data.ignoreTableCase === false ? 'config-value disabled' : 'config-value';
+        basicHtml += `<span class="config-item"><span class="config-label">表名忽略大小写:</span><span class="${ignoreCaseClass}">${ignoreCaseText}</span></span>`;
         basicHtml += '</div>';
         basicConfigDiv.innerHTML = basicHtml;
 

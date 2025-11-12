@@ -28,6 +28,11 @@ public class DataInitResponse {
     private List<String> sqlStatements;
 
     /**
+     * SQL 总条数
+     */
+    private Integer totalSqlCount;
+
+    /**
      * 操作类型（encrypt/decrypt）
      */
     private String operationType;

@@ -85,6 +85,7 @@ public class DataSourceConfigManager {
             merged.setEnable(properties.isEnable());
             merged.setFailurePolicy(properties.getFailurePolicy());
             merged.setSqlParseCache(properties.getSqlParseCache());
+            merged.setIgnoreTableCase(properties.isIgnoreTableCase());
             merged.setTables(entry.getValue());
             configCache.put(datasourceId, merged);
         }
@@ -99,6 +100,7 @@ public class DataSourceConfigManager {
                 defaultConfig.setEnable(properties.isEnable());
                 defaultConfig.setFailurePolicy(properties.getFailurePolicy());
                 defaultConfig.setSqlParseCache(properties.getSqlParseCache());
+                defaultConfig.setIgnoreTableCase(properties.isIgnoreTableCase());
                 defaultConfig.setTables(new ArrayList<>());
                 configCache.put(DEFAULT_DATASOURCE_ID, defaultConfig);
             }
@@ -155,6 +157,11 @@ public class DataSourceConfigManager {
          * SQL 解析缓存配置
          */
         private FieldEncryptorProperties.SqlParseCacheConfig sqlParseCache;
+
+        /**
+         * 是否忽略表名大小写
+         */
+        private Boolean ignoreTableCase;
 
         /**
          * 表配置列表（已合并）

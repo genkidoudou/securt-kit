@@ -11,6 +11,7 @@ import io.github.hexlodev.core.config.TableConfigRegistry;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.*;
+import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -34,6 +35,11 @@ public class ConfigInitializer {
      * 数据源配置管理器
      */
     private static DataSourceConfigManager configManager;
+
+    /**
+     * 是否忽略表名大小写
+     */
+    private static volatile boolean IGNORE_TABLE_CASE = true;
 
     /**
      * 初始化配置
@@ -60,6 +66,7 @@ public class ConfigInitializer {
 
             // 初始化配置管理器
             configManager = new DataSourceConfigManager(properties);
+            IGNORE_TABLE_CASE = properties.isIgnoreTableCase();
 
             // 验证配置
             validateConfiguration(properties);
@@ -90,6 +97,7 @@ public class ConfigInitializer {
             // 初始化 SQL 解析缓存配置（使用全局配置）
             DataSourceConfigManager.MergedConfig globalConfig = configManager.getConfig(DataSourceConfigManager.DEFAULT_DATASOURCE_ID);
             initSqlParseCache(globalConfig);
+            SqlParseCache.configureCaseSensitivity(IGNORE_TABLE_CASE);
 
             // 初始化异常处理策略（使用全局配置）
             EncryptionHandler.initFromConfig(properties);
@@ -305,18 +313,21 @@ public class ConfigInitializer {
     private static void initSqlParseCache(DataSourceConfigManager.MergedConfig mergedConfig) {
         if (mergedConfig == null) {
             SqlParseCache.init(true, 1000);
+            SqlParseCache.configureCaseSensitivity(IGNORE_TABLE_CASE);
             return;
         }
 
         FieldEncryptorProperties.SqlParseCacheConfig cacheConfig = mergedConfig.getSqlParseCache();
         if (cacheConfig == null) {
             SqlParseCache.init(true, 1000);
+            SqlParseCache.configureCaseSensitivity(IGNORE_TABLE_CASE);
             log.debug("【securt-kit】SQL 解析缓存使用默认配置: enable=true, maxSize=1000");
         } else {
             SqlParseCache.init(
                     cacheConfig.isEnable(),
                     cacheConfig.getMaxSize()
             );
+            SqlParseCache.configureCaseSensitivity(IGNORE_TABLE_CASE);
             log.debug("【securt-kit】SQL 解析缓存配置: enable={}, maxSize={}",
                     cacheConfig.isEnable(), cacheConfig.getMaxSize());
         }
@@ -342,22 +353,25 @@ public class ConfigInitializer {
             return tableName;
         }
 
-        // 转换为小写并去除首尾空白
-        String lowerTableName = tableName.toLowerCase().trim();
+        // 去除首尾空白
+        String normalizedTableName = tableName.trim();
 
         // 去掉双引号（如果存在）
-        if (lowerTableName.startsWith("\"") && lowerTableName.endsWith("\"")) {
-            lowerTableName = lowerTableName.substring(1, lowerTableName.length() - 1);
+        if (normalizedTableName.startsWith("\"") && normalizedTableName.endsWith("\"") && normalizedTableName.length() > 1) {
+            normalizedTableName = normalizedTableName.substring(1, normalizedTableName.length() - 1);
         }
 
         // 如果包含点号，取最后一个点号后的部分作为表名
-        int lastDotIndex = lowerTableName.lastIndexOf('.');
-        if (lastDotIndex >= 0 && lastDotIndex < lowerTableName.length() - 1) {
-            return lowerTableName.substring(lastDotIndex + 1);
+        int lastDotIndex = normalizedTableName.lastIndexOf('.');
+        if (lastDotIndex >= 0 && lastDotIndex < normalizedTableName.length() - 1) {
+            normalizedTableName = normalizedTableName.substring(lastDotIndex + 1);
         }
 
-        // 如果没有点号，说明已经是纯表名
-        return lowerTableName;
+        if (IGNORE_TABLE_CASE) {
+            return normalizedTableName.toLowerCase(Locale.ROOT);
+        }
+
+        return normalizedTableName;
     }
 
     /**
@@ -384,7 +398,17 @@ public class ConfigInitializer {
     public static void reset() {
         INITIALIZED.set(false);
         configManager = null;
+        IGNORE_TABLE_CASE = true;
         log.info("【securt-kit】ConfigInitializer reset completed");
+    }
+
+    /**
+     * 是否忽略表名大小写
+     *
+     * @return true 表示忽略大小写
+     */
+    public static boolean isIgnoreTableCase() {
+        return IGNORE_TABLE_CASE;
     }
 }
 

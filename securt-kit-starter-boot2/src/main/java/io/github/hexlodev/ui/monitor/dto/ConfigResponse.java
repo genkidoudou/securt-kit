@@ -23,6 +23,11 @@ public class ConfigResponse {
     private String failurePolicy;
 
     /**
+     * 是否忽略表名大小写
+     */
+    private Boolean ignoreTableCase;
+
+    /**
      * SQL解析缓存配置
      */
     private SqlParseCacheConfigInfo sqlParseCache;

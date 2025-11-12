@@ -85,8 +85,10 @@ public class SimpleInterceptorConnection implements Connection {
         }
         this.delegate = delegate;
         this.datasourceId = cn.hutool.core.util.StrUtil.isBlank(datasourceId) ? "default" : datasourceId;
-        log.info("Connection intercepted: {} (datasource-id: {})", 
-                delegate.getClass().getSimpleName(), this.datasourceId);
+        if (log.isDebugEnabled()) {
+            log.debug("Connection intercepted: {} (datasource-id: {})",
+                    delegate.getClass().getSimpleName(), this.datasourceId);
+        }
     }
     
     /**
@@ -111,7 +113,9 @@ public class SimpleInterceptorConnection implements Connection {
     @Override
     public Statement createStatement() throws SQLException {
         Statement statement = delegate.createStatement();
-        log.info("Statement created");
+        if (log.isTraceEnabled()) {
+            log.trace("Statement created");
+        }
         return new SimpleInterceptorStatement(statement);
     }
     
@@ -129,7 +133,9 @@ public class SimpleInterceptorConnection implements Connection {
     @Override
     public PreparedStatement prepareStatement(String sql) throws SQLException {
         PreparedStatement statement = delegate.prepareStatement(sql);
-        log.info("PreparedStatement created for SQL: {} (datasource-id: {})", sql, datasourceId);
+        if (log.isDebugEnabled()) {
+            log.debug("PreparedStatement created (datasource-id: {})", datasourceId);
+        }
         // 确保传递正确的 datasource-id
         String dsId = StrUtil.isBlank(datasourceId) ? "default" : datasourceId;
         return new SimpleInterceptorPreparedStatement(statement, sql, dsId);
@@ -149,7 +155,9 @@ public class SimpleInterceptorConnection implements Connection {
     @Override
     public CallableStatement prepareCall(String sql) throws SQLException {
         CallableStatement statement = delegate.prepareCall(sql);
-        log.info("CallableStatement created for SQL: " + sql);
+        if (log.isTraceEnabled()) {
+            log.trace("CallableStatement created");
+        }
         return new SimpleInterceptorCallableStatement(statement, sql);
     }
     
@@ -181,7 +189,9 @@ public class SimpleInterceptorConnection implements Connection {
     
     @Override
     public void close() throws SQLException {
-        log.info("Connection closed");
+        if (log.isTraceEnabled()) {
+            log.trace("Connection closed");
+        }
         delegate.close();
     }
     
@@ -239,14 +249,19 @@ public class SimpleInterceptorConnection implements Connection {
     @Override
     public Statement createStatement(int resultSetType, int resultSetConcurrency) throws SQLException {
         Statement statement = delegate.createStatement(resultSetType, resultSetConcurrency);
-        log.info("Statement created with type=" + resultSetType + ", concurrency=" + resultSetConcurrency);
+        if (log.isTraceEnabled()) {
+            log.trace("Statement created with type={}, concurrency={}", resultSetType, resultSetConcurrency);
+        }
         return new SimpleInterceptorStatement(statement);
     }
     
     @Override
     public PreparedStatement prepareStatement(String sql, int resultSetType, int resultSetConcurrency) throws SQLException {
         PreparedStatement statement = delegate.prepareStatement(sql, resultSetType, resultSetConcurrency);
-        log.info("PreparedStatement created with type=" + resultSetType + ", concurrency=" + resultSetConcurrency + " (datasource-id: {})", datasourceId);
+        if (log.isTraceEnabled()) {
+            log.trace("PreparedStatement created with type={}, concurrency={} (datasource-id: {})",
+                    resultSetType, resultSetConcurrency, datasourceId);
+        }
         String dsId = StrUtil.isBlank(datasourceId) ? "default" : datasourceId;
         return new SimpleInterceptorPreparedStatement(statement, sql, dsId);
     }
@@ -254,7 +269,9 @@ public class SimpleInterceptorConnection implements Connection {
     @Override
     public CallableStatement prepareCall(String sql, int resultSetType, int resultSetConcurrency) throws SQLException {
         CallableStatement statement = delegate.prepareCall(sql, resultSetType, resultSetConcurrency);
-        log.info("CallableStatement created with type=" + resultSetType + ", concurrency=" + resultSetConcurrency);
+        if (log.isTraceEnabled()) {
+            log.trace("CallableStatement created with type={}, concurrency={}", resultSetType, resultSetConcurrency);
+        }
         return new SimpleInterceptorCallableStatement(statement, sql);
     }
     
@@ -302,14 +319,20 @@ public class SimpleInterceptorConnection implements Connection {
     @Override
     public Statement createStatement(int resultSetType, int resultSetConcurrency, int resultSetHoldability) throws SQLException {
         Statement statement = delegate.createStatement(resultSetType, resultSetConcurrency, resultSetHoldability);
-        log.info("Statement created with type=" + resultSetType + ", concurrency=" + resultSetConcurrency + ", holdability=" + resultSetHoldability);
+        if (log.isTraceEnabled()) {
+            log.trace("Statement created with type={}, concurrency={}, holdability={}",
+                    resultSetType, resultSetConcurrency, resultSetHoldability);
+        }
         return new SimpleInterceptorStatement(statement);
     }
     
     @Override
     public PreparedStatement prepareStatement(String sql, int resultSetType, int resultSetConcurrency, int resultSetHoldability) throws SQLException {
         PreparedStatement statement = delegate.prepareStatement(sql, resultSetType, resultSetConcurrency, resultSetHoldability);
-        log.info("PreparedStatement created with type=" + resultSetType + ", concurrency=" + resultSetConcurrency + ", holdability=" + resultSetHoldability + " (datasource-id: {})", datasourceId);
+        if (log.isTraceEnabled()) {
+            log.trace("PreparedStatement created with type={}, concurrency={}, holdability={} (datasource-id: {})",
+                    resultSetType, resultSetConcurrency, resultSetHoldability, datasourceId);
+        }
         String dsId = StrUtil.isBlank(datasourceId) ? "default" : datasourceId;
         return new SimpleInterceptorPreparedStatement(statement, sql, dsId);
     }
@@ -317,14 +340,20 @@ public class SimpleInterceptorConnection implements Connection {
     @Override
     public CallableStatement prepareCall(String sql, int resultSetType, int resultSetConcurrency, int resultSetHoldability) throws SQLException {
         CallableStatement statement = delegate.prepareCall(sql, resultSetType, resultSetConcurrency, resultSetHoldability);
-        log.info("CallableStatement created with type=" + resultSetType + ", concurrency=" + resultSetConcurrency + ", holdability=" + resultSetHoldability);
+        if (log.isTraceEnabled()) {
+            log.trace("CallableStatement created with type={}, concurrency={}, holdability={}",
+                    resultSetType, resultSetConcurrency, resultSetHoldability);
+        }
         return new SimpleInterceptorCallableStatement(statement, sql);
     }
     
     @Override
     public PreparedStatement prepareStatement(String sql, int autoGeneratedKeys) throws SQLException {
         PreparedStatement statement = delegate.prepareStatement(sql, autoGeneratedKeys);
-        log.info("PreparedStatement created with autoGeneratedKeys=" + autoGeneratedKeys + " (datasource-id: {})", datasourceId);
+        if (log.isTraceEnabled()) {
+            log.trace("PreparedStatement created with autoGeneratedKeys={} (datasource-id: {})",
+                    autoGeneratedKeys, datasourceId);
+        }
         String dsId = StrUtil.isBlank(datasourceId) ? "default" : datasourceId;
         return new SimpleInterceptorPreparedStatement(statement, sql, dsId);
     }
@@ -332,7 +361,9 @@ public class SimpleInterceptorConnection implements Connection {
     @Override
     public PreparedStatement prepareStatement(String sql, int[] columnIndexes) throws SQLException {
         PreparedStatement statement = delegate.prepareStatement(sql, columnIndexes);
-        log.info("PreparedStatement created with columnIndexes (datasource-id: {})", datasourceId);
+        if (log.isTraceEnabled()) {
+            log.trace("PreparedStatement created with columnIndexes (datasource-id: {})", datasourceId);
+        }
         String dsId = StrUtil.isBlank(datasourceId) ? "default" : datasourceId;
         return new SimpleInterceptorPreparedStatement(statement, sql, dsId);
     }
@@ -340,7 +371,9 @@ public class SimpleInterceptorConnection implements Connection {
     @Override
     public PreparedStatement prepareStatement(String sql, String[] columnNames) throws SQLException {
         PreparedStatement statement = delegate.prepareStatement(sql, columnNames);
-        log.info("PreparedStatement created with columnNames (datasource-id: {})", datasourceId);
+        if (log.isTraceEnabled()) {
+            log.trace("PreparedStatement created with columnNames (datasource-id: {})", datasourceId);
+        }
         String dsId = StrUtil.isBlank(datasourceId) ? "default" : datasourceId;
         return new SimpleInterceptorPreparedStatement(statement, sql, dsId);
     }

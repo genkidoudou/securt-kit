@@ -91,6 +91,69 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
      */
     private final SqlExecutor sqlExecutor;
 
+    @FunctionalInterface
+    private interface SqlStringConsumer {
+        void accept(String value) throws SQLException;
+    }
+
+    private boolean applyEncryptedString(int parameterIndex,
+                                         String encryptedValue,
+                                         SqlStringConsumer applier,
+                                         String context) throws SQLException {
+        if (encryptedValue == null) {
+            return false;
+        }
+        try {
+            applier.accept(encryptedValue);
+            parameterValues.put(parameterIndex, encryptedValue);
+            return true;
+        } catch (SQLException ex) {
+            log.warn("Failed to apply encrypted value for {} at parameter index {} (datasource-id: {}): {}",
+                    context, parameterIndex, datasourceId, ex.getMessage());
+            return false;
+        }
+    }
+
+    private Clob toClob(String value) throws SQLException {
+        Clob clob = delegate.getConnection().createClob();
+        clob.setString(1, value);
+        return clob;
+    }
+
+    private NClob toNClob(String value) throws SQLException {
+        NClob nClob = delegate.getConnection().createNClob();
+        nClob.setString(1, value);
+        return nClob;
+    }
+
+    private void cacheOriginalClobValue(int parameterIndex, Clob clob) {
+        if (clob == null) {
+            return;
+        }
+        try {
+            String value = clobToString(clob);
+            if (value != null) {
+                parameterValues.put(parameterIndex, value);
+            }
+        } catch (Exception ignored) {
+            // 读取失败不影响执行，日志在调用处已经处理
+        }
+    }
+
+    private void cacheOriginalNClobValue(int parameterIndex, NClob nClob) {
+        if (nClob == null) {
+            return;
+        }
+        try {
+            String value = nClobToString(nClob);
+            if (value != null) {
+                parameterValues.put(parameterIndex, value);
+            }
+        } catch (Exception ignored) {
+            // 读取失败不影响执行
+        }
+    }
+
     /**
      * 构造函数（向后兼容）
      *
@@ -164,8 +227,8 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
             try {
                 this.pair = SecurtkitUtils.parseSql(this.sql, this.datasourceId);
                 
-                if (log.isInfoEnabled()) {
-                    log.info("SQL requires encryption [sql={}, tables={}, datasource-id={}, fieldsCount={}]", 
+                if (log.isDebugEnabled()) {
+                    log.debug("SQL requires encryption [sql={}, tables={}, datasource-id={}, fieldsCount={}]", 
                             this.sql != null ? this.sql : "null",
                             this.tables,
                             this.datasourceId,
@@ -390,15 +453,16 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
     public void addBatch() throws SQLException {
         log.debug("Adding prepared statement to batch");
         delegate.addBatch();
+        parameterValues.clear();
     }
 
     @Override
     public void setCharacterStream(int parameterIndex, java.io.Reader reader, int length) throws SQLException {
         if (reader != null) {
-            String encrypted = parameterEncryptor.encryptReader(parameterIndex, reader, length);
-            if (encrypted != null) {
-                delegate.setCharacterStream(parameterIndex, new java.io.StringReader(encrypted), encrypted.length());
-                parameterValues.put(parameterIndex, encrypted);
+            String processed = parameterEncryptor.encryptReader(parameterIndex, reader, length);
+            if (applyEncryptedString(parameterIndex, processed,
+                    value -> delegate.setCharacterStream(parameterIndex, new java.io.StringReader(value), value.length()),
+                    "characterStream(length)")) {
                 return;
             }
         }
@@ -418,30 +482,15 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
     @Override
     public void setClob(int parameterIndex, Clob x) throws SQLException {
         if (x != null) {
-            String encrypted = parameterEncryptor.encryptClob(parameterIndex, x);
-            if (encrypted != null && !encrypted.equals(clobToString(x))) {
-                try {
-                    Clob encryptedClob = delegate.getConnection().createClob();
-                    encryptedClob.setString(1, encrypted);
-                    delegate.setClob(parameterIndex, encryptedClob);
-                    parameterValues.put(parameterIndex, encrypted);
-                    return;
-                } catch (Exception e) {
-                    log.warn("Failed to create encrypted Clob at parameter index {}, using original value", parameterIndex, e);
-                }
+            String processed = parameterEncryptor.encryptClob(parameterIndex, x);
+            if (applyEncryptedString(parameterIndex, processed,
+                    value -> delegate.setClob(parameterIndex, toClob(value)),
+                    "clob")) {
+                return;
             }
+            cacheOriginalClobValue(parameterIndex, x);
         }
         delegate.setClob(parameterIndex, x);
-        if (x != null) {
-            try {
-                String value = clobToString(x);
-                if (value != null) {
-                    parameterValues.put(parameterIndex, value);
-                }
-            } catch (Exception ignored) {
-                // 读取失败不影响执行
-            }
-        }
     }
 
     @Override
@@ -497,10 +546,10 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
     @Override
     public void setNCharacterStream(int parameterIndex, java.io.Reader value, long length) throws SQLException {
         if (value != null) {
-            String encrypted = parameterEncryptor.encryptReader(parameterIndex, value, length);
-            if (encrypted != null) {
-                delegate.setNCharacterStream(parameterIndex, new java.io.StringReader(encrypted), encrypted.length());
-                parameterValues.put(parameterIndex, encrypted);
+            String processed = parameterEncryptor.encryptReader(parameterIndex, value, length);
+            if (applyEncryptedString(parameterIndex, processed,
+                    str -> delegate.setNCharacterStream(parameterIndex, new java.io.StringReader(str), str.length()),
+                    "nCharacterStream(long)")) {
                 return;
             }
         }
@@ -510,46 +559,25 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
     @Override
     public void setNClob(int parameterIndex, NClob value) throws SQLException {
         if (value != null) {
-            String encrypted = parameterEncryptor.encryptNClob(parameterIndex, value);
-            if (encrypted != null && !encrypted.equals(nClobToString(value))) {
-                try {
-                    NClob encryptedNClob = delegate.getConnection().createNClob();
-                    encryptedNClob.setString(1, encrypted);
-                    delegate.setNClob(parameterIndex, encryptedNClob);
-                    parameterValues.put(parameterIndex, encrypted);
-                    return;
-                } catch (Exception e) {
-                    log.warn("Failed to create encrypted NClob at parameter index {}, using original value", parameterIndex, e);
-                }
+            String processed = parameterEncryptor.encryptNClob(parameterIndex, value);
+            if (applyEncryptedString(parameterIndex, processed,
+                    text -> delegate.setNClob(parameterIndex, toNClob(text)),
+                    "nClob")) {
+                return;
             }
+            cacheOriginalNClobValue(parameterIndex, value);
         }
         delegate.setNClob(parameterIndex, value);
-        if (value != null) {
-            try {
-                String strValue = nClobToString(value);
-                if (strValue != null) {
-                    parameterValues.put(parameterIndex, strValue);
-                }
-            } catch (Exception ignored) {
-                // 读取失败不影响执行
-            }
-        }
     }
 
     @Override
     public void setClob(int parameterIndex, java.io.Reader reader, long length) throws SQLException {
         if (reader != null) {
-            String encrypted = parameterEncryptor.encryptReader(parameterIndex, reader, length);
-            if (encrypted != null) {
-                try {
-                    Clob encryptedClob = delegate.getConnection().createClob();
-                    encryptedClob.setString(1, encrypted);
-                    delegate.setClob(parameterIndex, encryptedClob);
-                    parameterValues.put(parameterIndex, encrypted);
-                    return;
-                } catch (Exception e) {
-                    log.warn("Failed to create encrypted Clob at parameter index {}, using original value", parameterIndex, e);
-                }
+            String processed = parameterEncryptor.encryptReader(parameterIndex, reader, length);
+            if (applyEncryptedString(parameterIndex, processed,
+                    value -> delegate.setClob(parameterIndex, toClob(value)),
+                    "clob(reader,long)")) {
+                return;
             }
         }
         delegate.setClob(parameterIndex, reader, length);
@@ -563,17 +591,11 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
     @Override
     public void setNClob(int parameterIndex, java.io.Reader reader, long length) throws SQLException {
         if (reader != null) {
-            String encrypted = parameterEncryptor.encryptReader(parameterIndex, reader, length);
-            if (encrypted != null) {
-                try {
-                    NClob encryptedNClob = delegate.getConnection().createNClob();
-                    encryptedNClob.setString(1, encrypted);
-                    delegate.setNClob(parameterIndex, encryptedNClob);
-                    parameterValues.put(parameterIndex, encrypted);
-                    return;
-                } catch (Exception e) {
-                    log.warn("Failed to create encrypted NClob at parameter index {}, using original value", parameterIndex, e);
-                }
+            String processed = parameterEncryptor.encryptReader(parameterIndex, reader, length);
+            if (applyEncryptedString(parameterIndex, processed,
+                    text -> delegate.setNClob(parameterIndex, toNClob(text)),
+                    "nClob(reader,long)")) {
+                return;
             }
         }
         delegate.setNClob(parameterIndex, reader, length);
@@ -603,10 +625,10 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
     @Override
     public void setCharacterStream(int parameterIndex, java.io.Reader reader, long length) throws SQLException {
         if (reader != null) {
-            String encrypted = parameterEncryptor.encryptReader(parameterIndex, reader, length);
-            if (encrypted != null) {
-                delegate.setCharacterStream(parameterIndex, new java.io.StringReader(encrypted), encrypted.length());
-                parameterValues.put(parameterIndex, encrypted);
+            String processed = parameterEncryptor.encryptReader(parameterIndex, reader, length);
+            if (applyEncryptedString(parameterIndex, processed,
+                    value -> delegate.setCharacterStream(parameterIndex, new java.io.StringReader(value), value.length()),
+                    "characterStream(long)")) {
                 return;
             }
         }
@@ -626,10 +648,10 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
     @Override
     public void setCharacterStream(int parameterIndex, java.io.Reader reader) throws SQLException {
         if (reader != null) {
-            String encrypted = parameterEncryptor.encryptReader(parameterIndex, reader, Long.MAX_VALUE);
-            if (encrypted != null) {
-                delegate.setCharacterStream(parameterIndex, new java.io.StringReader(encrypted));
-                parameterValues.put(parameterIndex, encrypted);
+            String processed = parameterEncryptor.encryptReader(parameterIndex, reader, Long.MAX_VALUE);
+            if (applyEncryptedString(parameterIndex, processed,
+                    value -> delegate.setCharacterStream(parameterIndex, new java.io.StringReader(value)),
+                    "characterStream()")) {
                 return;
             }
         }
@@ -639,10 +661,10 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
     @Override
     public void setNCharacterStream(int parameterIndex, java.io.Reader value) throws SQLException {
         if (value != null) {
-            String encrypted = parameterEncryptor.encryptReader(parameterIndex, value, Long.MAX_VALUE);
-            if (encrypted != null) {
-                delegate.setNCharacterStream(parameterIndex, new java.io.StringReader(encrypted));
-                parameterValues.put(parameterIndex, encrypted);
+            String processed = parameterEncryptor.encryptReader(parameterIndex, value, Long.MAX_VALUE);
+            if (applyEncryptedString(parameterIndex, processed,
+                    str -> delegate.setNCharacterStream(parameterIndex, new java.io.StringReader(str)),
+                    "nCharacterStream()")) {
                 return;
             }
         }
@@ -652,17 +674,11 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
     @Override
     public void setClob(int parameterIndex, java.io.Reader reader) throws SQLException {
         if (reader != null) {
-            String encrypted = parameterEncryptor.encryptReader(parameterIndex, reader, Long.MAX_VALUE);
-            if (encrypted != null) {
-                try {
-                    Clob encryptedClob = delegate.getConnection().createClob();
-                    encryptedClob.setString(1, encrypted);
-                    delegate.setClob(parameterIndex, encryptedClob);
-                    parameterValues.put(parameterIndex, encrypted);
-                    return;
-                } catch (Exception e) {
-                    log.warn("Failed to create encrypted Clob at parameter index {}, using original value", parameterIndex, e);
-                }
+            String processed = parameterEncryptor.encryptReader(parameterIndex, reader, Long.MAX_VALUE);
+            if (applyEncryptedString(parameterIndex, processed,
+                    value -> delegate.setClob(parameterIndex, toClob(value)),
+                    "clob(reader)")) {
+                return;
             }
         }
         delegate.setClob(parameterIndex, reader);
@@ -676,17 +692,11 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
     @Override
     public void setNClob(int parameterIndex, java.io.Reader reader) throws SQLException {
         if (reader != null) {
-            String encrypted = parameterEncryptor.encryptReader(parameterIndex, reader, Long.MAX_VALUE);
-            if (encrypted != null) {
-                try {
-                    NClob encryptedNClob = delegate.getConnection().createNClob();
-                    encryptedNClob.setString(1, encrypted);
-                    delegate.setNClob(parameterIndex, encryptedNClob);
-                    parameterValues.put(parameterIndex, encrypted);
-                    return;
-                } catch (Exception e) {
-                    log.warn("Failed to create encrypted NClob at parameter index {}, using original value", parameterIndex, e);
-                }
+            String processed = parameterEncryptor.encryptReader(parameterIndex, reader, Long.MAX_VALUE);
+            if (applyEncryptedString(parameterIndex, processed,
+                    text -> delegate.setNClob(parameterIndex, toNClob(text)),
+                    "nClob(reader)")) {
+                return;
             }
         }
         delegate.setNClob(parameterIndex, reader);
@@ -958,7 +968,9 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
         long startTime = System.currentTimeMillis();
         boolean result = delegate.execute(sql);
         long endTime = System.currentTimeMillis();
-        log.info("[EXECUTE] Executed in " + (endTime - startTime) + "ms, result: " + result);
+        if (log.isDebugEnabled()) {
+            log.debug("[EXECUTE] Executed in {} ms, result: {}", (endTime - startTime), result);
+        }
         return result;
     }
 
@@ -975,7 +987,9 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
         long startTime = System.currentTimeMillis();
         int result = delegate.executeUpdate(sql);
         long endTime = System.currentTimeMillis();
-        log.info("[EXECUTE UPDATE] Executed in " + (endTime - startTime) + "ms, affected rows: " + result);
+        if (log.isDebugEnabled()) {
+            log.debug("[EXECUTE UPDATE] Executed in {} ms, affected rows: {}", (endTime - startTime), result);
+        }
         return result;
     }
 
@@ -992,7 +1006,9 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
         long startTime = System.currentTimeMillis();
         ResultSet resultSet = delegate.executeQuery(sql);
         long endTime = System.currentTimeMillis();
-        log.info("[EXECUTE QUERY] Executed in " + (endTime - startTime) + "ms");
+        if (log.isDebugEnabled()) {
+            log.debug("[EXECUTE QUERY] Executed in {} ms", (endTime - startTime));
+        }
         return resultSet;
     }
 }

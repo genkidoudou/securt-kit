@@ -1507,7 +1507,8 @@ public class MonitorController {
             throw new IllegalArgumentException("表 " + normalizedTableName + " 在数据源 " + datasourceId + " 中没有配置需要加密的字段");
         }
 
-        List<String> sqlStatements = new ArrayList<>();
+        List<String> sampleSqlStatements = new ArrayList<>();
+        int totalSqlCount = 0;
         int processedCount = 0;
         int processedFieldCount = 0;
 
@@ -1589,7 +1590,10 @@ public class MonitorController {
                     }
 
                     String finalSql = updateSql.toString();
-                    sqlStatements.add(finalSql);
+                    totalSqlCount++;
+                    if (sampleSqlStatements.size() < 10) {
+                        sampleSqlStatements.add(finalSql);
+                    }
                     log.debug("生成UPDATE SQL: {}", finalSql);
 
                     // 执行UPDATE
@@ -1610,7 +1614,8 @@ public class MonitorController {
 
         response.setProcessedCount(processedCount);
         response.setProcessedFieldCount(processedFieldCount);
-        response.setSqlStatements(sqlStatements);
+        response.setSqlStatements(sampleSqlStatements);
+        response.setTotalSqlCount(totalSqlCount);
 
         return response;
     }
@@ -1650,6 +1655,7 @@ public class MonitorController {
             response.setFailurePolicy(fieldEncryptorProperties.getFailurePolicy() != null 
                     ? fieldEncryptorProperties.getFailurePolicy().name() 
                     : "FALLBACK");
+            response.setIgnoreTableCase(fieldEncryptorProperties.isIgnoreTableCase());
 
             // 设置SQL解析缓存配置
             if (fieldEncryptorProperties.getSqlParseCache() != null) {
