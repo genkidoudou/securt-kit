@@ -64,6 +64,12 @@ public class FieldEncryptorProperties {
     private SqlParseCacheConfig sqlParseCache;
 
     /**
+     * SQL 注释跳过配置
+     * @since 1.1.1
+     */
+    private SkipCommentConfig skipComment = new SkipCommentConfig();
+
+    /**
      * 加密/解密失败处理策略
      * <p>
      * 当加密或解密操作失败时，框架如何处理：
@@ -222,6 +228,22 @@ public class FieldEncryptorProperties {
          * 建议值：500-2000，根据应用实际 SQL 数量调整
          */
         private int maxSize = 1000;
+    }
+
+    /**
+     * 注释跳过配置
+     */
+    @Data
+    public static class SkipCommentConfig {
+        /**
+         * 是否启用注释跳过功能
+         */
+        private boolean enable;
+
+        /**
+         * 注释中的关键字（不包含注释边界符号，比较时忽略首尾空格）
+         */
+        private String token = "SECURT_SKIP";
     }
 
     /**

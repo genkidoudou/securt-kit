@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.*;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Pattern;
 
 /**
  * 配置初始化器
@@ -42,6 +43,13 @@ public class ConfigInitializer {
     private static volatile boolean IGNORE_TABLE_CASE = true;
 
     /**
+     * 注释跳过配置
+     */
+    private static volatile boolean SKIP_COMMENT_ENABLED = false;
+    private static volatile String SKIP_COMMENT_TOKEN = "SECURT_SKIP";
+    private static volatile Pattern SKIP_COMMENT_PATTERN;
+
+    /**
      * 初始化配置
      *
      * @param properties 字段加密配置属性
@@ -67,6 +75,7 @@ public class ConfigInitializer {
             // 初始化配置管理器
             configManager = new DataSourceConfigManager(properties);
             IGNORE_TABLE_CASE = properties.isIgnoreTableCase();
+            initSkipCommentConfig(properties.getSkipComment());
 
             // 验证配置
             validateConfiguration(properties);
@@ -399,6 +408,8 @@ public class ConfigInitializer {
         INITIALIZED.set(false);
         configManager = null;
         IGNORE_TABLE_CASE = true;
+        SKIP_COMMENT_ENABLED = false;
+        SKIP_COMMENT_TOKEN = "SECURT_SKIP";
         log.info("【securt-kit】ConfigInitializer reset completed");
     }
 
@@ -409,6 +420,33 @@ public class ConfigInitializer {
      */
     public static boolean isIgnoreTableCase() {
         return IGNORE_TABLE_CASE;
+    }
+
+    /**
+     * 根据注释判断 SQL 是否跳过
+     *
+     * @param sql 原始 SQL
+     * @return true 表示应跳过
+     */
+    public static boolean shouldSkipByComment(String sql) {
+        if (!SKIP_COMMENT_ENABLED || SKIP_COMMENT_PATTERN == null || StrUtil.isBlank(sql)) {
+            return false;
+        }
+        return SKIP_COMMENT_PATTERN.matcher(sql).find();
+    }
+
+    private static void initSkipCommentConfig(FieldEncryptorProperties.SkipCommentConfig skipCommentConfig) {
+        if (skipCommentConfig != null && skipCommentConfig.isEnable() && StrUtil.isNotBlank(skipCommentConfig.getToken())) {
+            SKIP_COMMENT_ENABLED = true;
+            SKIP_COMMENT_TOKEN = skipCommentConfig.getToken().trim();
+            SKIP_COMMENT_PATTERN = Pattern.compile("/\\*\\s*" + Pattern.quote(SKIP_COMMENT_TOKEN) + "\\s*\\*/", Pattern.CASE_INSENSITIVE);
+            log.info("【securt-kit】Comment skip enabled with token: {}", SKIP_COMMENT_TOKEN);
+        } else {
+            SKIP_COMMENT_ENABLED = false;
+            SKIP_COMMENT_TOKEN = "SECURT_SKIP";
+            SKIP_COMMENT_PATTERN = null;
+            log.debug("【securt-kit】Comment skip disabled");
+        }
     }
 }
 

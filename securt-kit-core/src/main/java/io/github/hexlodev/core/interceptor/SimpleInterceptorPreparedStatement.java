@@ -2,6 +2,7 @@ package io.github.hexlodev.core.interceptor;
 
 import cn.hutool.core.lang.Pair;
 import cn.hutool.core.util.StrUtil;
+import io.github.hexlodev.core.config.ConfigInitializer;
 import io.github.hexlodev.core.parser.SecurtkitUtils;
 import io.github.hexlodev.core.parser.dto.ColumnTableDto;
 import io.github.hexlodev.core.parser.dto.FieldEncryptorInfoDto;
@@ -80,6 +81,11 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
      * 仅在表需要加密时才会进行解析
      */
     private Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> pair;
+
+    /**
+     * 是否跳过当前 SQL 的加解密
+     */
+    private final boolean skipEncrypt;
 
     /**
      * 参数加密器
@@ -200,6 +206,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
         this.delegate = delegate;
         this.sql = sql.trim();
         this.datasourceId = StrUtil.isBlank(datasourceId) ? "default" : datasourceId;
+        this.skipEncrypt = ConfigInitializer.shouldSkipByComment(this.sql);
         
         // 调试日志：记录 datasource-id 的来源
         if (StrUtil.isBlank(datasourceId)) {
@@ -208,44 +215,50 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
             log.debug("PreparedStatement created with datasource-id: {} for SQL: {}", datasourceId, sql);
         }
 
-        // 解析SQL中的表名（使用缓存优化）
-        try {
-            // 使用 SqlParseCache 的表名解析方法，优先从缓存获取
-            Set<String> parsedTables = io.github.hexlodev.core.parser.SqlParseCache.parseTableNames(this.sql);
-            this.tables = parsedTables != null ? new HashSet<>(parsedTables) : new HashSet<>();
-            log.debug("Parsed tables from SQL: {} (datasource-id: {})", this.tables, this.datasourceId);
-        } catch (Exception e) {
-            log.warn("Failed to parse table names from SQL [sql={}, sqlLength={}], error: {}", 
-                    this.sql != null ? this.sql : "null",
-                    this.sql != null ? this.sql.length() : 0,
-                    e.getMessage(), e);
+        if (this.skipEncrypt) {
             this.tables = new HashSet<>();
-        }
-
-        // 如果表需要加密，则解析SQL获取字段映射关系（使用数据源标识）
-        if (SecurtkitUtils.needEncrypt(this.tables, this.datasourceId)) {
+            this.pair = null;
+            log.debug("SQL matched skip comment token, encryption disabled. datasource-id: {}", this.datasourceId);
+        } else {
+            // 解析SQL中的表名（使用缓存优化）
             try {
-                this.pair = SecurtkitUtils.parseSql(this.sql, this.datasourceId);
-                
-                if (log.isDebugEnabled()) {
-                    log.debug("SQL requires encryption [sql={}, tables={}, datasource-id={}, fieldsCount={}]", 
-                            this.sql != null ? this.sql : "null",
-                            this.tables,
-                            this.datasourceId,
-                            this.pair != null ? this.pair.getValue().size() : 0);
-                }
-            } catch (JSQLParserException e) {
-                log.error("Failed to parse SQL for encryption [sql={}, sqlLength={}, tables={}, datasource-id={}], error: {}", 
+                // 使用 SqlParseCache 的表名解析方法，优先从缓存获取
+                Set<String> parsedTables = io.github.hexlodev.core.parser.SqlParseCache.parseTableNames(this.sql);
+                this.tables = parsedTables != null ? new HashSet<>(parsedTables) : new HashSet<>();
+                log.debug("Parsed tables from SQL: {} (datasource-id: {})", this.tables, this.datasourceId);
+            } catch (Exception e) {
+                log.warn("Failed to parse table names from SQL [sql={}, sqlLength={}], error: {}",
                         this.sql != null ? this.sql : "null",
                         this.sql != null ? this.sql.length() : 0,
-                        this.tables,
-                        this.datasourceId,
                         e.getMessage(), e);
-                throw new RuntimeException("SQL parsing failed for encryption", e);
+                this.tables = new HashSet<>();
             }
-        } else {
-            log.debug("Tables do not require encryption: {} (datasource-id: {})", this.tables, this.datasourceId);
-            this.pair = null;
+
+            // 如果表需要加密，则解析SQL获取字段映射关系（使用数据源标识）
+            if (SecurtkitUtils.needEncrypt(this.tables, this.datasourceId)) {
+                try {
+                    this.pair = SecurtkitUtils.parseSql(this.sql, this.datasourceId);
+
+                    if (log.isDebugEnabled()) {
+                        log.debug("SQL requires encryption [sql={}, tables={}, datasource-id={}, fieldsCount={}]",
+                                this.sql != null ? this.sql : "null",
+                                this.tables,
+                                this.datasourceId,
+                                this.pair != null ? this.pair.getValue().size() : 0);
+                    }
+                } catch (JSQLParserException e) {
+                    log.error("Failed to parse SQL for encryption [sql={}, sqlLength={}, tables={}, datasource-id={}], error: {}",
+                            this.sql != null ? this.sql : "null",
+                            this.sql != null ? this.sql.length() : 0,
+                            this.tables,
+                            this.datasourceId,
+                            e.getMessage(), e);
+                    throw new RuntimeException("SQL parsing failed for encryption", e);
+                }
+            } else {
+                log.debug("Tables do not require encryption: {} (datasource-id: {})", this.tables, this.datasourceId);
+                this.pair = null;
+            }
         }
 
         // 初始化参数加密器和 SQL 执行器
