@@ -13,13 +13,13 @@
     <!-- 注意：IDEA 可能无法识别未在 <modules> 中的模块，但这是 Maven 最可靠的模块排除方式 -->
     <modules>
         <module>securt-kit-core</module>
-<!--        <module>securt-kit-starter-boot2</module>-->
-<!--        <module>securt-kit-test-boot2</module>-->
-<!--        <module>securt-kit-dy-datasource-test-boot2</module>-->
+        <module>securt-kit-starter-boot2</module>
+        <module>securt-kit-test-boot2</module>
+        <module>securt-kit-dy-datasource-test-boot2</module>
         <!-- Boot 3 模块不包含在默认 modules 中，需要使用 -pl 参数构建 -->
-         <module>securt-kit-starter-boot3</module>
-         <module>securt-kit-test-boot3</module>
-         <module>securt-kit-dy-datasource-test-boot3</module>
+<!--         <module>securt-kit-starter-boot3</module>-->
+<!--         <module>securt-kit-test-boot3</module>-->
+<!--         <module>securt-kit-dy-datasource-test-boot3</module>-->
     </modules>
 
     <properties>
