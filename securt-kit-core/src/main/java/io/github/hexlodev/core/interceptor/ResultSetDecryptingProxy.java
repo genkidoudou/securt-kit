@@ -3,6 +3,7 @@ package io.github.hexlodev.core.interceptor;
 import cn.hutool.core.lang.Pair;
 import io.github.hexlodev.core.TableCache;
 import io.github.hexlodev.core.cache.StrategyCache;
+import io.github.hexlodev.core.digest.DigestReadSupport;
 import io.github.hexlodev.core.exception.EncryptionHandler;
 import io.github.hexlodev.core.logging.SqlLogger;
 import io.github.hexlodev.core.parser.SecurtkitUtils;
@@ -55,6 +56,8 @@ final class ResultSetDecryptingProxy implements InvocationHandler {
      * 数据源标识（多数据源场景）
      */
     private final String datasourceId;
+
+    private boolean currentRowVerified = true;
 
     private ResultSetDecryptingProxy(ResultSet delegate, Set<String> tables, Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> pair, String sql, String datasourceId) {
         this.delegate = delegate;
@@ -113,9 +116,17 @@ final class ResultSetDecryptingProxy implements InvocationHandler {
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
         String name = method.getName();
 
+        if (isColumnRead(name, args)) {
+            verifyCurrentRowOnce();
+        }
+
         // 优先执行原始调用
         Object result = method.invoke(delegate, args);
 
+        if ("next".equals(name)) {
+            currentRowVerified = !Boolean.TRUE.equals(result);
+            return result;
+        }
         if (result == null) {
             return null;
         }
@@ -207,6 +218,64 @@ final class ResultSetDecryptingProxy implements InvocationHandler {
         }
 
         return result;
+    }
+
+    private boolean isColumnRead(String methodName, Object[] args) {
+        return methodName.startsWith("get")
+                && args != null
+                && args.length > 0
+                && (args[0] instanceof Integer || args[0] instanceof String);
+    }
+
+    private void verifyCurrentRowOnce() {
+        if (currentRowVerified) {
+            return;
+        }
+        Set<String> requiredColumns = DigestReadSupport.requiredColumns(tables, datasourceId);
+        if (requiredColumns.isEmpty()) {
+            currentRowVerified = true;
+            return;
+        }
+
+        Map<String, String> row = new LinkedHashMap<String, String>();
+        try {
+            ResultSetMetaData metadata = getMetaData();
+            for (int index = 1; index <= metadata.getColumnCount(); index++) {
+                String label = metadata.getColumnLabel(index);
+                String columnName = metadata.getColumnName(index);
+                if (!containsIgnoreCase(requiredColumns, label)
+                        && !containsIgnoreCase(requiredColumns, columnName)) {
+                    continue;
+                }
+                String key = label == null || label.isEmpty() ? columnName : label;
+                String value = maybeDecryptWithInfo(key, delegate.getString(index));
+                if (label != null && !label.isEmpty()) {
+                    row.put(label, value);
+                }
+                if (columnName != null && !columnName.isEmpty()) {
+                    row.put(columnName, value);
+                }
+            }
+        } catch (SQLException e) {
+            log.debug("Unable to collect result row for digest verification", e);
+            currentRowVerified = true;
+            return;
+        }
+
+        DigestReadSupport.verifyResultRow(tables, datasourceId, row);
+        currentRowVerified = true;
+    }
+
+    private boolean containsIgnoreCase(Set<String> values, String candidate) {
+        if (candidate == null) {
+            return false;
+        }
+        for (String value : values) {
+            if (candidate.equalsIgnoreCase(value)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
