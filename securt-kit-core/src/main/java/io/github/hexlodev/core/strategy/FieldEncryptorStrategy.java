@@ -118,4 +118,25 @@ public interface FieldEncryptorStrategy {
      * @since 2025/10/7
      */
     String decryption(String oldValue);
+
+    default boolean supportsDigest() {
+        return false;
+    }
+
+    default String digest(java.util.Map<String, String> sourcePlainValues) {
+        return null;
+    }
+
+    default boolean verifyDigest(java.util.Map<String, String> sourcePlainValues, String digestValue) {
+        if (digestValue == null || sourcePlainValues == null) {
+            return false;
+        }
+        String expected = digest(sourcePlainValues);
+        if (expected == null) {
+            return false;
+        }
+        byte[] a = expected.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] b = digestValue.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        return java.security.MessageDigest.isEqual(a, b);
+    }
 }
