@@ -4,9 +4,12 @@ import cn.hutool.core.collection.CollectionUtil;
 import cn.hutool.core.util.ClassUtil;
 import cn.hutool.core.util.StrUtil;
 import io.github.hexlodev.core.cache.StrategyCache;
+import io.github.hexlodev.core.digest.ResolvedDigestRule;
+import io.github.hexlodev.core.exception.ConfigurationException;
 import io.github.hexlodev.core.exception.EncryptionHandler;
 import io.github.hexlodev.core.parser.SqlParseCache;
 import io.github.hexlodev.core.strategy.FieldEncryptorStrategy;
+import io.github.hexlodev.core.strategy.HmacSha256DigestStrategy;
 import io.github.hexlodev.core.config.TableConfigRegistry;
 import lombok.extern.slf4j.Slf4j;
 
@@ -79,6 +82,7 @@ public class ConfigInitializer {
 
             // 验证配置
             validateConfiguration(properties);
+            validateAndRegisterDigestConfiguration(properties);
 
             // 判断是否使用多数据源配置（tables 中指定了 datasource-id）
             boolean isMultiDatasource = isMultiDatasourceConfig(properties);
@@ -116,6 +120,7 @@ public class ConfigInitializer {
             // 初始化失败，重置状态以便下次重试
             log.error("【securt-kit】ConfigInitializer initialization failed", e);
             INITIALIZED.set(false);
+            DigestConfigRegistry.clear();
             throw new RuntimeException("Failed to initialize ConfigInitializer", e);
         }
     }
@@ -213,6 +218,155 @@ public class ConfigInitializer {
         }
 
         log.debug("【securt-kit】配置验证通过，共配置 {} 个表", tables.size());
+    }
+
+    private static void validateAndRegisterDigestConfiguration(FieldEncryptorProperties properties) {
+        Map<String, Map<String, List<ResolvedDigestRule>>> resolvedByDatasource = new HashMap<>();
+        Map<String, Set<String>> targetsByTable = new HashMap<>();
+
+        if (CollectionUtil.isEmpty(properties.getTables())) {
+            return;
+        }
+
+        for (FieldEncryptorProperties.TableConfig table : properties.getTables()) {
+            if (CollectionUtil.isEmpty(table.getDigest())) {
+                continue;
+            }
+
+            String datasourceId = StrUtil.isBlank(table.getDatasourceId())
+                    ? DataSourceConfigManager.DEFAULT_DATASOURCE_ID
+                    : table.getDatasourceId();
+            String tableName = extractPureTableName(table.getTableName());
+            String tableKey = datasourceId + '\0' + tableName.toLowerCase(Locale.ROOT);
+            Set<String> encryptedFields = encryptedFieldNames(table);
+            Set<String> targetFields = targetsByTable.computeIfAbsent(tableKey, key -> new HashSet<>());
+            List<ResolvedDigestRule> rules = resolvedByDatasource
+                    .computeIfAbsent(datasourceId, key -> new HashMap<>())
+                    .computeIfAbsent(tableName.toLowerCase(Locale.ROOT), key -> new ArrayList<>());
+
+            for (FieldEncryptorProperties.DigestConfig digest : table.getDigest()) {
+                if (digest == null) {
+                    throw new ConfigurationException("表 '" + tableName + "' 的摘要配置不能为空");
+                }
+                if (CollectionUtil.isEmpty(digest.getSourceFields())) {
+                    throw new ConfigurationException("表 '" + tableName + "' 的摘要 sourceFields 不能为空");
+                }
+                if (StrUtil.isBlank(digest.getTargetField())) {
+                    throw new ConfigurationException("表 '" + tableName + "' 的摘要 targetField 不能为空");
+                }
+
+                String targetField = digest.getTargetField().trim();
+                String normalizedTarget = targetField.toLowerCase(Locale.ROOT);
+                if (!targetFields.add(normalizedTarget)) {
+                    throw new ConfigurationException("表 '" + tableName + "' 的摘要 targetField 重复: " + targetField);
+                }
+                if (encryptedFields.contains(normalizedTarget)) {
+                    throw new ConfigurationException(
+                            "表 '" + tableName + "' 的摘要 targetField 不能同时配置为加密字段: " + targetField);
+                }
+
+                Class<? extends FieldEncryptorStrategy> strategyClass =
+                        resolveDigestStrategy(properties, digest, tableName);
+                FieldEncryptorStrategy strategy = createDigestStrategy(properties, strategyClass);
+                if (!strategy.supportsDigest()) {
+                    throw new ConfigurationException(
+                            "摘要策略不支持 digest 操作: " + strategyClass.getName());
+                }
+
+                FieldEncryptorProperties.PartialUpdate partialUpdate = digest.getPartialUpdate() != null
+                        ? digest.getPartialUpdate()
+                        : properties.getDigestPartialUpdate();
+                if (partialUpdate == null) {
+                    partialUpdate = FieldEncryptorProperties.PartialUpdate.RELOAD;
+                }
+                boolean verifyOnRead = digest.getVerifyOnRead() != null
+                        ? digest.getVerifyOnRead()
+                        : properties.isDigestVerifyOnRead();
+                FieldEncryptorProperties.FailurePolicy failurePolicy = digest.getFailurePolicy() != null
+                        ? digest.getFailurePolicy()
+                        : properties.getDigestFailurePolicy();
+                if (failurePolicy == null) {
+                    failurePolicy = properties.getFailurePolicy();
+                }
+                if (failurePolicy == null) {
+                    failurePolicy = FieldEncryptorProperties.FailurePolicy.FALLBACK;
+                }
+
+                rules.add(new ResolvedDigestRule(
+                        tableName,
+                        digest.getSourceFields(),
+                        targetField,
+                        strategyClass,
+                        partialUpdate,
+                        verifyOnRead,
+                        failurePolicy));
+            }
+        }
+
+        DigestConfigRegistry.clear();
+        for (Map.Entry<String, Map<String, List<ResolvedDigestRule>>> datasourceEntry
+                : resolvedByDatasource.entrySet()) {
+            for (Map.Entry<String, List<ResolvedDigestRule>> tableEntry
+                    : datasourceEntry.getValue().entrySet()) {
+                DigestConfigRegistry.register(
+                        datasourceEntry.getKey(), tableEntry.getKey(), tableEntry.getValue());
+            }
+        }
+    }
+
+    private static Set<String> encryptedFieldNames(FieldEncryptorProperties.TableConfig table) {
+        Set<String> names = new HashSet<>();
+        if (CollectionUtil.isNotEmpty(table.getFields())) {
+            for (FieldEncryptorProperties.FieldConfig field : table.getFields()) {
+                if (field != null && StrUtil.isNotBlank(field.getFieldName())) {
+                    names.add(field.getFieldName().trim().toLowerCase(Locale.ROOT));
+                }
+            }
+        }
+        return names;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Class<? extends FieldEncryptorStrategy> resolveDigestStrategy(
+            FieldEncryptorProperties properties,
+            FieldEncryptorProperties.DigestConfig digest,
+            String tableName) {
+        String strategyName = StrUtil.isNotBlank(digest.getStrategy())
+                ? digest.getStrategy()
+                : properties.getDigestStrategy();
+        if (StrUtil.isBlank(strategyName)) {
+            throw new ConfigurationException("表 '" + tableName + "' 未配置摘要策略");
+        }
+        try {
+            Class<?> strategyClass = ClassUtil.loadClass(strategyName);
+            if (!FieldEncryptorStrategy.class.isAssignableFrom(strategyClass)) {
+                throw new ConfigurationException("摘要策略未实现 FieldEncryptorStrategy: " + strategyName);
+            }
+            return (Class<? extends FieldEncryptorStrategy>) strategyClass;
+        } catch (ConfigurationException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new ConfigurationException("无法加载摘要策略: " + strategyName, e);
+        }
+    }
+
+    private static FieldEncryptorStrategy createDigestStrategy(
+            FieldEncryptorProperties properties,
+            Class<? extends FieldEncryptorStrategy> strategyClass) {
+        if (HmacSha256DigestStrategy.class.equals(strategyClass)) {
+            if (StrUtil.isBlank(properties.getDigestHmacKey())) {
+                throw new ConfigurationException(
+                        "使用 HmacSha256DigestStrategy 时 digest-hmac-key 不能为空");
+            }
+            StrategyCache.registerStrategy(
+                    HmacSha256DigestStrategy.class,
+                    new HmacSha256DigestStrategy(properties.getDigestHmacKey()));
+        }
+        try {
+            return StrategyCache.getStrategy(strategyClass);
+        } catch (Exception e) {
+            throw new ConfigurationException("无法创建摘要策略: " + strategyClass.getName(), e);
+        }
     }
 
     /**
@@ -410,6 +564,7 @@ public class ConfigInitializer {
         IGNORE_TABLE_CASE = true;
         SKIP_COMMENT_ENABLED = false;
         SKIP_COMMENT_TOKEN = "SECURT_SKIP";
+        DigestConfigRegistry.clear();
         log.info("【securt-kit】ConfigInitializer reset completed");
     }
 
