@@ -144,6 +144,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
                 datasourceId,
                 pair,
                 digestPlainParameterValues,
+                parameterValues,
                 digestRewriteResult,
                 delegate);
         for (Integer index : digestIndexes) {

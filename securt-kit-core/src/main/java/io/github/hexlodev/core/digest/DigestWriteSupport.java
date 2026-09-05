@@ -56,7 +56,8 @@ public final class DigestWriteSupport {
             Set<String> tables,
             String datasourceId,
             Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> pair,
-            Map<Integer, Object> parameterValues,
+            Map<Integer, Object> plainParameterValues,
+            Map<Integer, Object> storedParameterValues,
             DigestRewriteResult rewriteResult,
             PreparedStatement delegate) throws SQLException {
         if (!isSupportedWrite(sql)
@@ -72,18 +73,20 @@ public final class DigestWriteSupport {
 
         Map<Integer, ColumnTableDto> columnsByIndex = columnsByIndex(pair, table);
         Map<String, String> availablePlain = new LinkedHashMap<String, String>();
-        if (parameterValues != null) {
+        // Digest input comes from preserved caller plaintext; setter-time field encryption
+        // may already have populated storedParameterValues with ciphertext.
+        if (plainParameterValues != null) {
             for (Map.Entry<Integer, ColumnTableDto> entry : columnsByIndex.entrySet()) {
-                if (!parameterValues.containsKey(entry.getKey())) {
+                if (!plainParameterValues.containsKey(entry.getKey())) {
                     continue;
                 }
-                Object value = parameterValues.get(entry.getKey());
+                Object value = plainParameterValues.get(entry.getKey());
                 availablePlain.put(entry.getValue().getSourceColumn(),
                         value == null ? null : String.valueOf(value));
             }
         }
 
-        ReloadContext reload = reloadContext(sql, parameterValues);
+        ReloadContext reload = reloadContext(sql, plainParameterValues, storedParameterValues);
         Connection connection = reload.insert ? null : delegate.getConnection();
         Map<String, String> digests = new DigestService().computeTargetDigests(
                 table,
@@ -98,23 +101,30 @@ public final class DigestWriteSupport {
         }
 
         Set<Integer> boundIndexes = new HashSet<Integer>();
+        Set<Integer> appendedIndexes = rewriteResult == null
+                ? Collections.<Integer>emptySet()
+                : new HashSet<Integer>(rewriteResult.getAppendedParameterIndexes());
         for (Map.Entry<Integer, ColumnTableDto> entry : columnsByIndex.entrySet()) {
+            if (appendedIndexes.contains(entry.getKey())) {
+                continue;
+            }
             String digest = getIgnoreCase(digests, entry.getValue().getSourceColumn());
             if (digest != null) {
-                bind(delegate, parameterValues, entry.getKey(), digest);
+                bind(delegate, plainParameterValues, storedParameterValues, entry.getKey(), digest);
                 boundIndexes.add(entry.getKey());
             }
         }
 
         if (rewriteResult != null) {
-            int digestPosition = 0;
-            for (Map.Entry<String, String> digest : digests.entrySet()) {
-                if (digestPosition >= rewriteResult.getAppendedParameterIndexes().size()) {
-                    break;
-                }
-                Integer index = rewriteResult.getAppendedParameterIndexes().get(digestPosition++);
-                if (!boundIndexes.contains(index)) {
-                    bind(delegate, parameterValues, index, digest.getValue());
+            List<Integer> indexes = rewriteResult.getAppendedParameterIndexes();
+            List<String> targets = rewriteResult.getAppendedTargetFields();
+            for (int position = 0;
+                 position < indexes.size() && position < targets.size();
+                 position++) {
+                Integer index = indexes.get(position);
+                String digest = getIgnoreCase(digests, targets.get(position));
+                if (index != null && digest != null && !boundIndexes.contains(index)) {
+                    bind(delegate, plainParameterValues, storedParameterValues, index, digest);
                     boundIndexes.add(index);
                 }
             }
@@ -123,12 +133,16 @@ public final class DigestWriteSupport {
     }
 
     private static void bind(PreparedStatement delegate,
-                             Map<Integer, Object> parameterValues,
+                             Map<Integer, Object> plainParameterValues,
+                             Map<Integer, Object> storedParameterValues,
                              int index,
                              String digest) throws SQLException {
         delegate.setString(index, digest);
-        if (parameterValues != null) {
-            parameterValues.put(index, digest);
+        if (plainParameterValues != null) {
+            plainParameterValues.put(index, digest);
+        }
+        if (storedParameterValues != null) {
+            storedParameterValues.put(index, digest);
         }
     }
 
@@ -165,7 +179,10 @@ public final class DigestWriteSupport {
         return matched;
     }
 
-    private static ReloadContext reloadContext(String sql, Map<Integer, Object> parameterValues) {
+    private static ReloadContext reloadContext(
+            String sql,
+            Map<Integer, Object> plainParameterValues,
+            Map<Integer, Object> storedParameterValues) {
         try {
             Statement statement = CCJSqlParserUtil.parse(sql);
             if (statement instanceof Insert) {
@@ -179,23 +196,44 @@ public final class DigestWriteSupport {
                 return new ReloadContext(false, null, Collections.emptyList());
             }
             String whereSql = update.getWhere().toString();
-            int whereParameterCount = countPlaceholders(whereSql);
-            int totalParameterCount = countPlaceholders(sql);
-            List<Object> whereParams = new ArrayList<Object>();
-            for (int index = totalParameterCount - whereParameterCount + 1;
-                 index <= totalParameterCount; index++) {
-                if (parameterValues == null || !parameterValues.containsKey(index)) {
-                    throw new SecurtKitException(
-                            "Cannot resolve UPDATE WHERE parameters for digest RELOAD");
-                }
-                whereParams.add(parameterValues.get(index));
-            }
+            List<Object> whereParams = reloadWhereParameters(
+                    sql, plainParameterValues, storedParameterValues);
             return new ReloadContext(false, whereSql, whereParams);
         } catch (SecurtKitException e) {
             throw e;
         } catch (Exception e) {
             throw new SecurtKitException("Cannot parse SQL for digest write", e);
         }
+    }
+
+    static List<Object> reloadWhereParameters(
+            String sql,
+            Map<Integer, Object> plainParameterValues,
+            Map<Integer, Object> storedParameterValues) {
+        int whereParameterCount;
+        try {
+            Statement statement = CCJSqlParserUtil.parse(sql);
+            if (!(statement instanceof Update) || ((Update) statement).getWhere() == null) {
+                return Collections.emptyList();
+            }
+            whereParameterCount = countPlaceholders(((Update) statement).getWhere().toString());
+        } catch (Exception e) {
+            throw new SecurtKitException("Cannot parse SQL for digest write", e);
+        }
+        int totalParameterCount = countPlaceholders(sql);
+        List<Object> whereParams = new ArrayList<Object>();
+        for (int index = totalParameterCount - whereParameterCount + 1;
+             index <= totalParameterCount; index++) {
+            if (storedParameterValues != null && storedParameterValues.containsKey(index)) {
+                whereParams.add(storedParameterValues.get(index));
+            } else if (plainParameterValues != null && plainParameterValues.containsKey(index)) {
+                whereParams.add(plainParameterValues.get(index));
+            } else {
+                throw new SecurtKitException(
+                        "Cannot resolve UPDATE WHERE parameters for digest RELOAD");
+            }
+        }
+        return whereParams;
     }
 
     private static int countPlaceholders(String sql) {

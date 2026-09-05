@@ -76,7 +76,7 @@ public final class DigestSqlRewriter {
         }
         appendJdbcParameters(values, toAppend.size());
 
-        return DigestRewriteResult.rewritten(insert.toString(), appendedIndexes);
+        return DigestRewriteResult.rewritten(insert.toString(), appendedIndexes, toAppend);
     }
 
     private static DigestRewriteResult rewriteUpdate(Update update, List<String> missingTargetFields) {
@@ -111,7 +111,7 @@ public final class DigestSqlRewriter {
             setPlaceholderCount++;
         }
 
-        return DigestRewriteResult.rewritten(update.toString(), appendedIndexes);
+        return DigestRewriteResult.rewritten(update.toString(), appendedIndexes, toAppend);
     }
 
     private static boolean hasJoins(Update update) {

@@ -62,9 +62,13 @@ class DigestWriteSupportTest {
                         column(2, "id_card"),
                         column(3, "row_digest")),
                 values,
+                values,
                 new DigestRewriteResult(
                         "INSERT INTO user_account(phone, id_card, row_digest) VALUES (?, ?, ?)",
-                        Collections.singletonList(3), true, null),
+                        Collections.singletonList(3),
+                        Collections.singletonList("row_digest"),
+                        true,
+                        null),
                 recordingStatement(bound));
 
         Map<String, String> ordered = new LinkedHashMap<String, String>();
@@ -92,6 +96,7 @@ class DigestWriteSupportTest {
                         column(2, "row_digest"),
                         column(3, "id_card")),
                 values,
+                values,
                 new DigestRewriteResult(
                         "INSERT INTO user_account(phone, row_digest, id_card) VALUES (?, ?, ?)",
                         Collections.<Integer>emptyList(), false, null),
@@ -103,6 +108,58 @@ class DigestWriteSupportTest {
         String expected = strategy.digest(ordered);
         assertEquals(Collections.singletonMap(2, expected), bound);
         assertEquals(expected, values.get(2));
+    }
+
+    @Test
+    void bindsOnlyTheDigestTargetActuallyAppendedByRewrite() throws Exception {
+        DigestConfigRegistry.clear();
+        DigestConfigRegistry.register(DATASOURCE, TABLE, Arrays.asList(
+                rule(Collections.singletonList("phone"), "phone_digest"),
+                rule(Collections.singletonList("id_card"), "id_card_digest")));
+        String originalSql =
+                "INSERT INTO user_account(phone, phone_digest, id_card) VALUES (?, ?, ?)";
+        DigestRewriteResult rewrite = DigestWriteSupport.rewriteForConfiguredDigests(
+                originalSql, Collections.singleton(TABLE), DATASOURCE);
+        Map<Integer, Object> values = new LinkedHashMap<Integer, Object>();
+        values.put(1, "13800138000");
+        values.put(2, "caller-supplied-digest");
+        values.put(3, "110101199001011234");
+        Map<Integer, String> bound = new LinkedHashMap<Integer, String>();
+
+        DigestWriteSupport.applyDigestsBeforeEncrypt(
+                rewrite.getSql(),
+                Collections.singleton(TABLE),
+                DATASOURCE,
+                pair(
+                        column(1, "phone"),
+                        column(2, "phone_digest"),
+                        column(3, "id_card")),
+                values,
+                values,
+                rewrite,
+                recordingStatement(bound));
+
+        Map<String, String> phone = Collections.singletonMap("phone", "13800138000");
+        Map<String, String> idCard =
+                Collections.singletonMap("id_card", "110101199001011234");
+        assertEquals(strategy.digest(phone), bound.get(2));
+        assertEquals(strategy.digest(idCard), bound.get(4));
+    }
+
+    @Test
+    void reloadWhereUsesStoredValueAndFallsBackToPlainValue() {
+        Map<Integer, Object> plain = new LinkedHashMap<Integer, Object>();
+        plain.put(2, "plain-id");
+        plain.put(3, "plain-tenant");
+        Map<Integer, Object> stored = new LinkedHashMap<Integer, Object>();
+        stored.put(2, "encrypted-id");
+
+        List<Object> whereParams = DigestWriteSupport.reloadWhereParameters(
+                "UPDATE user_account SET phone = ? WHERE id = ? AND tenant = ?",
+                plain,
+                stored);
+
+        assertEquals(Arrays.<Object>asList("encrypted-id", "plain-tenant"), whereParams);
     }
 
     @Test
@@ -131,6 +188,17 @@ class DigestWriteSupportTest {
 
         assertEquals("where-id", bound.get(3));
         assertFalse(bound.containsKey(2));
+    }
+
+    private ResolvedDigestRule rule(List<String> sources, String target) {
+        return new ResolvedDigestRule(
+                TABLE,
+                sources,
+                target,
+                HmacSha256DigestStrategy.class,
+                FieldEncryptorProperties.PartialUpdate.FAIL,
+                false,
+                FieldEncryptorProperties.FailurePolicy.FALLBACK);
     }
 
     private Pair<Map<String, ColumnTableDto>, List<FieldEncryptorInfoDto>> pair(ColumnTableDto... columns) {
