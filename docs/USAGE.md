@@ -5,6 +5,7 @@
 - [基础配置](#基础配置)
 - [多数据源配置](#多数据源配置)
 - [自定义加密策略](#自定义加密策略)
+- [字段完整性摘要](#字段完整性摘要)
 - [失败处理策略](#失败处理策略)
 - [性能优化](#性能优化)
 - [最佳实践](#最佳实践)
@@ -158,6 +159,31 @@ securtkit:
 2. **加密和解密必须互逆**
 3. **必须处理 null 值**
 4. **建议实现为线程安全的**
+
+---
+
+## 字段完整性摘要
+
+摘要按源字段明文计算并写入目标列，可选在读取时验签以检测库侧篡改。HMAC 密钥应通过环境变量或配置中心注入，不要写入代码或提交到仓库。
+
+```yaml
+securtkit:
+  encryptor:
+    digest-strategy: io.github.hexlodev.core.strategy.HmacSha256DigestStrategy
+    digest-hmac-key: ${DIGEST_HMAC_KEY}
+    digest-partial-update: RELOAD
+    digest-verify-on-read: false
+    # digest-failure-policy: FAIL_FAST
+    tables:
+      - table-name: user
+        fields:
+          - field-name: phone
+        digest:
+          - source-fields: [phone]
+            target-field: row_digest
+```
+
+数据库表需要预先创建 `row_digest` 列。`RELOAD` 表示部分更新缺少摘要源字段时从当前行补读；开启 `digest-verify-on-read` 后，验签失败按 `digest-failure-policy`（未配置则按 `failure-policy`）处理。
 
 ---
 

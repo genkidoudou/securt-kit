@@ -5,8 +5,19 @@ CREATE TABLE IF NOT EXISTS "user" (
     phone VARCHAR(20),
     age INT,
     email VARCHAR(100),
+    row_digest VARCHAR(128),
     created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- 摘要完整性集成测试表
+CREATE TABLE IF NOT EXISTS digest_user (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    phone VARCHAR(100),
+    age INT,
+    email VARCHAR(100),
+    row_digest VARCHAR(128)
 );
 
 -- 创建订单表

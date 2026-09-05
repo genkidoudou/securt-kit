@@ -111,11 +111,24 @@ server:
 # 加密测试
 securtkit:
   encryptor:
+    mode: JDBC
+    digest-strategy: io.github.hexlodev.core.strategy.HmacSha256DigestStrategy
+    digest-hmac-key: boot2-digest-integration-secret
+    digest-partial-update: RELOAD
+    digest-verify-on-read: true
+    digest-failure-policy: FAIL_FAST
     tables:
       - table-name: user
         fields:
           - field-name: name
           - field-name: phone
+      - table-name: digest_user
+        fields:
+          - field-name: name
+          - field-name: phone
+        digest:
+          - source-fields: [phone]
+            target-field: row_digest
       - table-name: orders
         fields:
           - field-name: customer_name
