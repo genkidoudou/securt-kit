@@ -5,6 +5,7 @@ import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.util.List;
+import java.util.Locale;
 
 /**
  * 字段加密配置属性
@@ -58,6 +59,30 @@ public class FieldEncryptorProperties {
     private boolean enable;
 
     /**
+     * 加解密通道模式
+     * <p>
+     * 决定由哪个通道挂载加解密逻辑：
+     * <ul>
+     *   <li>JDBC: 默认值，启用 Driver / Statement 拦截通道（兼容现状）</li>
+     *   <li>MYBATIS: 注册 MyBatis 插件通道，不要求使用 {@code jdbc:interceptor:} URL</li>
+     *   <li>OFF: 加载配置但不挂载任何拦截通道，便于排障</li>
+     * </ul>
+     * 同一数据源不允许同时启用 JDBC 与 MYBATIS 通道，避免双重加密。
+     * </p>
+     * <p>
+     * 配置示例：
+     * <pre>{@code
+     * securtkit:
+     *   encryptor:
+     *     mode: JDBC
+     * }</pre>
+     * </p>
+     *
+     * @since 1.3.0
+     */
+    private Mode mode = Mode.JDBC;
+
+    /**
      * SQL 解析缓存配置
      * @since 1.0.0
      */
@@ -93,6 +118,31 @@ public class FieldEncryptorProperties {
      * @since 1.0.0
      */
     private FailurePolicy failurePolicy = FailurePolicy.FALLBACK;
+
+    private String digestStrategy;
+    private PartialUpdate digestPartialUpdate = PartialUpdate.RELOAD;
+    private boolean digestVerifyOnRead = false;
+    private FailurePolicy digestFailurePolicy;
+    private String digestHmacKey;
+
+    /**
+     * LIKE 模式处理器实现类全名
+     * <p>
+     * 默认使用 {@link io.github.hexlodev.core.strategy.like.ExactMatchLikePatternHandler}：
+     * 仅将无通配符的 LIKE 按精确匹配加密；含 {@code %} / {@code _} 时跳过加密。
+     * </p>
+     * <p>
+     * 配置示例：
+     * <pre>{@code
+     * securtkit:
+     *   encryptor:
+     *     like-pattern-handler: com.example.MyFuzzyLikePatternHandler
+     * }</pre>
+     * </p>
+     *
+     * @since 1.2.0
+     */
+    private String likePatternHandler;
 
     /**
      * 是否忽略表名大小写
@@ -179,6 +229,8 @@ public class FieldEncryptorProperties {
          */
         private List<FieldConfig> fields;
 
+        private List<DigestConfig> digest;
+
     }
 
 
@@ -244,6 +296,53 @@ public class FieldEncryptorProperties {
          * 注释中的关键字（不包含注释边界符号，比较时忽略首尾空格）
          */
         private String token = "SECURT_SKIP";
+    }
+
+    /**
+     * 加解密通道模式
+     *
+     * @since 1.3.0
+     */
+    public enum Mode {
+        /**
+         * JDBC 拦截通道（默认）
+         */
+        JDBC,
+
+        /**
+         * MyBatis 插件通道
+         */
+        MYBATIS,
+
+        /**
+         * 不挂载任何通道
+         */
+        OFF
+    }
+
+    @Data
+    public static class DigestConfig {
+        private List<String> sourceFields;
+        private String targetField;
+        private String strategy;
+        private PartialUpdate partialUpdate;
+        private Boolean verifyOnRead;
+        private FailurePolicy failurePolicy;
+    }
+
+    public enum PartialUpdate {
+        SKIP, RELOAD, FAIL;
+
+        public static PartialUpdate fromString(String value) {
+            if (value == null || value.trim().isEmpty()) {
+                return RELOAD;
+            }
+            try {
+                return valueOf(value.toUpperCase(Locale.ROOT).trim());
+            } catch (IllegalArgumentException e) {
+                return RELOAD;
+            }
+        }
     }
 
     /**
