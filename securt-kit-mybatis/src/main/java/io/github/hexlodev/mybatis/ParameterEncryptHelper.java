@@ -120,10 +120,6 @@ public final class ParameterEncryptHelper {
             }
         }
 
-        DigestRewriteResult rewrite = DigestSqlRewriter.tryAppendTargets(boundSql.getSql(), targets);
-        if (rewrite.getWarnMessage() != null) {
-            log.warn("【securt-kit】MyBatis digest SQL was not rewritten: {}", rewrite.getWarnMessage());
-        }
         boolean insert = isInsert(boundSql.getSql());
         ReloadContext reload = buildReloadContext(
                 boundSql.getSql(), valuesByIndex, columnsByIndex, dsId);
@@ -132,6 +128,18 @@ public final class ParameterEncryptHelper {
                 reload.whereSql, reload.whereParams);
         if (digests.isEmpty()) {
             return false;
+        }
+
+        List<String> computedTargets = new ArrayList<String>(targets.size());
+        for (String target : targets) {
+            if (getIgnoreCase(digests, target) != null) {
+                computedTargets.add(target);
+            }
+        }
+        DigestRewriteResult rewrite = DigestSqlRewriter.tryAppendTargets(
+                boundSql.getSql(), computedTargets);
+        if (rewrite.getWarnMessage() != null) {
+            log.warn("【securt-kit】MyBatis digest SQL was not rewritten: {}", rewrite.getWarnMessage());
         }
 
         List<ParameterMapping> mappings = originalMappings == null

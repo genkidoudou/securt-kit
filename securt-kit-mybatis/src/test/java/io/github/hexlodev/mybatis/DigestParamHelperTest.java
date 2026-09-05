@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -83,6 +84,48 @@ class DigestParamHelperTest {
     }
 
     @Test
+    void skipsUncomputedDigestTargetWithoutAddingUnboundPlaceholder() {
+        DigestConfigRegistry.clear();
+        DigestConfigRegistry.register(DATASOURCE, TABLE, Arrays.asList(
+                new ResolvedDigestRule(
+                        TABLE,
+                        Collections.singletonList("phone"),
+                        "phone_digest",
+                        HmacSha256DigestStrategy.class,
+                        FieldEncryptorProperties.PartialUpdate.SKIP,
+                        true,
+                        FieldEncryptorProperties.FailurePolicy.FAIL_FAST),
+                new ResolvedDigestRule(
+                        TABLE,
+                        Collections.singletonList("id_card"),
+                        "id_card_digest",
+                        HmacSha256DigestStrategy.class,
+                        FieldEncryptorProperties.PartialUpdate.SKIP,
+                        true,
+                        FieldEncryptorProperties.FailurePolicy.FAIL_FAST)));
+        Map<String, Object> parameter = new LinkedHashMap<String, Object>();
+        parameter.put("phone", "13800138000");
+        parameter.put("id", 1L);
+        BoundSql boundSql = boundSql(
+                "UPDATE user_account SET phone = ? WHERE id = ?",
+                Arrays.asList("phone", "id"),
+                parameter);
+
+        boolean rewritten = ParameterEncryptHelper.applyDigests(
+                parameter,
+                boundSql,
+                pair(column(1, "phone"), column(2, "id")),
+                Collections.singleton(TABLE),
+                DATASOURCE);
+
+        assertTrue(rewritten);
+        assertTrue(boundSql.getSql().toLowerCase().contains("phone_digest"));
+        assertFalse(boundSql.getSql().toLowerCase().contains("id_card_digest"));
+        assertEquals(boundSql.getParameterMappings().size(), countPlaceholders(boundSql.getSql()));
+        assertEquals(3, boundSql.getParameterMappings().size());
+    }
+
+    @Test
     void verifiesMapDigestAfterResultDecryption() {
         Map<String, String> sourceValues = new LinkedHashMap<String, String>();
         sourceValues.put("phone", "13800138000");
@@ -96,6 +139,16 @@ class DigestParamHelperTest {
                         Collections.<FieldEncryptorInfoDto>emptyList()),
                 Collections.singleton(TABLE),
                 DATASOURCE));
+    }
+
+    private static int countPlaceholders(String sql) {
+        int count = 0;
+        for (int i = 0; i < sql.length(); i++) {
+            if (sql.charAt(i) == '?') {
+                count++;
+            }
+        }
+        return count;
     }
 
     private static BoundSql boundSql(String sql, List<String> properties, Object parameter) {
