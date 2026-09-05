@@ -223,9 +223,20 @@ public class ConfigInitializer {
     private static void validateAndRegisterDigestConfiguration(FieldEncryptorProperties properties) {
         Map<String, Map<String, List<ResolvedDigestRule>>> resolvedByDatasource = new HashMap<>();
         Map<String, Set<String>> targetsByTable = new HashMap<>();
+        Map<String, Set<String>> encryptedFieldsByTable = new HashMap<>();
 
         if (CollectionUtil.isEmpty(properties.getTables())) {
             return;
+        }
+
+        for (FieldEncryptorProperties.TableConfig table : properties.getTables()) {
+            String datasourceId = StrUtil.isBlank(table.getDatasourceId())
+                    ? DataSourceConfigManager.DEFAULT_DATASOURCE_ID
+                    : table.getDatasourceId();
+            String tableName = extractPureTableName(table.getTableName());
+            String tableKey = datasourceId + '\0' + tableName.toLowerCase(Locale.ROOT);
+            encryptedFieldsByTable.computeIfAbsent(tableKey, key -> new HashSet<>())
+                    .addAll(encryptedFieldNames(table));
         }
 
         for (FieldEncryptorProperties.TableConfig table : properties.getTables()) {
@@ -238,7 +249,7 @@ public class ConfigInitializer {
                     : table.getDatasourceId();
             String tableName = extractPureTableName(table.getTableName());
             String tableKey = datasourceId + '\0' + tableName.toLowerCase(Locale.ROOT);
-            Set<String> encryptedFields = encryptedFieldNames(table);
+            Set<String> encryptedFields = encryptedFieldsByTable.get(tableKey);
             Set<String> targetFields = targetsByTable.computeIfAbsent(tableKey, key -> new HashSet<>());
             List<ResolvedDigestRule> rules = resolvedByDatasource
                     .computeIfAbsent(datasourceId, key -> new HashMap<>())
@@ -250,6 +261,12 @@ public class ConfigInitializer {
                 }
                 if (CollectionUtil.isEmpty(digest.getSourceFields())) {
                     throw new ConfigurationException("表 '" + tableName + "' 的摘要 sourceFields 不能为空");
+                }
+                for (String sourceField : digest.getSourceFields()) {
+                    if (StrUtil.isBlank(sourceField)) {
+                        throw new ConfigurationException(
+                                "表 '" + tableName + "' 的摘要 sourceFields 不能包含空字段");
+                    }
                 }
                 if (StrUtil.isBlank(digest.getTargetField())) {
                     throw new ConfigurationException("表 '" + tableName + "' 的摘要 targetField 不能为空");

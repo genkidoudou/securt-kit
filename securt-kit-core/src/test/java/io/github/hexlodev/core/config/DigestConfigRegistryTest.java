@@ -34,6 +34,19 @@ class DigestConfigRegistryTest {
     }
 
     @Test
+    void rejectsTargetFieldEncryptedByAnotherConfigForSameTableAndDatasource() {
+        FieldEncryptorProperties properties = baseProps();
+        FieldEncryptorProperties.TableConfig encryptedFields = new FieldEncryptorProperties.TableConfig();
+        encryptedFields.setTableName("USER");
+        encryptedFields.setFields(new ArrayList<FieldEncryptorProperties.FieldConfig>(
+                Collections.singletonList(field("ROW_DIGEST"))));
+        encryptedFields.setDigest(Collections.<FieldEncryptorProperties.DigestConfig>emptyList());
+        properties.setTables(Arrays.asList(properties.getTables().get(0), encryptedFields));
+
+        assertThrows(RuntimeException.class, () -> ConfigInitializer.initialize(properties));
+    }
+
+    @Test
     void rejectsDuplicateTargetFieldIgnoringCase() {
         FieldEncryptorProperties properties = baseProps();
         FieldEncryptorProperties.DigestConfig duplicate = digest("phone", "ROW_DIGEST");
@@ -52,6 +65,18 @@ class DigestConfigRegistryTest {
         FieldEncryptorProperties unsupported = baseProps();
         unsupported.getTables().get(0).getDigest().get(0).setStrategy(UnsupportedDigestStrategy.class.getName());
         assertThrows(RuntimeException.class, () -> ConfigInitializer.initialize(unsupported));
+    }
+
+    @Test
+    void rejectsBlankSourceFieldEntries() {
+        for (String sourceField : Arrays.asList(null, "", " ")) {
+            FieldEncryptorProperties properties = baseProps();
+            properties.getTables().get(0).getDigest().get(0)
+                    .setSourceFields(Collections.singletonList(sourceField));
+
+            assertThrows(RuntimeException.class, () -> ConfigInitializer.initialize(properties));
+            ConfigInitializer.reset();
+        }
     }
 
     @Test
