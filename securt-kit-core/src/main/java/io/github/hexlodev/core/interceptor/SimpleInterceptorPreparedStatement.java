@@ -3,6 +3,10 @@ package io.github.hexlodev.core.interceptor;
 import cn.hutool.core.lang.Pair;
 import cn.hutool.core.util.StrUtil;
 import io.github.hexlodev.core.config.ConfigInitializer;
+import io.github.hexlodev.core.config.DigestConfigRegistry;
+import io.github.hexlodev.core.config.EncryptModeHolder;
+import io.github.hexlodev.core.digest.DigestRewriteResult;
+import io.github.hexlodev.core.digest.DigestWriteSupport;
 import io.github.hexlodev.core.parser.SecurtkitUtils;
 import io.github.hexlodev.core.parser.dto.ColumnTableDto;
 import io.github.hexlodev.core.parser.dto.FieldEncryptorInfoDto;
@@ -77,6 +81,13 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
     private final Map<Integer, Object> parameterValues = new LinkedHashMap<>();
 
     /**
+     * 摘要计算使用的调用方原始参数，索引为改写后 SQL 的物理索引。
+     */
+    private final Map<Integer, Object> digestPlainParameterValues = new LinkedHashMap<>();
+
+    private DigestRewriteResult digestRewriteResult;
+
+    /**
      * SQL解析结果，包含占位符到表字段的映射和需要加密的字段信息
      * 仅在表需要加密时才会进行解析
      */
@@ -96,6 +107,49 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
      * SQL 执行器
      */
     private final SqlExecutor sqlExecutor;
+
+    public void setDigestRewriteResult(DigestRewriteResult digestRewriteResult) {
+        this.digestRewriteResult = digestRewriteResult;
+    }
+
+    private int delegateParameterIndex(int applicationIndex) {
+        int physicalIndex = applicationIndex;
+        if (digestRewriteResult == null) {
+            return physicalIndex;
+        }
+        for (Integer appendedIndex : digestRewriteResult.getAppendedParameterIndexes()) {
+            if (appendedIndex != null && appendedIndex <= physicalIndex) {
+                physicalIndex++;
+            }
+        }
+        return physicalIndex;
+    }
+
+    private boolean hasDigestConfiguration() {
+        for (String table : tables) {
+            if (DigestConfigRegistry.hasDigest(table, datasourceId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void applyDigestsBeforeExecute() throws SQLException {
+        if (skipEncrypt || !EncryptModeHolder.isJdbc()) {
+            return;
+        }
+        Set<Integer> digestIndexes = DigestWriteSupport.applyDigestsBeforeEncrypt(
+                sql,
+                tables,
+                datasourceId,
+                pair,
+                digestPlainParameterValues,
+                digestRewriteResult,
+                delegate);
+        for (Integer index : digestIndexes) {
+            parameterValues.put(index, digestPlainParameterValues.get(index));
+        }
+    }
 
     @FunctionalInterface
     private interface SqlStringConsumer {
@@ -206,7 +260,13 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
         this.delegate = delegate;
         this.sql = sql.trim();
         this.datasourceId = StrUtil.isBlank(datasourceId) ? "default" : datasourceId;
-        this.skipEncrypt = ConfigInitializer.shouldSkipByComment(this.sql);
+        boolean skip = ConfigInitializer.shouldSkipByComment(this.sql);
+        if (!EncryptModeHolder.isJdbc()) {
+            // 非 JDBC 通道模式下，Driver 拦截仅透传，避免与 MyBatis 通道双重加密
+            skip = true;
+            log.debug("Encrypt mode is {}, JDBC interceptor passthrough", EncryptModeHolder.getMode());
+        }
+        this.skipEncrypt = skip;
         
         // 调试日志：记录 datasource-id 的来源
         if (StrUtil.isBlank(datasourceId)) {
@@ -235,7 +295,8 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
             }
 
             // 如果表需要加密，则解析SQL获取字段映射关系（使用数据源标识）
-            if (SecurtkitUtils.needEncrypt(this.tables, this.datasourceId)) {
+            if (SecurtkitUtils.needEncrypt(this.tables, this.datasourceId)
+                    || hasDigestConfiguration()) {
                 try {
                     this.pair = SecurtkitUtils.parseSql(this.sql, this.datasourceId);
 
@@ -276,6 +337,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
      */
     @Override
     public ResultSet executeQuery() throws SQLException {
+        applyDigestsBeforeExecute();
         return sqlExecutor.executeQuery(parameterValues);
     }
 
@@ -289,6 +351,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
      */
     @Override
     public int executeUpdate() throws SQLException {
+        applyDigestsBeforeExecute();
         return sqlExecutor.executeUpdate(parameterValues);
     }
 
@@ -302,6 +365,7 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
      */
     @Override
     public boolean execute() throws SQLException {
+        applyDigestsBeforeExecute();
         return sqlExecutor.execute(parameterValues);
     }
 
@@ -318,9 +382,11 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
      */
     @Override
     public void setString(int parameterIndex, String x) throws SQLException {
-        String newValue = parameterEncryptor.encryptString(parameterIndex, x);
-        delegate.setString(parameterIndex, newValue);
-        parameterValues.put(parameterIndex, newValue);
+        int physicalIndex = delegateParameterIndex(parameterIndex);
+        String newValue = parameterEncryptor.encryptString(physicalIndex, x);
+        delegate.setString(physicalIndex, newValue);
+        parameterValues.put(physicalIndex, newValue);
+        digestPlainParameterValues.put(physicalIndex, x);
     }
 
     /**
@@ -332,8 +398,10 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
      */
     @Override
     public void setInt(int parameterIndex, int x) throws SQLException {
-        delegate.setInt(parameterIndex, x);
-        parameterValues.put(parameterIndex, x);
+        int physicalIndex = delegateParameterIndex(parameterIndex);
+        delegate.setInt(physicalIndex, x);
+        parameterValues.put(physicalIndex, x);
+        digestPlainParameterValues.put(physicalIndex, x);
     }
 
     /**
@@ -345,8 +413,10 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
      */
     @Override
     public void setLong(int parameterIndex, long x) throws SQLException {
-        delegate.setLong(parameterIndex, x);
-        parameterValues.put(parameterIndex, x);
+        int physicalIndex = delegateParameterIndex(parameterIndex);
+        delegate.setLong(physicalIndex, x);
+        parameterValues.put(physicalIndex, x);
+        digestPlainParameterValues.put(physicalIndex, x);
     }
 
     /**
@@ -358,8 +428,10 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
      */
     @Override
     public void setDouble(int parameterIndex, double x) throws SQLException {
-        delegate.setDouble(parameterIndex, x);
-        parameterValues.put(parameterIndex, x);
+        int physicalIndex = delegateParameterIndex(parameterIndex);
+        delegate.setDouble(physicalIndex, x);
+        parameterValues.put(physicalIndex, x);
+        digestPlainParameterValues.put(physicalIndex, x);
     }
 
     /**
@@ -371,90 +443,99 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
      */
     @Override
     public void setBoolean(int parameterIndex, boolean x) throws SQLException {
-        delegate.setBoolean(parameterIndex, x);
-        parameterValues.put(parameterIndex, x);
+        int physicalIndex = delegateParameterIndex(parameterIndex);
+        delegate.setBoolean(physicalIndex, x);
+        parameterValues.put(physicalIndex, x);
+        digestPlainParameterValues.put(physicalIndex, x);
     }
 
     // 其他PreparedStatement方法直接委托
     @Override
     public void setNull(int parameterIndex, int sqlType) throws SQLException {
-        delegate.setNull(parameterIndex, sqlType);
-        parameterValues.put(parameterIndex, null);
+        int physicalIndex = delegateParameterIndex(parameterIndex);
+        delegate.setNull(physicalIndex, sqlType);
+        parameterValues.put(physicalIndex, null);
+        digestPlainParameterValues.put(physicalIndex, null);
     }
 
     @Override
     public void setByte(int parameterIndex, byte x) throws SQLException {
-        delegate.setByte(parameterIndex, x);
+        delegate.setByte(delegateParameterIndex(parameterIndex), x);
     }
 
     @Override
     public void setShort(int parameterIndex, short x) throws SQLException {
-        delegate.setShort(parameterIndex, x);
+        delegate.setShort(delegateParameterIndex(parameterIndex), x);
     }
 
     @Override
     public void setFloat(int parameterIndex, float x) throws SQLException {
-        delegate.setFloat(parameterIndex, x);
+        delegate.setFloat(delegateParameterIndex(parameterIndex), x);
     }
 
     @Override
     public void setBigDecimal(int parameterIndex, java.math.BigDecimal x) throws SQLException {
-        delegate.setBigDecimal(parameterIndex, x);
+        delegate.setBigDecimal(delegateParameterIndex(parameterIndex), x);
     }
 
     @Override
     public void setBytes(int parameterIndex, byte[] x) throws SQLException {
-        delegate.setBytes(parameterIndex, x);
+        delegate.setBytes(delegateParameterIndex(parameterIndex), x);
     }
 
     @Override
     public void setDate(int parameterIndex, Date x) throws SQLException {
-        delegate.setDate(parameterIndex, x);
+        delegate.setDate(delegateParameterIndex(parameterIndex), x);
     }
 
     @Override
     public void setTime(int parameterIndex, Time x) throws SQLException {
-        delegate.setTime(parameterIndex, x);
+        delegate.setTime(delegateParameterIndex(parameterIndex), x);
     }
 
     @Override
     public void setTimestamp(int parameterIndex, Timestamp x) throws SQLException {
-        delegate.setTimestamp(parameterIndex, x);
+        delegate.setTimestamp(delegateParameterIndex(parameterIndex), x);
     }
 
     @Override
     public void setAsciiStream(int parameterIndex, java.io.InputStream x, int length) throws SQLException {
-        delegate.setAsciiStream(parameterIndex, x, length);
+        delegate.setAsciiStream(delegateParameterIndex(parameterIndex), x, length);
     }
 
     @Override
     public void setUnicodeStream(int parameterIndex, java.io.InputStream x, int length) throws SQLException {
-        delegate.setUnicodeStream(parameterIndex, x, length);
+        delegate.setUnicodeStream(delegateParameterIndex(parameterIndex), x, length);
     }
 
     @Override
     public void setBinaryStream(int parameterIndex, java.io.InputStream x, int length) throws SQLException {
-        delegate.setBinaryStream(parameterIndex, x, length);
+        delegate.setBinaryStream(delegateParameterIndex(parameterIndex), x, length);
     }
 
     @Override
     public void clearParameters() throws SQLException {
         delegate.clearParameters();
         parameterValues.clear();
+        digestPlainParameterValues.clear();
     }
 
     @Override
     public void setObject(int parameterIndex, Object x, int targetSqlType) throws SQLException {
-        Object newValue = parameterEncryptor.encryptObject(parameterIndex, x);
-        delegate.setObject(parameterIndex, newValue, targetSqlType);
-        parameterValues.put(parameterIndex, newValue);
+        int physicalIndex = delegateParameterIndex(parameterIndex);
+        Object newValue = parameterEncryptor.encryptObject(physicalIndex, x);
+        delegate.setObject(physicalIndex, newValue, targetSqlType);
+        parameterValues.put(physicalIndex, newValue);
+        digestPlainParameterValues.put(physicalIndex, x);
     }
 
     @Override
     public void setObject(int parameterIndex, Object x) throws SQLException {
-        Object newValue = parameterEncryptor.encryptObject(parameterIndex, x);
-        delegate.setObject(parameterIndex, newValue);
-        parameterValues.put(parameterIndex, newValue);
+        int physicalIndex = delegateParameterIndex(parameterIndex);
+        Object newValue = parameterEncryptor.encryptObject(physicalIndex, x);
+        delegate.setObject(physicalIndex, newValue);
+        parameterValues.put(physicalIndex, newValue);
+        digestPlainParameterValues.put(physicalIndex, x);
     }
 
     /**
@@ -465,50 +546,54 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
     @Override
     public void addBatch() throws SQLException {
         log.debug("Adding prepared statement to batch");
+        applyDigestsBeforeExecute();
         delegate.addBatch();
         parameterValues.clear();
+        digestPlainParameterValues.clear();
     }
 
     @Override
     public void setCharacterStream(int parameterIndex, java.io.Reader reader, int length) throws SQLException {
+        int physicalIndex = delegateParameterIndex(parameterIndex);
         if (reader != null) {
-            String processed = parameterEncryptor.encryptReader(parameterIndex, reader, length);
-            if (applyEncryptedString(parameterIndex, processed,
-                    value -> delegate.setCharacterStream(parameterIndex, new java.io.StringReader(value), value.length()),
+            String processed = parameterEncryptor.encryptReader(physicalIndex, reader, length);
+            if (applyEncryptedString(physicalIndex, processed,
+                    value -> delegate.setCharacterStream(physicalIndex, new java.io.StringReader(value), value.length()),
                     "characterStream(length)")) {
                 return;
             }
         }
-        delegate.setCharacterStream(parameterIndex, reader, length);
+        delegate.setCharacterStream(physicalIndex, reader, length);
     }
 
     @Override
     public void setRef(int parameterIndex, Ref x) throws SQLException {
-        delegate.setRef(parameterIndex, x);
+        delegate.setRef(delegateParameterIndex(parameterIndex), x);
     }
 
     @Override
     public void setBlob(int parameterIndex, Blob x) throws SQLException {
-        delegate.setBlob(parameterIndex, x);
+        delegate.setBlob(delegateParameterIndex(parameterIndex), x);
     }
 
     @Override
     public void setClob(int parameterIndex, Clob x) throws SQLException {
+        int physicalIndex = delegateParameterIndex(parameterIndex);
         if (x != null) {
-            String processed = parameterEncryptor.encryptClob(parameterIndex, x);
-            if (applyEncryptedString(parameterIndex, processed,
-                    value -> delegate.setClob(parameterIndex, toClob(value)),
+            String processed = parameterEncryptor.encryptClob(physicalIndex, x);
+            if (applyEncryptedString(physicalIndex, processed,
+                    value -> delegate.setClob(physicalIndex, toClob(value)),
                     "clob")) {
                 return;
             }
-            cacheOriginalClobValue(parameterIndex, x);
+            cacheOriginalClobValue(physicalIndex, x);
         }
-        delegate.setClob(parameterIndex, x);
+        delegate.setClob(physicalIndex, x);
     }
 
     @Override
     public void setArray(int parameterIndex, Array x) throws SQLException {
-        delegate.setArray(parameterIndex, x);
+        delegate.setArray(delegateParameterIndex(parameterIndex), x);
     }
 
     @Override
@@ -518,27 +603,27 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     @Override
     public void setDate(int parameterIndex, Date x, java.util.Calendar cal) throws SQLException {
-        delegate.setDate(parameterIndex, x, cal);
+        delegate.setDate(delegateParameterIndex(parameterIndex), x, cal);
     }
 
     @Override
     public void setTime(int parameterIndex, Time x, java.util.Calendar cal) throws SQLException {
-        delegate.setTime(parameterIndex, x, cal);
+        delegate.setTime(delegateParameterIndex(parameterIndex), x, cal);
     }
 
     @Override
     public void setTimestamp(int parameterIndex, Timestamp x, java.util.Calendar cal) throws SQLException {
-        delegate.setTimestamp(parameterIndex, x, cal);
+        delegate.setTimestamp(delegateParameterIndex(parameterIndex), x, cal);
     }
 
     @Override
     public void setNull(int parameterIndex, int sqlType, String typeName) throws SQLException {
-        delegate.setNull(parameterIndex, sqlType, typeName);
+        delegate.setNull(delegateParameterIndex(parameterIndex), sqlType, typeName);
     }
 
     @Override
     public void setURL(int parameterIndex, java.net.URL x) throws SQLException {
-        delegate.setURL(parameterIndex, x);
+        delegate.setURL(delegateParameterIndex(parameterIndex), x);
     }
 
     @Override
@@ -548,171 +633,189 @@ public class SimpleInterceptorPreparedStatement implements PreparedStatement {
 
     @Override
     public void setRowId(int parameterIndex, RowId x) throws SQLException {
-        delegate.setRowId(parameterIndex, x);
+        delegate.setRowId(delegateParameterIndex(parameterIndex), x);
     }
 
     @Override
     public void setNString(int parameterIndex, String value) throws SQLException {
-        delegate.setNString(parameterIndex, value);
+        int physicalIndex = delegateParameterIndex(parameterIndex);
+        String newValue = parameterEncryptor.encryptString(physicalIndex, value);
+        if (newValue != null) {
+            parameterValues.put(physicalIndex, newValue);
+        }
+        digestPlainParameterValues.put(physicalIndex, value);
+        delegate.setNString(physicalIndex, newValue);
     }
 
     @Override
     public void setNCharacterStream(int parameterIndex, java.io.Reader value, long length) throws SQLException {
+        int physicalIndex = delegateParameterIndex(parameterIndex);
         if (value != null) {
-            String processed = parameterEncryptor.encryptReader(parameterIndex, value, length);
-            if (applyEncryptedString(parameterIndex, processed,
-                    str -> delegate.setNCharacterStream(parameterIndex, new java.io.StringReader(str), str.length()),
+            String processed = parameterEncryptor.encryptReader(physicalIndex, value, length);
+            if (applyEncryptedString(physicalIndex, processed,
+                    str -> delegate.setNCharacterStream(physicalIndex, new java.io.StringReader(str), str.length()),
                     "nCharacterStream(long)")) {
                 return;
             }
         }
-        delegate.setNCharacterStream(parameterIndex, value, length);
+        delegate.setNCharacterStream(physicalIndex, value, length);
     }
 
     @Override
     public void setNClob(int parameterIndex, NClob value) throws SQLException {
+        int physicalIndex = delegateParameterIndex(parameterIndex);
         if (value != null) {
-            String processed = parameterEncryptor.encryptNClob(parameterIndex, value);
-            if (applyEncryptedString(parameterIndex, processed,
-                    text -> delegate.setNClob(parameterIndex, toNClob(text)),
+            String processed = parameterEncryptor.encryptNClob(physicalIndex, value);
+            if (applyEncryptedString(physicalIndex, processed,
+                    text -> delegate.setNClob(physicalIndex, toNClob(text)),
                     "nClob")) {
                 return;
             }
-            cacheOriginalNClobValue(parameterIndex, value);
+            cacheOriginalNClobValue(physicalIndex, value);
         }
-        delegate.setNClob(parameterIndex, value);
+        delegate.setNClob(physicalIndex, value);
     }
 
     @Override
     public void setClob(int parameterIndex, java.io.Reader reader, long length) throws SQLException {
+        int physicalIndex = delegateParameterIndex(parameterIndex);
         if (reader != null) {
-            String processed = parameterEncryptor.encryptReader(parameterIndex, reader, length);
-            if (applyEncryptedString(parameterIndex, processed,
-                    value -> delegate.setClob(parameterIndex, toClob(value)),
+            String processed = parameterEncryptor.encryptReader(physicalIndex, reader, length);
+            if (applyEncryptedString(physicalIndex, processed,
+                    value -> delegate.setClob(physicalIndex, toClob(value)),
                     "clob(reader,long)")) {
                 return;
             }
         }
-        delegate.setClob(parameterIndex, reader, length);
+        delegate.setClob(physicalIndex, reader, length);
     }
 
     @Override
     public void setBlob(int parameterIndex, java.io.InputStream inputStream, long length) throws SQLException {
-        delegate.setBlob(parameterIndex, inputStream, length);
+        delegate.setBlob(delegateParameterIndex(parameterIndex), inputStream, length);
     }
 
     @Override
     public void setNClob(int parameterIndex, java.io.Reader reader, long length) throws SQLException {
+        int physicalIndex = delegateParameterIndex(parameterIndex);
         if (reader != null) {
-            String processed = parameterEncryptor.encryptReader(parameterIndex, reader, length);
-            if (applyEncryptedString(parameterIndex, processed,
-                    text -> delegate.setNClob(parameterIndex, toNClob(text)),
+            String processed = parameterEncryptor.encryptReader(physicalIndex, reader, length);
+            if (applyEncryptedString(physicalIndex, processed,
+                    text -> delegate.setNClob(physicalIndex, toNClob(text)),
                     "nClob(reader,long)")) {
                 return;
             }
         }
-        delegate.setNClob(parameterIndex, reader, length);
+        delegate.setNClob(physicalIndex, reader, length);
     }
 
     @Override
     public void setSQLXML(int parameterIndex, SQLXML xmlObject) throws SQLException {
-        delegate.setSQLXML(parameterIndex, xmlObject);
+        delegate.setSQLXML(delegateParameterIndex(parameterIndex), xmlObject);
     }
 
     @Override
     public void setObject(int parameterIndex, Object x, int targetSqlType, int scaleOrLength) throws SQLException {
-        delegate.setObject(parameterIndex, x, targetSqlType, scaleOrLength);
-        parameterValues.put(parameterIndex, x);
+        int physicalIndex = delegateParameterIndex(parameterIndex);
+        Object newValue = parameterEncryptor.encryptObject(physicalIndex, x);
+        delegate.setObject(physicalIndex, newValue, targetSqlType, scaleOrLength);
+        parameterValues.put(physicalIndex, newValue);
+        digestPlainParameterValues.put(physicalIndex, x);
     }
 
     @Override
     public void setAsciiStream(int parameterIndex, java.io.InputStream x, long length) throws SQLException {
-        delegate.setAsciiStream(parameterIndex, x, length);
+        delegate.setAsciiStream(delegateParameterIndex(parameterIndex), x, length);
     }
 
     @Override
     public void setBinaryStream(int parameterIndex, java.io.InputStream x, long length) throws SQLException {
-        delegate.setBinaryStream(parameterIndex, x, length);
+        delegate.setBinaryStream(delegateParameterIndex(parameterIndex), x, length);
     }
 
     @Override
     public void setCharacterStream(int parameterIndex, java.io.Reader reader, long length) throws SQLException {
+        int physicalIndex = delegateParameterIndex(parameterIndex);
         if (reader != null) {
-            String processed = parameterEncryptor.encryptReader(parameterIndex, reader, length);
-            if (applyEncryptedString(parameterIndex, processed,
-                    value -> delegate.setCharacterStream(parameterIndex, new java.io.StringReader(value), value.length()),
+            String processed = parameterEncryptor.encryptReader(physicalIndex, reader, length);
+            if (applyEncryptedString(physicalIndex, processed,
+                    value -> delegate.setCharacterStream(physicalIndex, new java.io.StringReader(value), value.length()),
                     "characterStream(long)")) {
                 return;
             }
         }
-        delegate.setCharacterStream(parameterIndex, reader, length);
+        delegate.setCharacterStream(physicalIndex, reader, length);
     }
 
     @Override
     public void setAsciiStream(int parameterIndex, java.io.InputStream x) throws SQLException {
-        delegate.setAsciiStream(parameterIndex, x);
+        delegate.setAsciiStream(delegateParameterIndex(parameterIndex), x);
     }
 
     @Override
     public void setBinaryStream(int parameterIndex, java.io.InputStream x) throws SQLException {
-        delegate.setBinaryStream(parameterIndex, x);
+        delegate.setBinaryStream(delegateParameterIndex(parameterIndex), x);
     }
 
     @Override
     public void setCharacterStream(int parameterIndex, java.io.Reader reader) throws SQLException {
+        int physicalIndex = delegateParameterIndex(parameterIndex);
         if (reader != null) {
-            String processed = parameterEncryptor.encryptReader(parameterIndex, reader, Long.MAX_VALUE);
-            if (applyEncryptedString(parameterIndex, processed,
-                    value -> delegate.setCharacterStream(parameterIndex, new java.io.StringReader(value)),
+            String processed = parameterEncryptor.encryptReader(physicalIndex, reader, Long.MAX_VALUE);
+            if (applyEncryptedString(physicalIndex, processed,
+                    value -> delegate.setCharacterStream(physicalIndex, new java.io.StringReader(value)),
                     "characterStream()")) {
                 return;
             }
         }
-        delegate.setCharacterStream(parameterIndex, reader);
+        delegate.setCharacterStream(physicalIndex, reader);
     }
 
     @Override
     public void setNCharacterStream(int parameterIndex, java.io.Reader value) throws SQLException {
+        int physicalIndex = delegateParameterIndex(parameterIndex);
         if (value != null) {
-            String processed = parameterEncryptor.encryptReader(parameterIndex, value, Long.MAX_VALUE);
-            if (applyEncryptedString(parameterIndex, processed,
-                    str -> delegate.setNCharacterStream(parameterIndex, new java.io.StringReader(str)),
+            String processed = parameterEncryptor.encryptReader(physicalIndex, value, Long.MAX_VALUE);
+            if (applyEncryptedString(physicalIndex, processed,
+                    str -> delegate.setNCharacterStream(physicalIndex, new java.io.StringReader(str)),
                     "nCharacterStream()")) {
                 return;
             }
         }
-        delegate.setNCharacterStream(parameterIndex, value);
+        delegate.setNCharacterStream(physicalIndex, value);
     }
 
     @Override
     public void setClob(int parameterIndex, java.io.Reader reader) throws SQLException {
+        int physicalIndex = delegateParameterIndex(parameterIndex);
         if (reader != null) {
-            String processed = parameterEncryptor.encryptReader(parameterIndex, reader, Long.MAX_VALUE);
-            if (applyEncryptedString(parameterIndex, processed,
-                    value -> delegate.setClob(parameterIndex, toClob(value)),
+            String processed = parameterEncryptor.encryptReader(physicalIndex, reader, Long.MAX_VALUE);
+            if (applyEncryptedString(physicalIndex, processed,
+                    value -> delegate.setClob(physicalIndex, toClob(value)),
                     "clob(reader)")) {
                 return;
             }
         }
-        delegate.setClob(parameterIndex, reader);
+        delegate.setClob(physicalIndex, reader);
     }
 
     @Override
     public void setBlob(int parameterIndex, java.io.InputStream inputStream) throws SQLException {
-        delegate.setBlob(parameterIndex, inputStream);
+        delegate.setBlob(delegateParameterIndex(parameterIndex), inputStream);
     }
 
     @Override
     public void setNClob(int parameterIndex, java.io.Reader reader) throws SQLException {
+        int physicalIndex = delegateParameterIndex(parameterIndex);
         if (reader != null) {
-            String processed = parameterEncryptor.encryptReader(parameterIndex, reader, Long.MAX_VALUE);
-            if (applyEncryptedString(parameterIndex, processed,
-                    text -> delegate.setNClob(parameterIndex, toNClob(text)),
+            String processed = parameterEncryptor.encryptReader(physicalIndex, reader, Long.MAX_VALUE);
+            if (applyEncryptedString(physicalIndex, processed,
+                    text -> delegate.setNClob(physicalIndex, toNClob(text)),
                     "nClob(reader)")) {
                 return;
             }
         }
-        delegate.setNClob(parameterIndex, reader);
+        delegate.setNClob(physicalIndex, reader);
     }
 
     /**

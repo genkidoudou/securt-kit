@@ -1,6 +1,10 @@
 package io.github.hexlodev.core.interceptor;
 
-import cn.hutool.core.util.StrUtil;
+import io.github.hexlodev.core.config.ConfigInitializer;
+import io.github.hexlodev.core.config.EncryptModeHolder;
+import io.github.hexlodev.core.digest.DigestRewriteResult;
+import io.github.hexlodev.core.digest.DigestWriteSupport;
+import io.github.hexlodev.core.parser.SqlParseCache;
 import lombok.extern.slf4j.Slf4j;
 
 import java.sql.*;
@@ -55,6 +59,38 @@ public class SimpleInterceptorConnection implements Connection {
      * 数据源标识（多数据源场景）
      */
     private final String datasourceId;
+
+    @FunctionalInterface
+    private interface PreparedStatementFactory {
+        PreparedStatement prepare(String sql) throws SQLException;
+    }
+
+    private PreparedStatement prepareIntercepted(
+            String sql, PreparedStatementFactory factory) throws SQLException {
+        String sqlToPrepare = sql;
+        DigestRewriteResult digestRewrite = null;
+        if (EncryptModeHolder.isJdbc() && !ConfigInitializer.shouldSkipByComment(sql)) {
+            try {
+                digestRewrite = DigestWriteSupport.rewriteForConfiguredDigests(
+                        sql, SqlParseCache.parseTableNames(sql), datasourceId);
+                if (digestRewrite != null && digestRewrite.isRewritten()) {
+                    sqlToPrepare = digestRewrite.getSql();
+                } else if (digestRewrite != null && digestRewrite.getWarnMessage() != null) {
+                    log.warn("Digest SQL was not rewritten: {}", digestRewrite.getWarnMessage());
+                }
+            } catch (RuntimeException e) {
+                log.warn("Failed to prepare digest SQL rewrite: {}", e.getMessage(), e);
+                throw e;
+            } catch (Exception e) {
+                throw new SQLException("Failed to parse SQL before digest rewrite", e);
+            }
+        }
+        PreparedStatement statement = factory.prepare(sqlToPrepare);
+        SimpleInterceptorPreparedStatement wrapped =
+                new SimpleInterceptorPreparedStatement(statement, sqlToPrepare, datasourceId);
+        wrapped.setDigestRewriteResult(digestRewrite);
+        return wrapped;
+    }
     
     /**
      * 构造函数（向后兼容）
@@ -132,13 +168,10 @@ public class SimpleInterceptorConnection implements Connection {
      */
     @Override
     public PreparedStatement prepareStatement(String sql) throws SQLException {
-        PreparedStatement statement = delegate.prepareStatement(sql);
         if (log.isDebugEnabled()) {
             log.debug("PreparedStatement created (datasource-id: {})", datasourceId);
         }
-        // 确保传递正确的 datasource-id
-        String dsId = StrUtil.isBlank(datasourceId) ? "default" : datasourceId;
-        return new SimpleInterceptorPreparedStatement(statement, sql, dsId);
+        return prepareIntercepted(sql, delegate::prepareStatement);
     }
     
     /**
@@ -257,13 +290,13 @@ public class SimpleInterceptorConnection implements Connection {
     
     @Override
     public PreparedStatement prepareStatement(String sql, int resultSetType, int resultSetConcurrency) throws SQLException {
-        PreparedStatement statement = delegate.prepareStatement(sql, resultSetType, resultSetConcurrency);
         if (log.isTraceEnabled()) {
             log.trace("PreparedStatement created with type={}, concurrency={} (datasource-id: {})",
                     resultSetType, resultSetConcurrency, datasourceId);
         }
-        String dsId = StrUtil.isBlank(datasourceId) ? "default" : datasourceId;
-        return new SimpleInterceptorPreparedStatement(statement, sql, dsId);
+        return prepareIntercepted(sql,
+                preparedSql -> delegate.prepareStatement(
+                        preparedSql, resultSetType, resultSetConcurrency));
     }
     
     @Override
@@ -328,13 +361,13 @@ public class SimpleInterceptorConnection implements Connection {
     
     @Override
     public PreparedStatement prepareStatement(String sql, int resultSetType, int resultSetConcurrency, int resultSetHoldability) throws SQLException {
-        PreparedStatement statement = delegate.prepareStatement(sql, resultSetType, resultSetConcurrency, resultSetHoldability);
         if (log.isTraceEnabled()) {
             log.trace("PreparedStatement created with type={}, concurrency={}, holdability={} (datasource-id: {})",
                     resultSetType, resultSetConcurrency, resultSetHoldability, datasourceId);
         }
-        String dsId = StrUtil.isBlank(datasourceId) ? "default" : datasourceId;
-        return new SimpleInterceptorPreparedStatement(statement, sql, dsId);
+        return prepareIntercepted(sql,
+                preparedSql -> delegate.prepareStatement(
+                        preparedSql, resultSetType, resultSetConcurrency, resultSetHoldability));
     }
     
     @Override
@@ -349,33 +382,30 @@ public class SimpleInterceptorConnection implements Connection {
     
     @Override
     public PreparedStatement prepareStatement(String sql, int autoGeneratedKeys) throws SQLException {
-        PreparedStatement statement = delegate.prepareStatement(sql, autoGeneratedKeys);
         if (log.isTraceEnabled()) {
             log.trace("PreparedStatement created with autoGeneratedKeys={} (datasource-id: {})",
                     autoGeneratedKeys, datasourceId);
         }
-        String dsId = StrUtil.isBlank(datasourceId) ? "default" : datasourceId;
-        return new SimpleInterceptorPreparedStatement(statement, sql, dsId);
+        return prepareIntercepted(sql,
+                preparedSql -> delegate.prepareStatement(preparedSql, autoGeneratedKeys));
     }
     
     @Override
     public PreparedStatement prepareStatement(String sql, int[] columnIndexes) throws SQLException {
-        PreparedStatement statement = delegate.prepareStatement(sql, columnIndexes);
         if (log.isTraceEnabled()) {
             log.trace("PreparedStatement created with columnIndexes (datasource-id: {})", datasourceId);
         }
-        String dsId = StrUtil.isBlank(datasourceId) ? "default" : datasourceId;
-        return new SimpleInterceptorPreparedStatement(statement, sql, dsId);
+        return prepareIntercepted(sql,
+                preparedSql -> delegate.prepareStatement(preparedSql, columnIndexes));
     }
     
     @Override
     public PreparedStatement prepareStatement(String sql, String[] columnNames) throws SQLException {
-        PreparedStatement statement = delegate.prepareStatement(sql, columnNames);
         if (log.isTraceEnabled()) {
             log.trace("PreparedStatement created with columnNames (datasource-id: {})", datasourceId);
         }
-        String dsId = StrUtil.isBlank(datasourceId) ? "default" : datasourceId;
-        return new SimpleInterceptorPreparedStatement(statement, sql, dsId);
+        return prepareIntercepted(sql,
+                preparedSql -> delegate.prepareStatement(preparedSql, columnNames));
     }
     
     // JDBC 4.0 methods
