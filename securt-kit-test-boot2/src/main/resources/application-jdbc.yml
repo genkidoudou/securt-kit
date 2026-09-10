@@ -1,0 +1,168 @@
+spring:
+  # 应用名称
+  application:
+    name: securt-kit-test
+  
+  # 数据源配置
+  datasource:
+#    driver-class-name: org.h2.Driver
+    driver-class-name: io.github.hexlodev.core.interceptor.SimpleInterceptorDriver
+    url: 'jdbc:interceptor:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=MySQL;INIT=CREATE SCHEMA IF NOT EXISTS TEST'
+    username: sa
+    password:
+    # H2 数据库配置
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  
+  # SQL 初始化配置
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+      data-locations: classpath:data.sql
+      continue-on-error: true
+
+# MyBatis 配置（手动配置，不使用自动配置）
+mybatis:
+  # MyBatis 配置文件路径（可选）
+  config-location: classpath:mybatis-config.xml
+  # Mapper XML 文件路径
+  mapper-locations: classpath:mapper/*.xml
+  # 实体类包路径
+  type-aliases-package: com.example.entity,io.github.test.entity
+  # 配置属性
+  configuration:
+    # 开启驼峰命名转换
+    map-underscore-to-camel-case: true
+    # 日志实现
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    # 缓存开关
+    cache-enabled: true
+    # 延迟加载开关
+    lazy-loading-enabled: false
+    # 积极加载开关
+    aggressive-lazy-loading: false
+    # 多个结果集开关
+    multiple-result-sets-enabled: true
+    # 使用列标签代替列名
+    use-column-label: true
+    # 允许JDBC生成主键
+    use-generated-keys: true
+    # 默认执行器类型
+    default-executor-type: reuse
+    # 默认语句超时时间
+    default-statement-timeout: 25
+    # 自动映射行为
+    auto-mapping-behavior: partial
+    # 自动映射未知列行为
+    auto-mapping-unknown-column-behavior: warning
+
+# MyBatis-Plus 配置
+mybatis-plus:
+  # Mapper XML 文件路径
+  mapper-locations: classpath:mapper/*.xml
+  # 实体类包路径
+  type-aliases-package: com.example.entity,io.github.test.entity
+  # 配置属性
+  configuration:
+    # 开启驼峰命名转换
+    map-underscore-to-camel-case: true
+    # 日志实现
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    # 缓存开关
+    cache-enabled: true
+  # 全局配置
+  global-config:
+    # 数据库类型
+    db-type: h2
+    # 是否开启 banner
+    banner: false
+    # 主键策略
+    id-type: auto
+    # 字段策略
+    field-strategy: not_null
+    # 逻辑删除字段名
+    logic-delete-field: deleted
+    # 逻辑删除值
+    logic-delete-value: 1
+    # 逻辑未删除值
+    logic-not-delete-value: 0
+
+# 日志配置
+logging:
+  level:
+    root: INFO
+    io.github.test: DEBUG
+    io.github.hexlodev.core: DEBUG
+    org.apache.ibatis: DEBUG
+    com.baomidou.mybatisplus: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# 服务器配置
+server:
+  port: 8080
+
+# 启动幂等补齐测试数据（ApplicationReadyEvent；晚于 CommandLineRunner）
+test-data:
+  seed:
+    enabled: true
+    target-rows: 10000
+    batch-size: 500
+
+# 加密测试
+securtkit:
+  encryptor:
+    mode: JDBC
+    digest-strategy: io.github.hexlodev.core.strategy.HmacSha256DigestStrategy
+    digest-hmac-key: boot2-digest-integration-secret
+    digest-partial-update: RELOAD
+    digest-verify-on-read: true
+    digest-failure-policy: SKIP
+    tables:
+      - table-name: user
+        fields:
+          - field-name: name
+          - field-name: phone
+      - table-name: digest_user
+        fields:
+          - field-name: name
+          - field-name: phone
+        digest:
+          - source-fields: [phone]
+            target-field: row_digest
+      - table-name: playground_person
+        fields:
+          - field-name: phone
+          - field-name: id_card
+        digest:
+          - source-fields: [phone, id_card]
+            target-field: row_digest
+      - table-name: orders
+        fields:
+          - field-name: customer_name
+          - field-name: customer_phone
+    enable: true
+    skip-comment:
+      enable: true
+      token: SECURT_SKIP
+  monitor:
+    enabled: true
+    username: admin
+    password: admin
+    path: /monitor
+    table-primary-keys:
+      user: id
+      digest_user: id
+      playground_person: id
+      orders: id
+  playground:
+    enabled: true
+    path: /playground
+    auth-enabled: false
+    allowed-tables: [user, digest_user, orders, playground_person]
+

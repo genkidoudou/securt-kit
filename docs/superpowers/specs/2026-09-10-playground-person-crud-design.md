@@ -1,6 +1,6 @@
 # Playground 人员表 CRUD 重设计
 
-> 状态：待用户审阅  
+> 状态：**已实现；双模式读写约定已被** [2026-09-10-playground-mp-scenarios-design.md](./2026-09-10-playground-mp-scenarios-design.md) **扩展（JDBC 显式加解密，不再要求仅 JDBC 模式）**  
 > 日期：2026-09-10  
 > 页面：`/playground/`  
 > 目的：用单表维护台演示敏感字段加密落库、列表解密，以及切换查看数据库原始密文。  
