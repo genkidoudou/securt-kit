@@ -131,6 +131,9 @@ uid           [ultimate] Your Name <you@example.com>
 
 把指纹或长 ID 存为 GitHub Secret **`GPG_KEY_ID`**（可选；多把钥匙时建议填，避免签错钥）。
 
+> 发布 workflow 已改为手动 `gpg --import` + Maven `-Dgpg.passphrase`，**短 KEYID（如 `82D47EE1B2C41DBD`）可以直接用作 `GPG_KEY_ID`**。  
+> 若改用 `crazy-max/ghaction-import-gpg`，`fingerprint` 必须填 **40 位完整指纹（无空格）**，填短 ID 会报 `ERR 67108933 Not implemented <GPG Agent>`。
+
 **3. 导出私钥全文 → `GPG_PRIVATE_KEY`**
 
 ```bash

@@ -127,11 +127,26 @@ jobs:
 
       - name: Import GPG key
         if: ${{ !inputs.dry_run }}
-        uses: crazy-max/ghaction-import-gpg@v6
-        with:
-          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
-          passphrase: ${{ secrets.GPG_PASSPHRASE }}
-          fingerprint: ${{ secrets.GPG_KEY_ID }}
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${GPG_PRIVATE_KEY:-}" ]]; then
+            echo "::error::缺少 GPG_PRIVATE_KEY Secret"
+            exit 1
+          fi
+
+          # 不用 crazy-max/import-gpg：短 KEYID 作 fingerprint 时会触发
+          # ERR 67108933 Not implemented <GPG Agent>
+          mkdir -p ~/.gnupg
+          chmod 700 ~/.gnupg
+          printf 'batch\npinentry-mode loopback\n' > ~/.gnupg/gpg.conf
+          printf 'allow-loopback-pinentry\n' > ~/.gnupg/gpg-agent.conf
+          gpgconf --kill gpg-agent || true
+
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          gpg --list-secret-keys --keyid-format LONG
 
       - name: Set release version in POMs
         run: |
@@ -146,14 +161,12 @@ jobs:
         env:
           CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
           CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          GPG_KEY_ID: ${{ secrets.GPG_KEY_ID }}
         run: |
           set -euo pipefail
           if [[ -z "${CENTRAL_USERNAME:-}" || -z "${CENTRAL_PASSWORD:-}" ]]; then
             echo "::error::缺少 CENTRAL_USERNAME / CENTRAL_PASSWORD Secrets"
-            exit 1
-          fi
-          if [[ -z "${{ secrets.GPG_PRIVATE_KEY }}" ]]; then
-            echo "::error::缺少 GPG_PRIVATE_KEY Secret"
             exit 1
           fi
 
@@ -162,11 +175,19 @@ jobs:
           if [[ "${AUTO}" == "true" ]]; then
             WAIT="published"
           fi
+
+          GPG_ARGS=(-Dgpg.passphrase="${GPG_PASSPHRASE}")
+          # 可选：指定签名钥（短/长 KEYID 或指纹均可）
+          if [[ -n "${GPG_KEY_ID:-}" ]]; then
+            GPG_ARGS+=(-Dgpg.keyname="${GPG_KEY_ID}")
+          fi
+
           # 发布库模块（含 Boot3 starter）；test/playground 已 maven.deploy.skip
           mvn -B -Prelease \
             -Dcentral.autoPublish="${AUTO}" \
             -Dcentral.waitUntil="${WAIT}" \
             -DskipTests \
+            "${GPG_ARGS[@]}" \
             clean deploy \
             -pl securt-kit-core,securt-kit-monitor,securt-kit-mybatis,securt-kit-starter-boot2,securt-kit-starter-boot3 \
             -am
