@@ -1,0 +1,60 @@
+name: Sync GitHub Wiki
+
+# 将仓库 doc/*.md 同步到 GitHub Wiki（不含 docs/ 设计文档）
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - "doc/**"
+      - ".github/workflows/sync-wiki.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync-wiki:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Publish doc/ to wiki
+        env:
+          # 默认 GITHUB_TOKEN 通常无法推 wiki；请在仓库 Secrets 配置 WIKI_TOKEN
+          # （classic PAT：勾选 repo；或 fine-grained：Contents 对本仓读写，并确保已开启 Wiki）
+          GH_TOKEN: ${{ secrets.WIKI_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::缺少 secrets.WIKI_TOKEN。请创建有 wiki 写权限的 PAT 并加入仓库 Secrets。"
+            exit 1
+          fi
+
+          # 首次使用前请在 GitHub 仓库 Settings → Wikis 启用 Wiki（会生成空 Home）
+          WIKI_DIR="${RUNNER_TEMP}/securt-kit-wiki"
+          rm -rf "${WIKI_DIR}"
+          git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.wiki.git" "${WIKI_DIR}"
+
+          # 同步白名单：仅这些用户手册进入 Wiki
+          for f in Home.md Quick-Start.md Usage.md Monitor.md Playground.md Multi-Datasource.md FAQ.md _Sidebar.md; do
+            if [ ! -f "doc/${f}" ]; then
+              echo "::error::缺少 doc/${f}"
+              exit 1
+            fi
+            cp "doc/${f}" "${WIKI_DIR}/${f}"
+          done
+
+          cd "${WIKI_DIR}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Wiki 无变更，跳过推送。"
+            exit 0
+          fi
+          git commit -m "docs: sync from doc/ (${GITHUB_SHA:-manual})"
+          git push
