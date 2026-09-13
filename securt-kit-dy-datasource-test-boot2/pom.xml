@@ -6,7 +6,7 @@
     <parent>
         <groupId>io.github.genkidoudou</groupId>
         <artifactId>securt-kit</artifactId>
-        <version>1.0.0</version>
+        <version>1.0.1-SNAPSHOT</version>
     </parent>
 
     <groupId>io.github.genkidoudou.dysouce</groupId>
@@ -26,13 +26,13 @@
         <dependency>
             <groupId>io.github.genkidoudou</groupId>
             <artifactId>securt-kit-starter-boot2</artifactId>
-            <version>1.0.0</version>
+            <version>1.0.1-SNAPSHOT</version>
         </dependency>
         <!-- 仅测试工程使用的演示页（不进入 starter） -->
         <dependency>
             <groupId>io.github.genkidoudou</groupId>
             <artifactId>securt-kit-playground</artifactId>
-            <version>1.0.0</version>
+            <version>1.0.1-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
