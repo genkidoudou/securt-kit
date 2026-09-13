@@ -5,11 +5,11 @@
     <parent>
         <groupId>io.github.genkidoudou</groupId>
         <artifactId>securt-kit</artifactId>
-        <version>1.0-SNAPSHOT</version>
+        <version>1.0.0</version>
     </parent>
     <groupId>io.github.genkidoudou.core</groupId>
     <artifactId>securt-kit-test-boot2</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>1.0.0</version>
     <name>securt-kit-test-boot2</name>
     <description>securt-kit-test for Spring Boot 2.7.x</description>
     <properties>
@@ -25,21 +25,21 @@
         <dependency>
             <groupId>io.github.genkidoudou</groupId>
             <artifactId>securt-kit-starter-boot2</artifactId>
-            <version>1.0-SNAPSHOT</version>
+            <version>1.0.0</version>
         </dependency>
 
         <!-- 仅测试工程使用的演示页（不进入 starter） -->
         <dependency>
             <groupId>io.github.genkidoudou</groupId>
             <artifactId>securt-kit-playground</artifactId>
-            <version>1.0-SNAPSHOT</version>
+            <version>1.0.0</version>
         </dependency>
 
         <!-- MYBATIS 通道：mode=MYBATIS / QueryWrapper 集成测试需要 -->
         <dependency>
             <groupId>io.github.genkidoudou</groupId>
             <artifactId>securt-kit-mybatis</artifactId>
-            <version>1.0-SNAPSHOT</version>
+            <version>1.0.0</version>
         </dependency>
 
         <dependency>
