@@ -2,14 +2,9 @@ spring:
   # 应用名称
   application:
     name: securt-kit-test
-  
+
   # 数据源配置
   datasource:
-#    driver-class-name: org.h2.Driver
-    driver-class-name: io.github.hexlodev.core.interceptor.SimpleInterceptorDriver
-    url: 'jdbc:interceptor:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=MySQL;INIT=CREATE SCHEMA IF NOT EXISTS TEST'
-    username: sa
-    password:
     # H2 数据库配置
     hikari:
       maximum-pool-size: 10
@@ -25,6 +20,8 @@ spring:
       schema-locations: classpath:schema.sql
       data-locations: classpath:data.sql
       continue-on-error: true
+  profiles:
+    active: mybatis
 
 # MyBatis 配置（手动配置，不使用自动配置）
 mybatis:
@@ -97,7 +94,7 @@ logging:
   level:
     root: INFO
     io.github.test: DEBUG
-    io.github.hexlodev.core: DEBUG
+    io.github.genkidoudou.core: DEBUG
     org.apache.ibatis: DEBUG
     com.baomidou.mybatisplus: DEBUG
   pattern:
@@ -107,16 +104,22 @@ logging:
 server:
   port: 8080
 
+# 启动幂等补齐测试数据（ApplicationReadyEvent；晚于 CommandLineRunner）
+test-data:
+  seed:
+    enabled: true
+    target-rows: 10000
+    batch-size: 500
 
 # 加密测试
 securtkit:
   encryptor:
     mode: JDBC
-    digest-strategy: io.github.hexlodev.core.strategy.HmacSha256DigestStrategy
+    digest-strategy: io.github.genkidoudou.core.strategy.HmacSha256DigestStrategy
     digest-hmac-key: boot2-digest-integration-secret
     digest-partial-update: RELOAD
     digest-verify-on-read: true
-    digest-failure-policy: FAIL_FAST
+    digest-failure-policy: SKIP
     tables:
       - table-name: user
         fields:
@@ -129,14 +132,34 @@ securtkit:
         digest:
           - source-fields: [phone]
             target-field: row_digest
+      - table-name: playground_person
+        fields:
+          - field-name: phone
+          - field-name: id_card
+        digest:
+          - source-fields: [phone, id_card]
+            target-field: row_digest
       - table-name: orders
         fields:
           - field-name: customer_name
           - field-name: customer_phone
     enable: true
+    skip-comment:
+      enable: true
+      token: SECURT_SKIP
   monitor:
     enabled: true
     username: admin
     password: admin
     path: /monitor
+    table-primary-keys:
+      user: id
+      digest_user: id
+      playground_person: id
+      orders: id
+  playground:
+    enabled: true
+    path: /playground
+    auth-enabled: false
+    allowed-tables: [user, digest_user, orders, playground_person]
 

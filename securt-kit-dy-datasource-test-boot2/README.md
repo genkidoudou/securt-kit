@@ -47,6 +47,15 @@ mvn spring-boot:run
 
 `http://localhost:8081/monitor/index.html`
 
+### 3.1 访问 Playground 演示页
+
+`http://localhost:8081/playground/`
+
+默认页面是 `playground_person` 人员维护台：业务/原始双视图 + CRUD。顶栏可切换 primary / secondary / third；切换后会重新执行前置检查并刷新列表。各数据源均初始化独立的 `playground_person` 表和一致的 `phone+id_card -> row_digest` 规则。
+
+配置项：`securtkit.playground.enabled=true`。  
+Playground 仅测试工程依赖，不随 starter 发布。
+
 ## 多数据源配置
 
 ### 数据源配置
@@ -58,13 +67,13 @@ spring:
       primary: primary
       datasource:
         primary:
-          driver-class-name: io.github.hexlodev.core.interceptor.SimpleInterceptorDriver
+          driver-class-name: io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver
           url: jdbc:interceptor:h2:mem:primary_db;datasource-id=primary
         secondary:
-          driver-class-name: io.github.hexlodev.core.interceptor.SimpleInterceptorDriver
+          driver-class-name: io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver
           url: jdbc:interceptor:h2:mem:secondary_db;datasource-id=secondary
         third:
-          driver-class-name: io.github.hexlodev.core.interceptor.SimpleInterceptorDriver
+          driver-class-name: io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver
           url: jdbc:interceptor:h2:mem:third_db;datasource-id=third
 ```
 

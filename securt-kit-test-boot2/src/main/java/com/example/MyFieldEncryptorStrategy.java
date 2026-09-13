@@ -1,7 +1,7 @@
 package com.example;
 
 import org.springframework.stereotype.Component;
-import  io.github.hexlodev.core.strategy.FieldEncryptorStrategy;
+import  io.github.genkidoudou.core.strategy.FieldEncryptorStrategy;
 @Component
 public class MyFieldEncryptorStrategy implements FieldEncryptorStrategy {
 

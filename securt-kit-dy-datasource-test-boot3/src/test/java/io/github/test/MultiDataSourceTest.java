@@ -1,8 +1,8 @@
 package io.github.test;
 
 import com.zaxxer.hikari.HikariDataSource;
-import io.github.hexlodev.core.TableCache;
-import io.github.hexlodev.core.config.FieldEncryptorProperties;
+import io.github.genkidoudou.core.TableCache;
+import io.github.genkidoudou.core.config.FieldEncryptorProperties;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -43,7 +43,7 @@ public class MultiDataSourceTest {
     @BeforeAll
     void setUp() throws ClassNotFoundException {
         // 加载拦截器驱动
-        Class.forName("io.github.hexlodev.core.interceptor.SimpleInterceptorDriver");
+        Class.forName("io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver");
 
         // 初始化多数据源加密配置（新配置方式：在 tables 中直接指定 datasource-id）
         FieldEncryptorProperties props = new FieldEncryptorProperties();
@@ -90,7 +90,7 @@ public class MultiDataSourceTest {
      */
     private DataSource createDataSource(String datasourceId, String baseUrl) {
         HikariDataSource dataSource = new HikariDataSource();
-        dataSource.setDriverClassName("io.github.hexlodev.core.interceptor.SimpleInterceptorDriver");
+        dataSource.setDriverClassName("io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver");
         // URL 中不再包含 datasource-id 参数，保持 URL 干净
         dataSource.setJdbcUrl(baseUrl);
         dataSource.setUsername("sa");
@@ -324,9 +324,9 @@ public class MultiDataSourceTest {
             assertFalse(conn.isClosed(), "连接不应该是关闭状态");
             
             // 验证连接是包装的连接，并且包含数据源标识
-            if (conn instanceof io.github.hexlodev.core.interceptor.SimpleInterceptorConnection) {
-                io.github.hexlodev.core.interceptor.SimpleInterceptorConnection interceptorConn = 
-                    (io.github.hexlodev.core.interceptor.SimpleInterceptorConnection) conn;
+            if (conn instanceof io.github.genkidoudou.core.interceptor.SimpleInterceptorConnection) {
+                io.github.genkidoudou.core.interceptor.SimpleInterceptorConnection interceptorConn = 
+                    (io.github.genkidoudou.core.interceptor.SimpleInterceptorConnection) conn;
                 assertEquals("test-ds", interceptorConn.getDatasourceId(), 
                     "数据源标识应该正确提取");
             }

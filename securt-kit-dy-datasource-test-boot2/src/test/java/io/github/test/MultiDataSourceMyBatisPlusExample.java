@@ -29,7 +29,7 @@ import org.springframework.context.annotation.ComponentScan;
 @SpringBootApplication(exclude = {DataSourceAutoConfiguration.class})
 @ComponentScan(basePackages = {
     "io.github.test",
-    "io.github.hexlodev",
+    "io.github.genkidoudou",
     "com.baomidou.dynamic.datasource"
 })
 public class MultiDataSourceMyBatisPlusExample implements CommandLineRunner {

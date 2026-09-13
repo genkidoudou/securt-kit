@@ -1,6 +1,6 @@
 # SELECT 函数包裹加密列结果解密设计
 
-> 状态：已确认（待实现）  
+> 状态：已实现  
 > 版本：v1.0  
 > 日期：2026-09-10  
 > 目的：使 `IFNULL(col,'x')` / `TRIM(col)` / `CAST(col AS …)` 等 SELECT 投影在 JDBC、MYBATIS、Monitor 下能按源加密字段解密返回值。  

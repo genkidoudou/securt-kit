@@ -1,6 +1,6 @@
 package io.github.test;
 
-import io.github.hexlodev.core.strategy.FieldEncryptorStrategy;
+import io.github.genkidoudou.core.strategy.FieldEncryptorStrategy;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 

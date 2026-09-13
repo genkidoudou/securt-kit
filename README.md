@@ -16,6 +16,7 @@
 - [监控界面](#监控界面)
 - [常见问题](#常见问题)
 - [贡献指南](#贡献指南)
+- [文档](#文档)
 
 ---
 
@@ -76,7 +77,7 @@
 **Spring Boot 2.7.x 项目**：
 ```xml
 <dependency>
-    <groupId>io.github.hexlodev</groupId>
+    <groupId>io.github.genkidoudou</groupId>
     <artifactId>securt-kit-starter-boot2</artifactId>
     <version>1.0-SNAPSHOT</version>
 </dependency>
@@ -85,7 +86,7 @@
 **Spring Boot 3.x 项目**：
 ```xml
 <dependency>
-    <groupId>io.github.hexlodev</groupId>
+    <groupId>io.github.genkidoudou</groupId>
     <artifactId>securt-kit-starter-boot3</artifactId>
     <version>1.0-SNAPSHOT</version>
 </dependency>
@@ -98,7 +99,7 @@
 ```yaml
 spring:
   datasource:
-    driver-class-name: io.github.hexlodev.core.interceptor.SimpleInterceptorDriver
+    driver-class-name: io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver
     url: jdbc:interceptor:mysql://localhost:3306/testdb
     username: root
     password: password
@@ -166,8 +167,10 @@ public User getUserById(Long id) {
 ```
 securt-kit/
 ├── securt-kit-core/                    # 核心模块（版本无关）
-├── securt-kit-starter-boot2/          # Spring Boot 2.7 启动器
-├── securt-kit-starter-boot3/          # Spring Boot 3.x 启动器
+├── securt-kit-monitor/                # 监控 UI 共享模块（Druid 风格，无 Servlet 依赖）
+├── securt-kit-mybatis/                # MyBatis 拦截通道（mode=MYBATIS）
+├── securt-kit-starter-boot2/          # Spring Boot 2.7 启动器（薄 Servlet 适配）
+├── securt-kit-starter-boot3/          # Spring Boot 3.x 启动器（薄 Servlet 适配）
 ├── securt-kit-test-boot2/             # Boot 2.7 测试项目
 ├── securt-kit-test-boot3/             # Boot 3.x 测试项目
 ├── securt-kit-dy-datasource-test-boot2/  # Boot 2.7 多数据源测试
@@ -196,6 +199,8 @@ securt-kit/
 - 自动配置 `FieldEncryptorProperties`
 - 自动初始化 `TableCache`
 - 内置监控 UI（加密解密测试、SQL 解析、配置查看）
+
+监控 UI 采用 Druid 同款思路：业务与静态资源在 `securt-kit-monitor`，各 Starter 仅注册对应 Servlet 适配层。详见 [监控 UI Servlet 改造](docs/MONITOR-SERVLET.md)。
 
 **监控 UI 访问地址**：`http://localhost:8080/monitor/index.html`
 
@@ -322,23 +327,40 @@ securtkit:
 
 ---
 
-## 🖥️ 监控界面
+## 🖥️ 监控界面（Monitor）
 
-启动应用后，访问 `http://localhost:8080/monitor/index.html` 使用监控界面。
+启动应用并启用 Monitor 后，访问 `http://localhost:8080/monitor/`（路径可配）。
 
-### 功能特性
+完整说明见：**[doc/Monitor.md](doc/Monitor.md)** · Wiki：[Monitor](https://github.com/genkidoudou/securt-kit/wiki/Monitor)
 
-1. **加密解密测试**：在线测试字段加密和解密功能
-2. **SQL 解析**：解析 SQL 语句，展示表名和字段信息
-3. **SQL 查询**：在线执行 SELECT 查询（仅支持 SELECT）
-4. **配置信息**：查看当前加密配置
-5. **数据初始化**：批量加密/解密数据库表数据
+### 功能概览
+
+| 能力 | 说明 |
+|------|------|
+| **工作台** | 默认首页：模式 / 表数量 / 数据源摘要与快捷入口 |
+| **加密解密** | 单值加密、解密、签名、验签 |
+| **验签** | 按表 + 主键读行、算摘要、比对（JDBC / MYBATIS 均可） |
+| **刷数作业** | 历史数据批量加解密 / 摘要回填（**先预览再回写**） |
+| **SQL** | 查询明密文双视图；SQL 解析；参数加密（只生成不执行） |
+| **配置信息** | 运行时生效的表字段、策略与 Digest |
+| **项目文档** | 页内离线精简接入指南 + 各页「使用说明」弹窗 |
 
 ### 安全说明
 
-- ⚠️ 监控页面默认启用登录认证
-- ⚠️ 建议通过内网访问或配置反向代理
-- ⚠️ SQL 查询功能仅支持 SELECT 语句
+- ⚠️ 生产请启用认证并更换默认口令
+- ⚠️ 建议内网或反向代理访问
+- ⚠️ SQL 查询仅支持 SELECT；刷数会改库，务必备份
+
+### 配置示例
+
+```yaml
+securtkit:
+  monitor:
+    enabled: true
+    username: admin
+    password: admin
+    path: /monitor
+```
 
 ---
 
@@ -385,20 +407,40 @@ securtkit:
 
 ## 📚 文档
 
-- [文档索引](docs/INDEX.md) - 所有文档的索引
-- [快速开始](docs/QUICK-START.md) - 5 分钟快速集成指南
-- [使用指南](docs/USAGE.md) - 详细使用说明
-- [多数据源配置](docs/MULTI-DATASOURCE.md) - 多数据源场景配置
-- [Core 模块文档](securt-kit-core/README.md) - 核心模块说明
-- [Core 使用文档](securt-kit-core/USAGE.md) - Core 模块使用说明
+### 用户手册（`doc/`，同步 GitHub Wiki）
+
+- [手册首页](doc/Home.md)
+- [快速开始](doc/Quick-Start.md)
+- [使用指南](doc/Usage.md)
+- [Monitor 使用说明](doc/Monitor.md)
+- [Playground](doc/Playground.md)
+- [多数据源](doc/Multi-Datasource.md)
+- [常见问题](doc/FAQ.md)
+- [Wiki 同步说明](doc/README.md)
+
+在线 Wiki：https://github.com/genkidoudou/securt-kit/wiki
+
+### 仓库内其它文档
+
+- [文档索引](docs/INDEX.md) - 设计稿 / OpenSpec / 模块说明索引
+- [快速开始（docs）](docs/QUICK-START.md)
+- [使用指南（docs）](docs/USAGE.md)
+- [多数据源配置（docs）](docs/MULTI-DATASOURCE.md)
+- [Playground 手册（docs）](docs/PLAYGROUND.md)
+- [MyBatis / JDBC 双模式融合设计](docs/MYBATIS-MODE-DESIGN.md)
+- [监控 UI Servlet 改造](docs/MONITOR-SERVLET.md)
+- [Core 模块文档](securt-kit-core/README.md)
+- [Core 使用文档](securt-kit-core/USAGE.md)
 
 ## 🔗 相关链接
 
-- **项目主页**: https://github.com/hexlodev/securt-kit
-- **问题反馈**: https://github.com/hexlodev/securt-kit/issues
+- **项目主页**: https://github.com/genkidoudou/securt-kit
+- **Wiki**: https://github.com/genkidoudou/securt-kit/wiki
+- **问题反馈**: https://github.com/genkidoudou/securt-kit/issues
+- **Maven Central 发布**: [docs/MAVEN-CENTRAL-PUBLISHING.md](docs/MAVEN-CENTRAL-PUBLISHING.md)
 
 ---
 
-**最后更新**: 2025-11-09  
+**最后更新**: 2026-09-13  
 **项目版本**: v1.0-SNAPSHOT
 

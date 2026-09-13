@@ -1,7 +1,7 @@
 package io.github.test;
 
-import io.github.hexlodev.core.config.ConfigInitializer;
-import io.github.hexlodev.core.config.FieldEncryptorProperties;
+import io.github.genkidoudou.core.config.ConfigInitializer;
+import io.github.genkidoudou.core.config.FieldEncryptorProperties;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 

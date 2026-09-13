@@ -4,15 +4,54 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>io.github.hexlodev</groupId>
+    <groupId>io.github.genkidoudou</groupId>
     <artifactId>securt-kit</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
+
+    <name>Securt-Kit</name>
+    <description>
+        Field-level encryption toolkit for JDBC / MyBatis (Spring Boot 2.7 and 3.x).
+        Transparent encrypt/decrypt, LIKE handling, and optional field digest integrity.
+    </description>
+    <url>https://github.com/genkidoudou/securt-kit</url>
+    <inceptionYear>2024</inceptionYear>
+
+    <licenses>
+        <license>
+            <name>The Apache Software License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>genkidoudou</id>
+            <name>genkidoudou</name>
+            <url>https://github.com/genkidoudou</url>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:https://github.com/genkidoudou/securt-kit.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/genkidoudou/securt-kit.git</developerConnection>
+        <url>https://github.com/genkidoudou/securt-kit</url>
+        <tag>HEAD</tag>
+    </scm>
+
+    <issueManagement>
+        <system>GitHub</system>
+        <url>https://github.com/genkidoudou/securt-kit/issues</url>
+    </issueManagement>
+
     <!-- 默认只包含 Boot 2.7 模块（Java 8 环境） -->
     <!-- Boot 3 模块需要使用 -pl 参数单独构建（需要 Java 17+） -->
-    <!-- 注意：IDEA 可能无法识别未在 <modules> 中的模块，但这是 Maven 最可靠的模块排除方式 -->
     <modules>
         <module>securt-kit-core</module>
+        <module>securt-kit-monitor</module>
+        <module>securt-kit-playground</module>
+        <module>securt-kit-mybatis</module>
         <module>securt-kit-starter-boot2</module>
         <module>securt-kit-test-boot2</module>
         <module>securt-kit-dy-datasource-test-boot2</module>
@@ -38,8 +77,8 @@
         <jakarta-validation.version>3.0.2</jakarta-validation.version>
         <javax-servlet.version>4.0.1</javax-servlet.version>
         <jakarta-servlet.version>6.0.0</jakarta-servlet.version>
-        <!-- 这些属性已不再使用，保留用于向后兼容 -->
-        <!-- 现在使用 <modules> 列表来控制哪些模块被构建 -->
+        <central-publishing-maven-plugin.version>0.10.0</central-publishing-maven-plugin.version>
+        <gpg.skip>true</gpg.skip>
     </properties>
 
     <profiles>
@@ -60,8 +99,12 @@
 
             <modules>
                 <module>securt-kit-core</module>
+                <module>securt-kit-monitor</module>
+                <module>securt-kit-playground</module>
+                <module>securt-kit-mybatis</module>
                 <module>securt-kit-starter-boot2</module>
                 <module>securt-kit-test-boot2</module>
+                <module>securt-kit-dy-datasource-test-boot2</module>
             </modules>
         </profile>
 
@@ -75,6 +118,86 @@
                 <!-- 跳过所有测试 -->
                 <maven.test.skip>true</maven.test.skip>
             </properties>
+        </profile>
+
+        <!--
+          Maven Central（Central Publisher Portal）发布。
+          用法：mvn -Prelease clean deploy
+          凭据：~/.m2/settings.xml 中 server id = central（Portal User Token）
+          GPG：本机已配置 gpg 且可非交互签名（或设置 gpg.passphrase）
+        -->
+        <profile>
+            <id>release</id>
+            <properties>
+                <gpg.skip>false</gpg.skip>
+                <maven.test.skip>true</maven.test.skip>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>${central-publishing-maven-plugin.version}</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <publishingServerId>central</publishingServerId>
+                            <!-- 首次建议 false：Portal 校验通过后再手动 Publish -->
+                            <autoPublish>false</autoPublish>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <version>3.3.1</version>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <goals>
+                                    <goal>jar-no-fork</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <version>3.11.2</version>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                                <configuration>
+                                    <failOnError>false</failOnError>
+                                    <doclint>none</doclint>
+                                    <quiet>true</quiet>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>3.2.7</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <gpgArguments>
+                                <arg>--pinentry-mode</arg>
+                                <arg>loopback</arg>
+                            </gpgArguments>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
     </profiles>
 

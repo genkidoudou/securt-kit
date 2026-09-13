@@ -5,24 +5,50 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.github.hexlodev</groupId>
+        <groupId>io.github.genkidoudou</groupId>
         <artifactId>securt-kit</artifactId>
         <version>1.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>securt-kit-starter-boot3</artifactId>
 
+    <name>securt-kit-starter-boot3</name>
+    <description>Spring Boot 3.x starter for Securt-Kit (auto-config + monitor servlet).</description>
+
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- 单独构建本模块时也使用 Boot 3 BOM，避免继承父 POM 默认的 Boot 2.7 -->
+        <spring-boot.version>${spring-boot-3.version}</spring-boot.version>
     </properties>
 
     <dependencies>
         <dependency>
-            <groupId>io.github.hexlodev.core</groupId>
+            <groupId>io.github.genkidoudou.core</groupId>
             <artifactId>securt-kit-core</artifactId>
             <version>${project.version}</version>
+        </dependency>
+
+        <!-- 共享监控 UI 内核（无 Servlet 依赖） -->
+        <dependency>
+            <groupId>io.github.genkidoudou</groupId>
+            <artifactId>securt-kit-monitor</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- MyBatis 通道（mode=MYBATIS 时使用） -->
+        <dependency>
+            <groupId>io.github.genkidoudou</groupId>
+            <artifactId>securt-kit-mybatis</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.mybatis</groupId>
+            <artifactId>mybatis</artifactId>
+            <version>3.5.13</version>
+            <scope>provided</scope>
         </dependency>
 
         <dependency>
@@ -49,14 +75,7 @@
             <scope>provided</scope>
         </dependency>
 
-        <!-- jakarta validation (for Boot 3.x) -->
-        <dependency>
-            <groupId>jakarta.validation</groupId>
-            <artifactId>jakarta.validation-api</artifactId>
-            <scope>provided</scope>
-        </dependency>
-
-        <!-- jakarta servlet (for Boot 3.x) -->
+        <!-- jakarta servlet (for Boot 3.x) - 仅薄 Servlet 适配层使用 -->
         <dependency>
             <groupId>jakarta.servlet</groupId>
             <artifactId>jakarta.servlet-api</artifactId>

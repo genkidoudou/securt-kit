@@ -4,13 +4,18 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <groupId>io.github.hexlodev</groupId>
+        <groupId>io.github.genkidoudou</groupId>
         <artifactId>securt-kit</artifactId>
         <version>1.0-SNAPSHOT</version>
     </parent>
 
-    <groupId>io.github.hexlodev.core</groupId>
+    <groupId>io.github.genkidoudou.core</groupId>
     <artifactId>securt-kit-core</artifactId>
+
+    <name>securt-kit-core</name>
+    <description>
+        Securt-Kit core: JDBC interceptor, SQL parse, field crypto and digest integrity.
+    </description>
 
     <properties>
         <maven.compiler.source>8</maven.compiler.source>
@@ -58,6 +63,12 @@
             <version>5.10.2</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>4.11.0</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -93,12 +104,12 @@
                                 <!-- 将 jsqlparser 的 net.sf.jsqlparser 包重命名 -->
                                 <relocation>
                                     <pattern>net.sf.jsqlparser</pattern>
-                                    <shadedPattern>io.github.hexlodev.shaded.jsqlparser</shadedPattern>
+                                    <shadedPattern>io.github.genkidoudou.shaded.jsqlparser</shadedPattern>
                                 </relocation>
                                 <!-- 将 jsqlparser 的 com.github.jsqlparser 包重命名 -->
                                 <relocation>
                                     <pattern>com.github.jsqlparser</pattern>
-                                    <shadedPattern>io.github.hexlodev.shaded.jsqlparser</shadedPattern>
+                                    <shadedPattern>io.github.genkidoudou.shaded.jsqlparser</shadedPattern>
                                 </relocation>
                             </relocations>
                             <filters>

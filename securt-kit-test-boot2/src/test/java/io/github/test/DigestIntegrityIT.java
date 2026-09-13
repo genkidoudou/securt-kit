@@ -1,7 +1,7 @@
 package io.github.test;
 
-import io.github.hexlodev.core.exception.DigestMismatchException;
-import io.github.hexlodev.core.strategy.HmacSha256DigestStrategy;
+import io.github.genkidoudou.core.exception.DigestMismatchException;
+import io.github.genkidoudou.core.strategy.HmacSha256DigestStrategy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

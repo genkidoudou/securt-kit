@@ -7,7 +7,7 @@
     <environment id="test">
       <transactionManager type="JDBC"/>
       <dataSource type="UNPOOLED">
-        <property name="driver" value="io.github.hexlodev.core.interceptor.SimpleInterceptorDriver"/>
+        <property name="driver" value="io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver"/>
         <property name="url" value="jdbc:interceptor:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=MySQL"/>
         <property name="username" value="sa"/>
         <property name="password" value=""/>

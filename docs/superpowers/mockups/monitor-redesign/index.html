@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Monitor 重设计 · 三种方案对比</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,500;0,9..40,700;1,9..40,500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0f1c1a;
+      --panel: #162824;
+      --line: #2a433d;
+      --text: #e7f2ee;
+      --muted: #8aa89e;
+      --accent: #3ecf8e;
+      --warn: #e8b84a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "IBM Plex Sans", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(900px 420px at 10% -10%, #1d4a3c 0%, transparent 55%),
+        radial-gradient(700px 360px at 100% 0%, #243a52 0%, transparent 50%),
+        var(--bg);
+    }
+    main {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 48px 24px 72px;
+    }
+    h1 {
+      font-family: "DM Sans", sans-serif;
+      font-size: clamp(1.8rem, 3vw, 2.4rem);
+      margin: 0 0 8px;
+      letter-spacing: -0.03em;
+    }
+    .lead {
+      color: var(--muted);
+      max-width: 52ch;
+      line-height: 1.55;
+      margin-bottom: 36px;
+    }
+    .badge {
+      display: inline-block;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+      padding: 4px 10px;
+      border-radius: 999px;
+      margin-bottom: 16px;
+    }
+    .grid {
+      display: grid;
+      gap: 16px;
+    }
+    @media (min-width: 800px) {
+      .grid { grid-template-columns: repeat(3, 1fr); }
+    }
+    a.card {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      text-decoration: none;
+      color: inherit;
+      background: color-mix(in srgb, var(--panel) 88%, black);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 20px;
+      transition: border-color .15s, transform .15s;
+      min-height: 240px;
+    }
+    a.card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+    a.card.rec { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+    .tag {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    a.card h2 {
+      font-family: "DM Sans", sans-serif;
+      font-size: 1.15rem;
+      margin: 0;
+    }
+    a.card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.5;
+      flex: 1;
+    }
+    .rec-pill {
+      align-self: flex-start;
+      background: color-mix(in srgb, var(--accent) 18%, transparent);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 6px;
+    }
+    .note {
+      margin-top: 28px;
+      color: var(--muted);
+      font-size: 0.85rem;
+      border-top: 1px solid var(--line);
+      padding-top: 16px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="badge">Static mockups · 非真实后端</div>
+    <h1>Monitor 重设计 · 三种方案</h1>
+    <p class="lead">
+      打开下方任一方案查看线框。均为静态 HTML，用来对比信息架构与页面气质；
+      选定后再写正式设计文档与实现计划。
+    </p>
+    <div class="grid">
+      <a class="card rec" href="./approach-1-sidebar.html">
+        <span class="rec-pill">推荐</span>
+        <span class="tag">方案 1</span>
+        <h2>侧栏分区运维台</h2>
+        <p>工作台首页 + 左侧分区导航。排查 / 刷数 / 工具 / 配置分层，适合反复进出的运维场景。</p>
+      </a>
+      <a class="card" href="./approach-2-wizard.html">
+        <span class="tag">方案 2</span>
+        <h2>顶部场景向导</h2>
+        <p>三大场景（查问题 / 改数据 / 看配置）驱动分步流程，新手路径短，高手切换成本偏高。</p>
+      </a>
+      <a class="card" href="./approach-3-tabs.html">
+        <span class="tag">方案 3</span>
+        <h2>多 Tab 视觉翻新</h2>
+        <p>保留 Tab 结构，合并 SQL、加工作台首屏，改动最小，信息架构收益有限。</p>
+      </a>
+    </div>
+    <p class="note">路径：<code>docs/superpowers/mockups/monitor-redesign/</code> · 用浏览器直接打开即可</p>
+  </main>
+</body>
+</html>

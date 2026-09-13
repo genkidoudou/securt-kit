@@ -38,6 +38,16 @@ mvn spring-boot:run
 
 启动后访问：`http://localhost:8080/monitor/index.html`
 
+### 2.1 访问 Playground 演示页
+
+启动后访问：`http://localhost:8080/playground/`
+
+默认页面是 `playground_person` 人员维护台：筛选、列表、新增/编辑/删除，并可在「业务视图（解密）」与「原始视图（库内密文）」间切换。手机号与身份证加密落库，摘要源为二者。
+
+页面前置检查要求 JDBC 模式、`phone`/`id_card` 加密、`phone+id_card -> row_digest` 摘要规则以及 `SECURT_SKIP` 开启。
+
+**注意：** Playground 仅存在于本测试工程，**不会**随 `securt-kit-starter-*` 发布。配置项：`securtkit.playground.enabled=true`。
+
 ## 与 Boot 2.7 版本的差异
 
 - **Java 版本**：需要 Java 17+

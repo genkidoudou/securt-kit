@@ -64,10 +64,10 @@ spring:
       primary: primary
       datasource:
         primary:
-          driver-class-name: io.github.hexlodev.core.interceptor.SimpleInterceptorDriver
+          driver-class-name: io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver
           url: jdbc:interceptor:h2:mem:primary_db;datasource-id=primary
         secondary:
-          driver-class-name: io.github.hexlodev.core.interceptor.SimpleInterceptorDriver
+          driver-class-name: io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver
           url: jdbc:interceptor:h2:mem:secondary_db;datasource-id=secondary
 
 securtkit:
@@ -169,7 +169,7 @@ securtkit:
 ```yaml
 securtkit:
   encryptor:
-    digest-strategy: io.github.hexlodev.core.strategy.HmacSha256DigestStrategy
+    digest-strategy: io.github.genkidoudou.core.strategy.HmacSha256DigestStrategy
     digest-hmac-key: ${DIGEST_HMAC_KEY}
     digest-partial-update: RELOAD
     digest-verify-on-read: false

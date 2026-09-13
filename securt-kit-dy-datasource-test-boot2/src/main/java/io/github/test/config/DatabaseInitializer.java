@@ -95,6 +95,14 @@ public class DatabaseInitializer implements CommandLineRunner {
                 "address VARCHAR(200), " +
                 "status VARCHAR(20)" +
                 ")";
+        String createDigestUserTableSql = "CREATE TABLE IF NOT EXISTS digest_user (" +
+                "id BIGINT PRIMARY KEY AUTO_INCREMENT, " +
+                "name VARCHAR(255), phone VARCHAR(255), age INT, email VARCHAR(255), " +
+                "row_digest VARCHAR(255))";
+        String createPlaygroundPersonTableSql = "CREATE TABLE IF NOT EXISTS playground_person (" +
+                "id BIGINT PRIMARY KEY AUTO_INCREMENT, " +
+                "name VARCHAR(255), phone VARCHAR(255), id_card VARCHAR(255), age INT, " +
+                "row_digest VARCHAR(255))";
 
         // 为所有数据源创建表
         if (dataSource instanceof DynamicRoutingDataSource) {
@@ -113,6 +121,8 @@ public class DatabaseInitializer implements CommandLineRunner {
                     // 为当前数据源创建 user 表和 order 表
                     stmt.execute(createUserTableSql);
                     stmt.execute(createOrderTableSql);
+                    stmt.execute(createDigestUserTableSql);
+                    stmt.execute(createPlaygroundPersonTableSql);
                     System.out.println("数据源 [" + datasourceName + "] 表初始化完成");
                 } catch (Exception e) {
                     // 如果某个数据源初始化失败，记录错误但不影响其他数据源
@@ -128,6 +138,8 @@ public class DatabaseInitializer implements CommandLineRunner {
                  Statement stmt = conn.createStatement()) {
                 stmt.execute(createUserTableSql);
                 stmt.execute(createOrderTableSql);
+                stmt.execute(createDigestUserTableSql);
+                stmt.execute(createPlaygroundPersonTableSql);
                 System.out.println("数据库表初始化完成");
             } catch (Exception e) {
                 System.err.println("数据库表初始化失败: " + e.getMessage());

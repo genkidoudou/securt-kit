@@ -6,8 +6,8 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import io.github.hexlodev.core.TableCache;
-import io.github.hexlodev.core.config.FieldEncryptorProperties;
+import io.github.genkidoudou.core.TableCache;
+import io.github.genkidoudou.core.config.FieldEncryptorProperties;
 import com.example.entity.UserEntity;
 import com.example.mapper.UserEntityMapper;
 import org.junit.jupiter.api.BeforeAll;
@@ -54,7 +54,7 @@ public class MyBatisPlusInterceptorTest {
     void setUp() {
         // 加载拦截器驱动
         try {
-            Class.forName("io.github.hexlodev.core.interceptor.SimpleInterceptorDriver");
+            Class.forName("io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver");
         } catch (ClassNotFoundException e) {
             throw new RuntimeException("Failed to load SimpleInterceptorDriver", e);
         }
@@ -89,8 +89,8 @@ public class MyBatisPlusInterceptorTest {
     void setUpTable() throws SQLException {
         try (Connection conn = dataSource.getConnection()) {
             try (Statement stmt = conn.createStatement()) {
-                stmt.execute("DROP TABLE IF EXISTS " + TEST_TABLE);
-                stmt.execute("CREATE TABLE " + TEST_TABLE + " (" +
+                stmt.execute("DROP TABLE IF EXISTS \"user\"");
+                stmt.execute("CREATE TABLE \"user\" (" +
                         "id BIGINT PRIMARY KEY AUTO_INCREMENT, " +
                         "name VARCHAR(100), " +
                         "phone VARCHAR(100), " +
@@ -445,6 +445,72 @@ public class MyBatisPlusInterceptorTest {
         
         System.out.println("testSelectCount -> count: " + count);
         assertEquals(2, count, "应该有2条年龄为30的记录");
+    }
+
+    /**
+     * JDBC 模式下用 QueryWrapper 按加密列 phone 等值查询
+     */
+    @Test
+    void testQueryWrapperEqEncryptedPhone() {
+        UserEntity user = new UserEntity();
+        user.setName("加密查询-张三");
+        user.setPhone("13800138111");
+        user.setAge(25);
+        userEntityMapper.insert(user);
+
+        QueryWrapper<UserEntity> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("phone", "13800138111");
+        List<UserEntity> list = userEntityMapper.selectList(queryWrapper);
+
+        assertEquals(1, list.size(), "按明文 phone 条件应能命中密文行");
+        assertEquals("加密查询-张三", list.get(0).getName());
+        assertEquals("13800138111", list.get(0).getPhone());
+    }
+
+    /**
+     * JDBC 模式下用 LambdaQueryWrapper 按加密列 phone 等值查询
+     */
+    @Test
+    void testLambdaQueryWrapperEqEncryptedPhone() {
+        UserEntity user = new UserEntity();
+        user.setName("加密查询-李四");
+        user.setPhone("13900139111");
+        user.setAge(30);
+        userEntityMapper.insert(user);
+
+        LambdaQueryWrapper<UserEntity> lambdaQuery = new LambdaQueryWrapper<>();
+        lambdaQuery.eq(UserEntity::getPhone, "13900139111");
+        List<UserEntity> list = userEntityMapper.selectList(lambdaQuery);
+
+        assertEquals(1, list.size());
+        assertEquals("加密查询-李四", list.get(0).getName());
+        assertEquals("13900139111", list.get(0).getPhone());
+    }
+
+    /**
+     * JDBC 模式下用 QueryWrapper.in 按加密列查询
+     */
+    @Test
+    void testQueryWrapperInEncryptedPhone() {
+        UserEntity user1 = new UserEntity();
+        user1.setName("加密IN-王五");
+        user1.setPhone("15000150111");
+        user1.setAge(28);
+        userEntityMapper.insert(user1);
+
+        UserEntity user2 = new UserEntity();
+        user2.setName("加密IN-赵六");
+        user2.setPhone("15100151111");
+        user2.setAge(32);
+        userEntityMapper.insert(user2);
+
+        QueryWrapper<UserEntity> queryWrapper = new QueryWrapper<>();
+        queryWrapper.in("phone", java.util.Arrays.asList("15000150111", "15100151111"));
+        List<UserEntity> list = userEntityMapper.selectList(queryWrapper);
+
+        assertEquals(2, list.size());
+        assertTrue(list.stream().anyMatch(u -> "加密IN-王五".equals(u.getName())));
+        assertTrue(list.stream().anyMatch(u -> "加密IN-赵六".equals(u.getName())));
     }
 }
 

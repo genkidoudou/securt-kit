@@ -4,12 +4,12 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <groupId>io.github.hexlodev</groupId>
+        <groupId>io.github.genkidoudou</groupId>
         <artifactId>securt-kit</artifactId>
         <version>1.0-SNAPSHOT</version>
     </parent>
 
-    <groupId>io.github.hexlodev.dysouce</groupId>
+    <groupId>io.github.genkidoudou.dysouce</groupId>
     <artifactId>securt-kit-dy-datasource-test-boot2</artifactId>
 
     <properties>
@@ -18,13 +18,20 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <spring-boot.version>2.7.18</spring-boot.version>
         <!-- maven.test.skip 由父 POM 的 profile 统一控制，这里不设置 -->
+        <maven.deploy.skip>true</maven.deploy.skip>
     </properties>
 
     <dependencies>
         <!-- add securt-kit-starter-boot2 dependency -->
         <dependency>
-            <groupId>io.github.hexlodev</groupId>
+            <groupId>io.github.genkidoudou</groupId>
             <artifactId>securt-kit-starter-boot2</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
+        <!-- 仅测试工程使用的演示页（不进入 starter） -->
+        <dependency>
+            <groupId>io.github.genkidoudou</groupId>
+            <artifactId>securt-kit-playground</artifactId>
             <version>1.0-SNAPSHOT</version>
         </dependency>
         <dependency>
@@ -135,7 +142,7 @@
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <version>${spring-boot.version}</version>
                 <configuration>
-                    <mainClass>io.github.test.MultiDataSourceApplication</mainClass>
+                    <mainClass>io.github.test.MultiDataSourceApplication2</mainClass>
                 </configuration>
                 <executions>
                     <execution>

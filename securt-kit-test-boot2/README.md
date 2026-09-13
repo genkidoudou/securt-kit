@@ -47,6 +47,16 @@ mvn spring-boot:run
 
 启动后访问：`http://localhost:8080/monitor/index.html`
 
+### 2.1 访问 Playground 演示页
+
+启动后访问：`http://localhost:8080/playground/`
+
+默认页面是 `playground_person` 人员维护台：筛选、列表、新增/编辑/删除，并可在「业务视图（解密）」与「原始视图（库内密文）」间切换。手机号与身份证加密落库，摘要源为二者。
+
+要求 JDBC 模式、`playground_person` 白名单、`phone`/`id_card` 加密、`phone+id_card -> row_digest` 摘要规则和 `SECURT_SKIP` 开启；页面顶部会显示前置检查结果。
+
+**注意：** Playground 仅存在于本测试工程（依赖 `securt-kit-playground` + 本地 Servlet 装配），**不会**随 `securt-kit-starter-*` 发布。配置项：`securtkit.playground.enabled=true`。
+
 ### 3. 查看测试结果
 
 项目启动后会自动运行测试，查看控制台输出。
@@ -58,7 +68,7 @@ mvn spring-boot:run
 ```yaml
 spring:
   datasource:
-    driver-class-name: io.github.hexlodev.core.interceptor.SimpleInterceptorDriver
+    driver-class-name: io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver
     url: jdbc:interceptor:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=MySQL
 ```
 

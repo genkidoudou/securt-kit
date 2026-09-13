@@ -58,7 +58,7 @@
 
 ```xml
 <dependency>
-    <groupId>io.github.hexlodev.core</groupId>
+    <groupId>io.github.genkidoudou.core</groupId>
     <artifactId>securt-kit-core</artifactId>
     <version>1.0-SNAPSHOT</version>
 </dependency>
@@ -71,7 +71,7 @@
 ```yaml
 spring:
   datasource:
-    driver-class-name: io.github.hexlodev.core.interceptor.SimpleInterceptorDriver
+    driver-class-name: io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver
     url: jdbc:interceptor:mysql://localhost:3306/testdb
 ```
 

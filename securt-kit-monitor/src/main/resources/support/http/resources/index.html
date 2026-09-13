@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Securt-Kit Monitor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Manrope:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/monitor/css/style.css">
+</head>
+<body>
+    <div id="loginPage" class="page">
+        <div class="login-container">
+            <h1>Securt-Kit Monitor</h1>
+            <p class="login-sub">运维排查控制台</p>
+            <form id="loginForm" class="login-form">
+                <div class="form-group">
+                    <label for="username">用户名</label>
+                    <input type="text" id="username" name="username" required autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label for="password">密码</label>
+                    <input type="password" id="password" name="password" required autocomplete="current-password">
+                </div>
+                <div id="loginError" class="error-message"></div>
+                <button type="submit" class="btn btn-primary">登录</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="mainPage" class="page" style="display: none;">
+        <header class="top">
+            <div class="top-row">
+                <div>
+                    <h1>Securt-Kit Monitor</h1>
+                    <p class="top-sub">运维排查 · 配置核对 · 刷数预览</p>
+                </div>
+                <button id="logoutBtn" class="btn btn-ghost-light">退出</button>
+            </div>
+            <nav class="tabs" aria-label="主导航">
+                <button type="button" class="tab-btn active" data-tab="home">工作台</button>
+                <button type="button" class="tab-btn" data-tab="crypto">加密解密</button>
+                <button type="button" class="tab-btn" data-tab="rowVerify">验签</button>
+                <button type="button" class="tab-btn" data-tab="batch">刷数作业</button>
+                <button type="button" class="tab-btn" data-tab="sql">SQL</button>
+                <button type="button" class="tab-btn" data-tab="config">配置信息</button>
+                <button type="button" class="tab-btn" data-tab="docs">项目文档</button>
+            </nav>
+        </header>
+
+        <div class="container">
+            <!-- 工作台 -->
+            <div id="homeTab" class="tab-content active">
+                <div class="section-head section-head-plain">
+                    <div>
+                        <h2>工作台</h2>
+                        <p class="hint-line">查看当前加密环境摘要并快速进入常用工具。</p>
+                    </div>
+                    <button type="button" class="help-trigger" data-help-topic="home" aria-label="查看工作台使用说明">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/></svg>
+                        <span>使用说明</span>
+                    </button>
+                </div>
+                <div class="stats" id="workbenchStats">
+                    <div class="stat"><div class="k">加密模式</div><div class="v" id="wbMode">—</div></div>
+                    <div class="stat"><div class="k">加密表</div><div class="v" id="wbEncryptTables">—</div></div>
+                    <div class="stat"><div class="k">摘要表</div><div class="v" id="wbDigestTables">—</div></div>
+                    <div class="stat"><div class="k">verify-on-read</div><div class="v" id="wbVerifyOnRead">—</div></div>
+                </div>
+                <div class="stat-row">
+                    <div class="chip">数据源 <strong id="wbDatasourceCount">—</strong></div>
+                    <div class="chip">启用 <strong id="wbEnabled">—</strong></div>
+                    <div class="chip">skip-comment <strong id="wbSkipComment">—</strong></div>
+                </div>
+                <div class="quick-cards">
+                    <button type="button" class="qcard" data-goto="sql" data-sql-mode="query">
+                        <h3>SQL 对照</h3>
+                        <p>SELECT 密文 / 明文双视图，排查字段加密结果。</p>
+                    </button>
+                    <button type="button" class="qcard" data-goto="batch">
+                        <h3>刷数预览</h3>
+                        <p>表 + WHERE → 预览 → 确认回写。</p>
+                    </button>
+                    <button type="button" class="qcard" data-goto="config">
+                        <h3>配置快览</h3>
+                        <p>mode / digest / 策略一眼确认。</p>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 加密解密 -->
+            <div id="cryptoTab" class="tab-content">
+                <div class="card">
+                    <div class="section-head">
+                        <div>
+                            <h2>加密 / 解密 / 签名 / 验签</h2>
+                            <p class="hint-line">输入内容后直接操作；签名与验签使用全局 digest-strategy（无需表名）。</p>
+                        </div>
+                        <button type="button" class="help-trigger" data-help-topic="crypto" aria-label="查看加密解密使用说明">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/></svg>
+                            <span>使用说明</span>
+                        </button>
+                    </div>
+                    <div class="form-group">
+                        <label>输入内容</label>
+                        <textarea id="cryptoInput" rows="4" placeholder="请输入明文或密文"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>数据源 <span class="req">*</span></label>
+                        <div id="cryptoDatasourceId" class="datasource-radio-group" role="radiogroup"></div>
+                        <div id="cryptoDatasourceError" class="error-message" style="display: none;"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>期望摘要（验签时必填）</label>
+                        <input type="text" id="expectedDigest" placeholder="验签时填写期望摘要值">
+                    </div>
+                    <div class="button-group">
+                        <button type="button" id="encryptBtn" class="btn btn-primary">加密</button>
+                        <button type="button" id="decryptBtn" class="btn btn-primary">解密</button>
+                        <button type="button" id="signBtn" class="btn btn-secondary">生成签名</button>
+                        <button type="button" id="verifyDigestBtn" class="btn btn-secondary">验签</button>
+                        <button type="button" id="clearBtn" class="btn btn-ghost">清空</button>
+                    </div>
+                    <div class="form-group">
+                        <label>输出结果</label>
+                        <textarea id="cryptoOutput" class="result-panel" rows="4" readonly></textarea>
+                    </div>
+                    <button type="button" id="copyBtn" class="btn btn-ghost" style="display: none;">复制结果</button>
+                </div>
+            </div>
+
+            <!-- 验签（原单行验签） -->
+            <div id="rowVerifyTab" class="tab-content">
+                <div class="card">
+                    <div class="section-head">
+                        <div>
+                            <h2>验签</h2>
+                            <p class="hint-line">按表和主键读取单行数据，生成或校验字段摘要。</p>
+                        </div>
+                        <button type="button" class="help-trigger" data-help-topic="rowVerify" aria-label="查看验签使用说明">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/></svg>
+                            <span>使用说明</span>
+                        </button>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>表名</label>
+                            <input type="text" id="rowVerifyTable" placeholder="digest_user">
+                        </div>
+                        <div class="form-group">
+                            <label>id</label>
+                            <input type="text" id="rowVerifyId" placeholder="1">
+                        </div>
+                        <div class="form-group">
+                            <label>id 列（可选）</label>
+                            <input type="text" id="rowVerifyIdColumn" placeholder="默认自动解析">
+                        </div>
+                    </div>
+                    <div class="button-group">
+                        <button type="button" id="rowLoadBtn" class="btn btn-primary">查询</button>
+                        <button type="button" id="rowSignBtn" class="btn btn-secondary">生成摘要</button>
+                        <button type="button" id="rowVerifyBtn" class="btn btn-secondary">验签</button>
+                    </div>
+                    <div class="form-group">
+                        <label>输入验签值（期望摘要）</label>
+                        <input type="text" id="rowExpectedDigest" placeholder="验签时填写">
+                    </div>
+                    <div id="rowDigestFields" class="result-table" style="margin-top:12px;"></div>
+                    <pre id="rowVerifyResult" class="result-panel"></pre>
+                </div>
+            </div>
+
+            <!-- 刷数作业 -->
+            <div id="batchTab" class="tab-content">
+                <div class="card">
+                    <div class="section-head">
+                        <div>
+                            <h2>刷数作业</h2>
+                            <p class="hint-line">批量预览并回写字段加密、解密或摘要结果。</p>
+                        </div>
+                        <button type="button" class="help-trigger" data-help-topic="batch" aria-label="查看刷数作业使用说明">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/></svg>
+                            <span>使用说明</span>
+                        </button>
+                    </div>
+                    <div class="subtabs" id="batchSubtabs" role="tablist">
+                        <button type="button" class="subtab on" data-batch-mode="crypto">加解密</button>
+                        <button type="button" class="subtab" data-batch-mode="digest">验签</button>
+                    </div>
+
+                    <div id="batchCryptoPanel" class="batch-panel active">
+                        <div class="button-group">
+                            <button type="button" id="batchEncryptSelectedBtn" class="btn btn-primary">加密所选</button>
+                            <button type="button" id="batchDecryptSelectedBtn" class="btn btn-primary">解密所选</button>
+                        </div>
+                        <div id="batchEncryptTableList" class="batch-table-list"></div>
+                    </div>
+
+                    <div id="batchDigestPanel" class="batch-panel">
+                        <div class="button-group">
+                            <button type="button" id="batchSignSelectedBtn" class="btn btn-secondary">生成签名（所选）</button>
+                        </div>
+                        <div id="batchDigestTableList" class="batch-table-list"></div>
+                    </div>
+
+                    <div class="steps" id="batchSteps" style="margin-top:14px;">
+                        <span class="step on" data-step="1">1. 选择表</span>
+                        <span class="step" data-step="2">2. 样本预览</span>
+                        <span class="step" data-step="3">3. 异步执行</span>
+                    </div>
+                    <div class="form-group" style="display:none;">
+                        <input type="hidden" id="batchTable" class="batch-scope-input" value="">
+                        <input type="hidden" id="batchWhere" class="batch-scope-input" value="1 = 1">
+                        <input type="hidden" id="batchIdColumn" class="batch-scope-input" value="">
+                        <select id="batchOp" class="batch-scope-input" style="display:none;">
+                            <option value="encrypt">encrypt</option>
+                            <option value="decrypt">decrypt</option>
+                            <option value="sign">sign</option>
+                        </select>
+                    </div>
+                    <div class="button-group">
+                        <button type="button" id="batchPreviewBtn" class="btn btn-ghost" style="display:none;">预览</button>
+                        <button type="button" id="batchStartJobBtn" class="btn btn-danger" disabled>开始异步作业</button>
+                        <button type="button" id="batchPauseBtn" class="btn btn-ghost" disabled>暂停</button>
+                        <button type="button" id="batchResumeBtn" class="btn btn-ghost" disabled>继续</button>
+                        <button type="button" id="batchCancelBtn" class="btn btn-ghost" disabled>取消</button>
+                    </div>
+                    <div id="batchProgressPanel" class="hint-line" style="margin-top:10px;display:none;"></div>
+                    <div id="batchJobsPanel" class="result-table" style="margin-top:8px;"></div>
+                    <div id="batchResultTable" class="result-table" style="margin-top:12px;"></div>
+                    <pre id="batchResult" class="result-panel" style="display:none;"></pre>
+                </div>
+            </div>
+
+            <!-- SQL（合并） -->
+            <div id="sqlTab" class="tab-content">
+                <div class="card sql-workspace-card">
+                    <div class="sql-workspace-head">
+                        <div>
+                            <h2>SQL 工具</h2>
+                            <p class="hint-line">查询与修改分区，结果在当前工作区内滚动。</p>
+                        </div>
+                        <div class="sql-workspace-actions">
+                            <button type="button" class="help-trigger" data-help-topic="sql" aria-label="查看 SQL 工具使用说明">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/></svg>
+                                <span>使用说明</span>
+                            </button>
+                            <div class="sql-primary-tabs" id="sqlPrimaryTabs" role="tablist">
+                                <button type="button" class="on" data-sql-view="query">查询</button>
+                                <button type="button" data-sql-view="modify">修改</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="sqlQueryPanel" class="sql-primary-view active">
+                        <div class="sql-toolbar">
+                            <span class="sql-toolbar-label">数据源 <span class="req">*</span></span>
+                            <div id="sqlQueryDatasourceId" class="datasource-radio-group" role="radiogroup"></div>
+                            <div id="sqlQueryDatasourceError" class="error-message" style="display: none;"></div>
+                            <span class="sql-toolbar-spacer"></span>
+                            <label for="sqlQueryPageSize">每页</label>
+                            <input type="number" id="sqlQueryPageSize" value="10" min="1" max="100">
+                            <label for="sqlQueryPageNum">页码</label>
+                            <input type="number" id="sqlQueryPageNum" value="1" min="1">
+                        </div>
+                        <div class="form-group">
+                            <label for="sqlQueryInput">查询 SQL（仅 SELECT）</label>
+                            <textarea id="sqlQueryInput" rows="5" placeholder='SELECT * FROM "user" WHERE id = 1'></textarea>
+                        </div>
+                        <div class="button-group sql-actions">
+                            <button type="button" id="querySqlBtn" class="btn btn-primary">查询</button>
+                            <button type="button" id="clearSqlQueryBtn" class="btn btn-ghost">清空</button>
+                        </div>
+                        <div id="sqlQueryResult" class="sql-query-result" style="display: none;">
+                            <div class="sql-executed-row">
+                                <label for="sqlQueryExecuted">执行的 SQL</label>
+                                <textarea id="sqlQueryExecuted" class="result-panel" rows="2" readonly></textarea>
+                            </div>
+                            <div class="sql-query-view-head">
+                                <div id="sqlQueryViewSwitch" class="sql-query-view-switch" role="tablist"
+                                     aria-label="查询结果视图">
+                                    <button type="button" class="on" data-query-result-view="plain"
+                                            role="tab" aria-selected="true">明文</button>
+                                    <button type="button" data-query-result-view="cipher"
+                                            role="tab" aria-selected="false">密文</button>
+                                </div>
+                                <div id="sqlQueryStats" class="muted-line"></div>
+                            </div>
+                            <div id="sqlQueryTable" class="result-table sql-workspace-result"></div>
+                        </div>
+                    </div>
+
+                    <div id="sqlModifyView" class="sql-primary-view">
+                        <div class="subtabs sql-modify-tabs" id="sqlSubtabs" role="tablist">
+                            <button type="button" class="subtab on" data-sql-mode="parse">SQL 解析</button>
+                            <button type="button" class="subtab" data-sql-mode="encrypt">参数加密</button>
+                        </div>
+
+                        <div id="sqlParsePanel" class="sql-panel active">
+                            <div class="sql-split">
+                                <div class="sql-pane">
+                                    <div class="sql-pane-head"><strong>输入 SQL</strong><span>支持 INSERT / UPDATE</span></div>
+                                    <div class="form-group sql-pane-datasource">
+                                        <label>数据源 <span class="req">*</span></label>
+                                        <div id="sqlParseDatasourceId" class="datasource-radio-group" role="radiogroup"></div>
+                                        <div id="sqlParseDatasourceError" class="error-message" style="display: none;"></div>
+                                    </div>
+                                    <textarea id="sqlInput" class="sql-pane-editor" rows="8" placeholder="UPDATE user SET name = ?, phone = ? WHERE id = ?"></textarea>
+                                    <div class="button-group sql-actions">
+                                        <button type="button" id="parseSqlBtn" class="btn btn-primary">解析</button>
+                                        <button type="button" id="clearSqlBtn" class="btn btn-ghost">清空</button>
+                                    </div>
+                                </div>
+                                <div class="sql-pane">
+                                    <div class="sql-pane-head"><strong>解析结果</strong><span>占位符与加密字段</span></div>
+                                    <div id="parseSqlResult" class="sql-workspace-result sql-parse-result" style="display: none;">
+                                        <div class="form-group">
+                                            <label>占位符映射</label>
+                                            <div id="placeholderTable" class="result-table"></div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>需要加密的字段</label>
+                                            <div id="encryptFieldsTable" class="result-table"></div>
+                                        </div>
+                                    </div>
+                                    <div class="sql-empty-result">解析后在此显示字段映射</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="sqlEncryptPanel" class="sql-panel">
+                            <div class="sql-split">
+                                <div class="sql-pane">
+                                    <div class="sql-pane-head"><strong>原始 SQL</strong><span>包含实际参数值</span></div>
+                                    <div class="form-group sql-pane-datasource">
+                                        <label>数据源 <span class="req">*</span></label>
+                                        <div id="sqlEncryptDatasourceId" class="datasource-radio-group" role="radiogroup"></div>
+                                        <div id="sqlEncryptDatasourceError" class="error-message" style="display: none;"></div>
+                                    </div>
+                                    <textarea id="sqlEncryptInput" class="sql-pane-editor" rows="8" placeholder="UPDATE user SET name = '张三', phone = '13800138000' WHERE id = 1"></textarea>
+                                    <div class="button-group sql-actions">
+                                        <button type="button" id="encryptSqlBtn" class="btn btn-primary">参数加密</button>
+                                        <button type="button" id="clearSqlEncryptBtn" class="btn btn-ghost">清空</button>
+                                    </div>
+                                </div>
+                                <div class="sql-pane">
+                                    <div class="sql-pane-head">
+                                        <strong>加密后的 SQL</strong>
+                                        <button type="button" id="copySqlEncryptBtn" class="btn btn-ghost" style="display: none;">复制</button>
+                                    </div>
+                                    <div id="sqlEncryptResult" class="sql-workspace-result sql-encrypt-result" style="display: none;">
+                                        <div class="form-group">
+                                            <label for="sqlEncryptOutput">加密后的 SQL</label>
+                                            <textarea id="sqlEncryptOutput" class="result-panel" rows="8" readonly></textarea>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="sqlEncryptOriginal">原始 SQL</label>
+                                            <textarea id="sqlEncryptOriginal" class="result-panel" rows="4" readonly></textarea>
+                                        </div>
+                                        <div id="sqlEncryptStats" class="muted-line"></div>
+                                    </div>
+                                    <div class="sql-empty-result">参数加密后在此显示结果</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 项目文档 -->
+            <div id="docsTab" class="tab-content">
+                <div class="card docs-card">
+                    <div class="section-head">
+                        <div>
+                            <h2>Securt-Kit 项目文档</h2>
+                            <p class="hint-line">从接入到运维的精简指南，所有内容均随 Monitor 离线提供。</p>
+                        </div>
+                    </div>
+                    <div class="docs-layout">
+                        <nav class="docs-nav" aria-label="项目文档目录">
+                            <a href="#docs-overview">项目简介</a>
+                            <a href="#docs-install">添加依赖</a>
+                            <a href="#docs-modes">通道模式</a>
+                            <a href="#docs-fields">字段与策略</a>
+                            <a href="#docs-digest-like">Digest 与 LIKE</a>
+                            <a href="#docs-multi-datasource">多数据源</a>
+                            <a href="#docs-tools">Monitor 与 Playground</a>
+                            <a href="#docs-faq">常见问题</a>
+                        </nav>
+                        <article class="docs-content" tabindex="0">
+                            <section id="docs-overview" class="docs-section">
+                                <span class="docs-kicker">01 · Overview</span>
+                                <h3>项目简介</h3>
+                                <p>Securt-Kit 是数据库字段级透明加解密框架。应用仍读写明文，框架在 JDBC 或 MyBatis 通道拦截 SQL 参数与结果集，对配置字段自动加密入库、解密返回。</p>
+                                <div class="docs-flow" aria-label="透明加解密流程">
+                                    <span>业务明文</span><b>→</b><span>SQL 拦截</span><b>→</b><span>密文入库</span><b>→</b><span>查询解密</span>
+                                </div>
+                                <p class="docs-note">适用于手机号、证件号、银行卡等敏感字段。Boot 2.7 支持 Java 8+，Boot 3 支持 Java 17+。</p>
+                            </section>
+
+                            <section id="docs-install" class="docs-section">
+                                <span class="docs-kicker">02 · Install</span>
+                                <h3>添加依赖</h3>
+                                <p>根据 Spring Boot 大版本选择对应 Starter，版本号请替换为项目实际发布版本。</p>
+                                <h4>Spring Boot 2.7</h4>
+                                <div class="docs-code">
+                                    <button type="button" class="docs-copy" data-copy-target="#docs-code-boot2">复制</button>
+                                    <pre><code id="docs-code-boot2">&lt;dependency&gt;
+  &lt;groupId&gt;io.github.genkidoudou&lt;/groupId&gt;
+  &lt;artifactId&gt;securt-kit-starter-boot2&lt;/artifactId&gt;
+  &lt;version&gt;1.0-SNAPSHOT&lt;/version&gt;
+&lt;/dependency&gt;</code></pre>
+                                </div>
+                                <h4>Spring Boot 3.x</h4>
+                                <div class="docs-code">
+                                    <button type="button" class="docs-copy" data-copy-target="#docs-code-boot3">复制</button>
+                                    <pre><code id="docs-code-boot3">&lt;dependency&gt;
+  &lt;groupId&gt;io.github.genkidoudou&lt;/groupId&gt;
+  &lt;artifactId&gt;securt-kit-starter-boot3&lt;/artifactId&gt;
+  &lt;version&gt;1.0-SNAPSHOT&lt;/version&gt;
+&lt;/dependency&gt;</code></pre>
+                                </div>
+                            </section>
+
+                            <section id="docs-modes" class="docs-section">
+                                <span class="docs-kicker">03 · Mode</span>
+                                <h3>选择加密通道</h3>
+                                <p><strong>JDBC</strong> 适合通用数据库访问；<strong>MYBATIS</strong> 适合 MyBatis / MyBatis-Plus 项目且无需修改驱动。同一数据源只能启用一种通道。</p>
+                                <h4>JDBC 模式</h4>
+                                <div class="docs-code">
+                                    <button type="button" class="docs-copy" data-copy-target="#docs-code-jdbc">复制</button>
+                                    <pre><code id="docs-code-jdbc">spring:
+  datasource:
+    driver-class-name: io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver
+    url: jdbc:interceptor:mysql://localhost:3306/app
+securtkit:
+  encryptor:
+    enable: true
+    mode: JDBC</code></pre>
+                                </div>
+                                <h4>MyBatis 模式</h4>
+                                <div class="docs-code">
+                                    <button type="button" class="docs-copy" data-copy-target="#docs-code-mybatis">复制</button>
+                                    <pre><code id="docs-code-mybatis">spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/app
+securtkit:
+  encryptor:
+    enable: true
+    mode: MYBATIS</code></pre>
+                                </div>
+                            </section>
+
+                            <section id="docs-fields" class="docs-section">
+                                <span class="docs-kicker">04 · Fields</span>
+                                <h3>配置字段与策略</h3>
+                                <p>按表和字段声明需要保护的数据。未指定策略时使用容器中的默认 <code>FieldEncryptorStrategy</code>；也可填写自定义实现类全限定名。</p>
+                                <div class="docs-code">
+                                    <button type="button" class="docs-copy" data-copy-target="#docs-code-fields">复制</button>
+                                    <pre><code id="docs-code-fields">securtkit:
+  encryptor:
+    enable: true
+    failure-policy: FALLBACK
+    tables:
+      - table-name: user
+        fields:
+          - field-name: name
+          - field-name: phone
+            strategy: com.example.PhoneEncryptorStrategy</code></pre>
+                                </div>
+                                <p class="docs-note">策略实现需提供可逆的 <code>encryption</code> 与 <code>decryption</code>，并正确处理 null。</p>
+                            </section>
+
+                            <section id="docs-digest-like" class="docs-section">
+                                <span class="docs-kicker">05 · Integrity & Search</span>
+                                <h3>Digest 与 LIKE</h3>
+                                <p><strong>Digest</strong> 用于字段完整性校验：根据一个或多个源字段生成摘要到目标字段，可开启读取验签。<strong>LIKE</strong> 默认采用精确匹配处理，可通过 <code>LikePatternHandler</code> 扩展自定义模式。</p>
+                                <div class="docs-code">
+                                    <button type="button" class="docs-copy" data-copy-target="#docs-code-digest">复制</button>
+                                    <pre><code id="docs-code-digest">securtkit:
+  encryptor:
+    digest-strategy: io.github.genkidoudou.core.strategy.HmacSha256DigestStrategy
+    digest-hmac-key: ${DIGEST_HMAC_KEY}
+    digest-verify-on-read: true
+    tables:
+      - table-name: user
+        digest:
+          - source-fields: [phone]
+            target-field: row_digest</code></pre>
+                                </div>
+                            </section>
+
+                            <section id="docs-multi-datasource" class="docs-section">
+                                <span class="docs-kicker">06 · Datasource</span>
+                                <h3>多数据源</h3>
+                                <p>同名表在不同数据源可配置不同字段或策略。为表规则设置 <code>datasource-id</code>，其值应与应用的数据源标识保持一致。</p>
+                                <div class="docs-code">
+                                    <button type="button" class="docs-copy" data-copy-target="#docs-code-datasource">复制</button>
+                                    <pre><code id="docs-code-datasource">securtkit:
+  encryptor:
+    tables:
+      - table-name: user
+        datasource-id: primary
+        fields:
+          - field-name: phone
+      - table-name: user
+        datasource-id: archive
+        fields:
+          - field-name: id_card</code></pre>
+                                </div>
+                            </section>
+
+                            <section id="docs-tools" class="docs-section">
+                                <span class="docs-kicker">07 · Tools</span>
+                                <h3>Monitor 与 Playground</h3>
+                                <p><strong>Monitor</strong> 位于 <code>/monitor/</code>，面向配置核对、SQL 对照、验签与刷数运维。<strong>Playground</strong> 位于 <code>/playground/</code>，面向开发阶段 CRUD、摘要和复杂 SQL 的交互演示。</p>
+                                <ul>
+                                    <li>生产环境使用 Monitor 前应配置认证，并限制网络访问范围。</li>
+                                    <li>刷数作业必须先预览，再确认回写。</li>
+                                    <li>SQL 参数加密只生成 SQL，不会直接执行 UPDATE 或 INSERT。</li>
+                                </ul>
+                            </section>
+
+                            <section id="docs-faq" class="docs-section">
+                                <span class="docs-kicker">08 · FAQ</span>
+                                <h3>常见问题</h3>
+                                <details>
+                                    <summary>为什么数据库里还是明文？</summary>
+                                    <p>先在配置信息页确认 enable、mode、数据源和表字段规则；JDBC 模式还需确认驱动和 URL 使用拦截前缀。</p>
+                                </details>
+                                <details>
+                                    <summary>为什么 SQL 解析没有占位符映射？</summary>
+                                    <p>只有 <code>?</code> 参数会产生占位符映射。字面量 SQL 没有映射是正常的，但已配置的 SET 字段仍会出现在加密字段结果中。</p>
+                                </details>
+                                <details>
+                                    <summary>JDBC 与 MyBatis 可以同时开启吗？</summary>
+                                    <p>同一数据源不可以，否则同一参数可能被重复处理。请选择一个 mode。</p>
+                                </details>
+                                <details>
+                                    <summary>哪里查看更完整的说明？</summary>
+                                    <p>仓库中的 README、docs/QUICK-START.md、docs/USAGE.md 和 docs/MULTI-DATASOURCE.md 提供完整细节。</p>
+                                </details>
+                            </section>
+                        </article>
+                    </div>
+                    <div id="docsCopyStatus" class="sr-only" aria-live="polite"></div>
+                </div>
+            </div>
+
+            <!-- 数据初始化已并入刷数作业，Tab 移除；DOM 保留隐藏以免旧脚本报错 -->
+            <div id="dataInitTab" class="tab-content" style="display:none !important;" hidden>
+                <div class="card">
+                    <h2>数据初始化</h2>
+                    <div class="form-group">
+                        <label>数据源 <span class="req">*</span></label>
+                        <div id="dataInitDatasourceId" class="datasource-radio-group" role="radiogroup"></div>
+                        <div id="dataInitDatasourceError" class="error-message" style="display: none;"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>表名（必填）</label>
+                        <input type="text" id="dataInitTableName" placeholder="例如: user" required>
+                    </div>
+                    <div class="form-group">
+                        <label>WHERE条件（可选）</label>
+                        <textarea id="dataInitWhereCondition" rows="2" placeholder="例如: id > 100 AND status = 1"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>主键字段（必填）</label>
+                        <input type="text" id="dataInitPrimaryKeyField" placeholder="例如: id" required>
+                    </div>
+                    <div class="button-group">
+                        <button type="button" id="dataInitEncryptBtn" class="btn btn-primary">加密</button>
+                        <button type="button" id="dataInitDecryptBtn" class="btn btn-primary">解密</button>
+                        <button type="button" id="clearDataInitBtn" class="btn btn-ghost">清空</button>
+                    </div>
+                    <div id="dataInitResult" style="display: none;">
+                        <div id="dataInitStats" class="muted-line"></div>
+                        <div class="form-group">
+                            <label>生成的 SQL</label>
+                            <textarea id="dataInitSqlOutput" class="result-panel" rows="10" readonly></textarea>
+                        </div>
+                        <button type="button" id="copyDataInitSqlBtn" class="btn btn-ghost" style="display: none;">复制SQL</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 配置信息 -->
+            <div id="configTab" class="tab-content">
+                <div class="card">
+                    <div class="section-head">
+                        <div>
+                            <h2>配置信息</h2>
+                            <p class="hint-line">核对当前运行时生效的模式、策略、缓存及表字段规则。</p>
+                        </div>
+                        <button type="button" class="help-trigger" data-help-topic="config" aria-label="查看配置信息使用说明">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/></svg>
+                            <span>使用说明</span>
+                        </button>
+                    </div>
+                    <div id="configResult" style="display: none;">
+                        <div class="form-group">
+                            <label>基本配置</label>
+                            <div id="basicConfig" class="config-section"></div>
+                        </div>
+                        <div class="form-group">
+                            <label>摘要全局配置</label>
+                            <div id="digestGlobalConfig" class="config-section"></div>
+                        </div>
+                        <div class="form-group">
+                            <label>SQL解析缓存配置</label>
+                            <div id="cacheConfig" class="config-section"></div>
+                        </div>
+                        <div class="form-group">
+                            <label>表配置（加密字段 + 摘要规则）</label>
+                            <div id="tablesConfig" class="config-section"></div>
+                        </div>
+                    </div>
+                    <div id="configLoading" class="loading-hint">正在加载配置信息...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="helpDialog" class="help-overlay" hidden>
+        <div class="help-modal" role="dialog" aria-modal="true" aria-labelledby="helpDialogTitle">
+            <div class="help-modal-head">
+                <div>
+                    <span class="help-eyebrow">Monitor Guide</span>
+                    <h2 id="helpDialogTitle">使用说明</h2>
+                </div>
+                <button type="button" id="helpDialogClose" class="help-close" aria-label="关闭使用说明">×</button>
+            </div>
+            <div id="helpDialogBody" class="help-modal-body"></div>
+        </div>
+    </div>
+
+    <template id="help-template-home" data-title="工作台使用说明">
+        <div class="help-content">
+            <p class="help-lead">工作台汇总当前运行环境，并提供常用运维功能的快捷入口。</p>
+            <div class="help-grid">
+                <section><h4>操作步骤</h4><ol><li>核对加密模式和启用状态。</li><li>检查加密表、摘要表及数据源数量。</li><li>从快捷卡片进入 SQL、刷数或配置页。</li></ol></section>
+                <section><h4>关键结果</h4><ul><li><b>加密模式</b>：JDBC、MYBATIS 或 OFF。</li><li><b>verify-on-read</b>：查询时是否自动验签。</li><li><b>skip-comment</b>：是否允许跳过自动处理。</li></ul></section>
+            </div>
+            <div class="help-example"><strong>最小示例</strong><code>发现加密表为 0 → 打开“配置信息”核对 tables 配置。</code></div>
+            <p class="help-warning">工作台只展示摘要，不替代配置信息页的完整规则核对。</p>
+        </div>
+    </template>
+
+    <template id="help-template-crypto" data-title="加密解密使用说明">
+        <div class="help-content">
+            <p class="help-lead">用于单个文本的加密、解密、签名或验签，适合快速验证策略是否生效。</p>
+            <div class="help-grid">
+                <section><h4>操作步骤</h4><ol><li>输入明文、密文或待签名文本。</li><li>选择数据源。</li><li>选择加密、解密、生成签名或验签。</li></ol></section>
+                <section><h4>关键字段</h4><ul><li><b>期望摘要</b>：仅验签时必填。</li><li><b>数据源</b>：决定使用哪套策略配置。</li><li><b>输出结果</b>：可复制用于对照。</li></ul></section>
+            </div>
+            <div class="help-example"><strong>最小示例</strong><code>输入 13800138000 → 选择 default → 点击“加密”。</code></div>
+            <p class="help-warning">此处调用字段策略本身，不代表某张表已正确配置该字段。</p>
+        </div>
+    </template>
+
+    <template id="help-template-rowVerify" data-title="单行验签使用说明">
+        <div class="help-content">
+            <p class="help-lead">按表名和主键读取单行数据，生成摘要或比较数据库中的完整性摘要。</p>
+            <div class="help-grid">
+                <section><h4>操作步骤</h4><ol><li>填写已配置摘要规则的表名和记录 id。</li><li>必要时指定主键列。</li><li>先查询字段，再生成摘要或验签。</li></ol></section>
+                <section><h4>结果解释</h4><ul><li><b>查询</b>：展示参与摘要的字段（加密源字段会先解密再展示）。</li><li><b>生成摘要</b>：计算当前字段摘要。</li><li><b>验签</b>：比较期望摘要与实际值。</li></ul></section>
+                <section><h4>模式说明</h4><p>MYBATIS 模式下业务查询走插件通道；Monitor 验签通过结果侧解密源字段后再比对，不依赖 JDBC 拦截。</p></section>
+            </div>
+            <div class="help-example"><strong>最小示例</strong><code>表 digest_user，id 1，主键列留空后点击“查询”。</code></div>
+            <p class="help-warning">表必须配置 digest 规则；验签失败可能表示数据变化或密钥、拼接规则不一致。</p>
+        </div>
+    </template>
+
+    <template id="help-template-batch" data-title="刷数作业使用说明">
+        <div class="help-content">
+            <p class="help-lead">对历史数据批量执行加密、解密或摘要回填，并在写库前预览影响。</p>
+            <div class="help-grid">
+                <section><h4>操作步骤</h4><ol><li>选择加解密或验签类型。</li><li>勾选目标表并发起预览。</li><li>核对最多 10 行预览结果。</li><li>确认无误后执行回写。</li></ol></section>
+                <section><h4>关键状态</h4><ul><li><b>选择表</b>：只显示已配置规则的表。</li><li><b>预览</b>：生成本次作业标识。</li><li><b>确认回写</b>：仅成功预览后可用。</li></ul></section>
+            </div>
+            <div class="help-example"><strong>最小示例</strong><code>选择 user → 点击“加密所选” → 核对预览 → 确认回写。</code></div>
+            <p class="help-warning">回写会修改数据库。必须先备份并在低峰期执行，不要跳过预览核对。</p>
+        </div>
+    </template>
+
+    <template id="help-template-sql" data-title="SQL 工具使用说明">
+        <div class="help-content">
+            <p class="help-lead">用于查询明密文对照、检查 SQL 字段映射，以及生成参数加密后的 SQL。</p>
+            <div class="help-grid">
+                <section><h4>三种模式</h4><ul><li><b>查询</b>：仅支持 SELECT；密文为库内原值，明文由 Monitor 按配置字段解密（JDBC / MYBATIS 模式均可用）。函数投影（如 <code>IFNULL(phone,'2')</code>）按源加密字段解密<strong>返回值</strong>；改写密文的函数可能解失败并保留原值。</li><li><b>SQL 解析</b>：显示占位符映射和加密字段。</li><li><b>参数加密</b>：替换字面量中的敏感值。</li></ul></section>
+                <section><h4>结果解释</h4><ul><li>只有 <code>?</code> 会产生占位符映射。</li><li>字面量无映射是正常的，配置字段仍应被识别。</li><li>各模式草稿独立保留。</li></ul></section>
+            </div>
+            <div class="help-example"><strong>最小示例</strong><code>UPDATE user SET phone = '13800138000' WHERE id = 1</code></div>
+            <p class="help-warning">参数加密只生成转换后的 SQL，不执行 INSERT 或 UPDATE；查询模式只允许 SELECT。</p>
+        </div>
+    </template>
+
+    <template id="help-template-config" data-title="配置信息使用说明">
+        <div class="help-content">
+            <p class="help-lead">展示当前应用运行时实际生效的加密、摘要、缓存和表字段规则。</p>
+            <div class="help-grid">
+                <section><h4>核对顺序</h4><ol><li>确认 enable 与 mode。</li><li>确认摘要策略和读取验签开关。</li><li>确认 SQL 缓存配置。</li><li>逐表检查字段策略与摘要规则。</li></ol></section>
+                <section><h4>常见定位</h4><ul><li>表缺失：检查 table-name 与数据源。</li><li>字段缺失：检查 field-name 大小写与配置层级。</li><li>策略异常：确认实现类可被应用加载。</li></ul></section>
+            </div>
+            <div class="help-example"><strong>最小示例</strong><code>SQL 未识别 phone → 在表配置中确认 user.phone 是否存在。</code></div>
+            <p class="help-warning">本页展示的是启动后配置快照；修改 application.yml 后通常需要重启应用。</p>
+        </div>
+    </template>
+
+    <script src="/monitor/js/app.js"></script>
+</body>
+</html>

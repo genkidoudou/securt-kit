@@ -2,8 +2,8 @@ package io.github.test;
 
 import com.baomidou.dynamic.datasource.annotation.DS;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import io.github.hexlodev.core.TableCache;
-import io.github.hexlodev.core.config.FieldEncryptorProperties;
+import io.github.genkidoudou.core.TableCache;
+import io.github.genkidoudou.core.config.FieldEncryptorProperties;
 import io.github.test.entity.UserEntity;
 import io.github.test.mapper.UserEntityMapper;
 import io.github.test.service.MultiDataSourceUserService;
@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 @SpringBootTest(classes = {
     io.github.test.service.MultiDataSourceUserService.class,
-    io.github.hexlodev.config.SecurtKitAutoConfiguration.class
+    io.github.genkidoudou.config.SecurtKitAutoConfiguration.class
 })
 @TestPropertySource(locations = "classpath:application-multi-datasource.yml")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -51,7 +51,7 @@ public class MultiDataSourceMyBatisPlusTest {
     @BeforeAll
     void setUp() throws ClassNotFoundException {
         // 加载拦截器驱动
-        Class.forName("io.github.hexlodev.core.interceptor.SimpleInterceptorDriver");
+        Class.forName("io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver");
 
         // 初始化多数据源加密配置（新配置方式：在 tables 中直接指定 datasource-id）
         FieldEncryptorProperties props = new FieldEncryptorProperties();

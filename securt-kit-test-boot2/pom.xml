@@ -3,11 +3,11 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <groupId>io.github.hexlodev</groupId>
+        <groupId>io.github.genkidoudou</groupId>
         <artifactId>securt-kit</artifactId>
         <version>1.0-SNAPSHOT</version>
     </parent>
-    <groupId>io.github.hexlodev.core</groupId>
+    <groupId>io.github.genkidoudou.core</groupId>
     <artifactId>securt-kit-test-boot2</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>securt-kit-test-boot2</name>
@@ -18,12 +18,27 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <spring-boot.version>2.7.18</spring-boot.version>
+        <maven.deploy.skip>true</maven.deploy.skip>
     </properties>
     <dependencies>
         <!-- add securt-kit-starter-boot2 dependency -->
         <dependency>
-            <groupId>io.github.hexlodev</groupId>
+            <groupId>io.github.genkidoudou</groupId>
             <artifactId>securt-kit-starter-boot2</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
+
+        <!-- 仅测试工程使用的演示页（不进入 starter） -->
+        <dependency>
+            <groupId>io.github.genkidoudou</groupId>
+            <artifactId>securt-kit-playground</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
+
+        <!-- MYBATIS 通道：mode=MYBATIS / QueryWrapper 集成测试需要 -->
+        <dependency>
+            <groupId>io.github.genkidoudou</groupId>
+            <artifactId>securt-kit-mybatis</artifactId>
             <version>1.0-SNAPSHOT</version>
         </dependency>
 
@@ -126,7 +141,7 @@
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <version>${spring-boot.version}</version>
                 <configuration>
-                    <mainClass>com.example.TestApplication</mainClass>
+                    <mainClass>com.example.TestApplication2</mainClass>
                 </configuration>
                 <executions>
                     <execution>

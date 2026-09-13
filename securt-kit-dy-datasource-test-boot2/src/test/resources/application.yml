@@ -15,8 +15,8 @@ spring:
       datasource:
         # 主数据源
         primary:
-          driver-class-name: io.github.hexlodev.core.interceptor.SimpleInterceptorDriver
-          url: 'jdbc:interceptor:h2:mem:primary_db;DB_CLOSE_DELAY=-1;MODE=MySQL'
+          driver-class-name: io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver
+          url: 'jdbc:interceptor:h2:mem:primary_db;DB_CLOSE_DELAY=-1;MODE=MySQL;datasource-id=primary'
           username: sa
           password:
           # 通过连接属性传递数据源标识（通用方式，适用于所有连接池）
@@ -26,8 +26,8 @@ spring:
             minimum-idle: 1
         # 从数据源
         secondary:
-          driver-class-name: io.github.hexlodev.core.interceptor.SimpleInterceptorDriver
-          url: 'jdbc:interceptor:h2:mem:secondary_db;DB_CLOSE_DELAY=-1;MODE=MySQL'
+          driver-class-name: io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver
+          url: 'jdbc:interceptor:h2:mem:secondary_db;DB_CLOSE_DELAY=-1;MODE=MySQL;datasource-id=secondary'
           username: sa
           password:
           # 通过连接属性传递数据源标识（通用方式，适用于所有连接池）
@@ -37,8 +37,8 @@ spring:
             minimum-idle: 1
         # 第三方数据源
         third:
-          driver-class-name: io.github.hexlodev.core.interceptor.SimpleInterceptorDriver
-          url: 'jdbc:interceptor:h2:mem:third_db;DB_CLOSE_DELAY=-1;MODE=MySQL'
+          driver-class-name: io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver
+          url: 'jdbc:interceptor:h2:mem:third_db;DB_CLOSE_DELAY=-1;MODE=MySQL;datasource-id=third'
           username: sa
           password:
           # 通过连接属性传递数据源标识（通用方式，适用于所有连接池）
@@ -65,7 +65,7 @@ logging:
   level:
     root: INFO
     io.github.test: DEBUG
-    io.github.hexlodev.core: DEBUG
+    io.github.genkidoudou.core: DEBUG
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
 
@@ -78,6 +78,14 @@ securtkit:
   encryptor:
     enable: true
     failure-policy: FALLBACK
+    digest-strategy: io.github.genkidoudou.core.strategy.HmacSha256DigestStrategy
+    digest-hmac-key: multi-ds-playground-test-secret
+    digest-partial-update: RELOAD
+    digest-verify-on-read: true
+    digest-failure-policy: FAIL_FAST
+    skip-comment:
+      enable: true
+      token: SECURT_SKIP
     sql-parse-cache:
       enable: true
       max-size: 1000
@@ -96,4 +104,57 @@ securtkit:
           - field-name: name
 
       # 第三方数据源不配置（等于关闭加密）
+      - table-name: digest_user
+        datasource-id: primary
+        fields:
+          - field-name: name
+          - field-name: phone
+        digest:
+          - source-fields: [phone]
+            target-field: row_digest
+      - table-name: digest_user
+        datasource-id: secondary
+        fields:
+          - field-name: name
+          - field-name: phone
+        digest:
+          - source-fields: [phone]
+            target-field: row_digest
+      - table-name: digest_user
+        datasource-id: third
+        fields:
+          - field-name: name
+          - field-name: phone
+        digest:
+          - source-fields: [phone]
+            target-field: row_digest
+      - table-name: playground_person
+        datasource-id: primary
+        fields:
+          - field-name: phone
+          - field-name: id_card
+        digest:
+          - source-fields: [phone, id_card]
+            target-field: row_digest
+      - table-name: playground_person
+        datasource-id: secondary
+        fields:
+          - field-name: phone
+          - field-name: id_card
+        digest:
+          - source-fields: [phone, id_card]
+            target-field: row_digest
+      - table-name: playground_person
+        datasource-id: third
+        fields:
+          - field-name: phone
+          - field-name: id_card
+        digest:
+          - source-fields: [phone, id_card]
+            target-field: row_digest
+  playground:
+    enabled: true
+    path: /playground
+    auth-enabled: false
+    allowed-tables: [user, order, digest_user, playground_person]
 

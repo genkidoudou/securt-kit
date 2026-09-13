@@ -3,11 +3,10 @@ spring:
   application:
     name: securt-kit-test
   
-  # 数据源配置
+  # 数据源配置（MYBATIS 模式禁止 jdbc:interceptor，避免双通道）
   datasource:
-#    driver-class-name: org.h2.Driver
-    driver-class-name: io.github.hexlodev.core.interceptor.SimpleInterceptorDriver
-    url: 'jdbc:interceptor:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=MySQL;INIT=CREATE SCHEMA IF NOT EXISTS TEST'
+    driver-class-name: org.h2.Driver
+    url: 'jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=MySQL;INIT=CREATE SCHEMA IF NOT EXISTS TEST'
     username: sa
     password:
     # H2 数据库配置
@@ -97,7 +96,7 @@ logging:
   level:
     root: INFO
     io.github.test: DEBUG
-    io.github.hexlodev.core: DEBUG
+    io.github.genkidoudou.core: DEBUG
     org.apache.ibatis: DEBUG
     com.baomidou.mybatisplus: DEBUG
   pattern:
@@ -111,19 +110,47 @@ server:
 # 加密测试
 securtkit:
   encryptor:
+    digest-strategy: io.github.genkidoudou.core.strategy.HmacSha256DigestStrategy
+    digest-hmac-key: boot3-digest-playground-secret
+    digest-partial-update: RELOAD
+    digest-verify-on-read: true
+    digest-failure-policy: FAIL_FAST
     tables:
       - table-name: user
         fields:
           - field-name: name
           - field-name: phone
+      - table-name: digest_user
+        fields:
+          - field-name: name
+          - field-name: phone
+        digest:
+          - source-fields: [phone]
+            target-field: row_digest
+      - table-name: playground_person
+        fields:
+          - field-name: phone
+          - field-name: id_card
+        digest:
+          - source-fields: [phone, id_card]
+            target-field: row_digest
       - table-name: orders
         fields:
           - field-name: customer_name
           - field-name: customer_phone
     enable: true
+    skip-comment:
+      enable: true
+      token: SECURT_SKIP
+    mode: mybatis
   monitor:
     enabled: true
     username: admin
     password: admin
     path: /monitor
+  playground:
+    enabled: true
+    path: /playground
+    auth-enabled: false
+    allowed-tables: [user, digest_user, orders, playground_person]
 

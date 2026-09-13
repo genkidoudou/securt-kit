@@ -1,6 +1,6 @@
 package io.github.test;
 
-import io.github.hexlodev.core.utils.TableNameParser;
+import io.github.genkidoudou.core.utils.TableNameParser;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;

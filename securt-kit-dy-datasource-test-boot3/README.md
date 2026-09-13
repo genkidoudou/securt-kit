@@ -18,7 +18,9 @@ cd securt-kit-dy-datasource-test-boot3
 mvn spring-boot:run
 ```
 
-## 配置说明
+启动后访问 Playground：`http://localhost:8081/playground/`。
+
+默认页面是 `playground_person` 人员维护台：业务/原始双视图 + CRUD。切换 primary / secondary / third 会重新检查所选数据源并刷新列表。
 
 配置方式与 Boot 2.7 版本完全相同，参考 [securt-kit-dy-datasource-test-boot2/README.md](../securt-kit-dy-datasource-test-boot2/README.md)。
 

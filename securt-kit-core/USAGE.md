@@ -8,7 +8,7 @@
 
 ```xml
 <dependency>
-    <groupId>io.github.hexlodev.core</groupId>
+    <groupId>io.github.genkidoudou.core</groupId>
     <artifactId>securt-kit-core</artifactId>
     <version>1.0-SNAPSHOT</version>
 </dependency>
@@ -27,7 +27,7 @@ Connection conn = DriverManager.getConnection(url, username, password);
 
 ```java
 HikariConfig config = new HikariConfig();
-config.setDriverClassName("io.github.hexlodev.core.interceptor.SimpleInterceptorDriver");
+config.setDriverClassName("io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver");
 config.setJdbcUrl("jdbc:interceptor:mysql://localhost:3306/testdb");
 HikariDataSource dataSource = new HikariDataSource(config);
 ```

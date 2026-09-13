@@ -15,7 +15,7 @@
 **Maven**:
 ```xml
 <dependency>
-    <groupId>io.github.hexlodev</groupId>
+    <groupId>io.github.genkidoudou</groupId>
     <artifactId>securt-kit-starter-boot2</artifactId>
     <version>1.0-SNAPSHOT</version>
 </dependency>
@@ -23,7 +23,7 @@
 
 **Gradle**:
 ```groovy
-implementation 'io.github.hexlodev:securt-kit-starter-boot2:1.0-SNAPSHOT'
+implementation 'io.github.genkidoudou:securt-kit-starter-boot2:1.0-SNAPSHOT'
 ```
 
 ### Spring Boot 3.x 项目
@@ -31,7 +31,7 @@ implementation 'io.github.hexlodev:securt-kit-starter-boot2:1.0-SNAPSHOT'
 **Maven**:
 ```xml
 <dependency>
-    <groupId>io.github.hexlodev</groupId>
+    <groupId>io.github.genkidoudou</groupId>
     <artifactId>securt-kit-starter-boot3</artifactId>
     <version>1.0-SNAPSHOT</version>
 </dependency>
@@ -39,34 +39,56 @@ implementation 'io.github.hexlodev:securt-kit-starter-boot2:1.0-SNAPSHOT'
 
 **Gradle**:
 ```groovy
-implementation 'io.github.hexlodev:securt-kit-starter-boot3:1.0-SNAPSHOT'
+implementation 'io.github.genkidoudou:securt-kit-starter-boot3:1.0-SNAPSHOT'
 ```
 
-## 步骤 2: 配置数据源
+## 步骤 2: 选择通道模式并配置数据源
 
-修改 `application.yml` 或 `application.properties`：
+`securtkit.encryptor.mode` 可选：`JDBC`（默认）| `MYBATIS` | `OFF`。  
+**同一数据源禁止 JDBC 与 MYBATIS 同时生效。**
 
-### YAML 配置
+### 模式 A：JDBC（默认）
+
+修改数据源驱动与 URL：
 
 ```yaml
 spring:
   datasource:
-    driver-class-name: io.github.hexlodev.core.interceptor.SimpleInterceptorDriver
+    driver-class-name: io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver
     url: jdbc:interceptor:mysql://localhost:3306/testdb
     username: root
     password: password
+
+securtkit:
+  encryptor:
+    enable: true
+    mode: JDBC
 ```
 
-### Properties 配置
+**重要**：JDBC 模式下 URL 必须使用 `jdbc:interceptor:` 前缀。
 
-```properties
-spring.datasource.driver-class-name=io.github.hexlodev.core.interceptor.SimpleInterceptorDriver
-spring.datasource.url=jdbc:interceptor:mysql://localhost:3306/testdb
-spring.datasource.username=root
-spring.datasource.password=password
+### 模式 B：MyBatis（无需改驱动）
+
+适用于以 MyBatis / MyBatis-Plus 为主、不想改连接池驱动的场景：
+
+```yaml
+spring:
+  datasource:
+    # 保持原驱动与 URL 即可，不要使用 jdbc:interceptor:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/testdb
+    username: root
+    password: password
+
+securtkit:
+  encryptor:
+    enable: true
+    mode: MYBATIS
 ```
 
-**重要**：URL 必须使用 `jdbc:interceptor:` 前缀！
+Starter 会自动注册 `EncryptInterceptor`（需 classpath 有 MyBatis；starter 已传递 `securt-kit-mybatis`）。
+
+详见 [MyBatis / JDBC 双模式设计](MYBATIS-MODE-DESIGN.md)。
 
 ## 步骤 3: 配置加密字段
 
@@ -76,6 +98,7 @@ spring.datasource.password=password
 securtkit:
   encryptor:
     enable: true
+    mode: JDBC   # 或 MYBATIS
     failure-policy: FALLBACK
     tables:
       - table-name: user
@@ -176,7 +199,7 @@ public class UserService {
 ```yaml
 spring:
   datasource:
-    driver-class-name: io.github.hexlodev.core.interceptor.SimpleInterceptorDriver
+    driver-class-name: io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver
     url: jdbc:interceptor:mysql://localhost:3306/testdb
     username: root
     password: password

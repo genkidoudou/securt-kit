@@ -1,8 +1,10 @@
 package com.example;
 
+import cn.hutool.extra.spring.SpringUtil;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Import;
 
 /**
  * Spring Boot 测试应用主类
@@ -12,7 +14,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  */
 @SpringBootApplication
 @MapperScan(basePackages = {"com.example.mapper"})
-
+@Import(SpringUtil.class)
 public class TestApplication2 {
 
     public static void main(String[] args) {

@@ -5,12 +5,15 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.github.hexlodev</groupId>
+        <groupId>io.github.genkidoudou</groupId>
         <artifactId>securt-kit</artifactId>
         <version>1.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>securt-kit-starter-boot2</artifactId>
+
+    <name>securt-kit-starter-boot2</name>
+    <description>Spring Boot 2.7 starter for Securt-Kit (auto-config + monitor servlet).</description>
 
     <properties>
         <maven.compiler.source>8</maven.compiler.source>
@@ -21,9 +24,31 @@
 
     <dependencies>
         <dependency>
-            <groupId>io.github.hexlodev.core</groupId>
+            <groupId>io.github.genkidoudou.core</groupId>
             <artifactId>securt-kit-core</artifactId>
             <version>${project.version}</version>
+        </dependency>
+
+        <!-- 共享监控 UI 内核（无 Servlet 依赖） -->
+        <dependency>
+            <groupId>io.github.genkidoudou</groupId>
+            <artifactId>securt-kit-monitor</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- MyBatis 通道（mode=MYBATIS 时使用；MyBatis 本身为 provided/业务引入） -->
+        <dependency>
+            <groupId>io.github.genkidoudou</groupId>
+            <artifactId>securt-kit-mybatis</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- 编译期可见 MyBatis Interceptor 接口（运行由业务提供） -->
+        <dependency>
+            <groupId>org.mybatis</groupId>
+            <artifactId>mybatis</artifactId>
+            <version>3.5.13</version>
+            <scope>provided</scope>
         </dependency>
 
         <dependency>
@@ -50,14 +75,7 @@
             <scope>provided</scope>
         </dependency>
 
-        <!-- javax validation (for Boot 2.7) -->
-        <dependency>
-            <groupId>javax.validation</groupId>
-            <artifactId>validation-api</artifactId>
-            <scope>provided</scope>
-        </dependency>
-
-        <!-- javax servlet (for Boot 2.7) -->
+        <!-- javax servlet (for Boot 2.7) - 仅薄 Servlet 适配层使用 -->
         <dependency>
             <groupId>javax.servlet</groupId>
             <artifactId>javax.servlet-api</artifactId>

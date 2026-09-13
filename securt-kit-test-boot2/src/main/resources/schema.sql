@@ -20,6 +20,16 @@ CREATE TABLE IF NOT EXISTS digest_user (
     row_digest VARCHAR(128)
 );
 
+-- Playground 人员维护演示表
+CREATE TABLE IF NOT EXISTS playground_person (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    phone VARCHAR(100),
+    id_card VARCHAR(100),
+    age INT,
+    row_digest VARCHAR(128)
+);
+
 -- 创建订单表
 CREATE TABLE IF NOT EXISTS orders (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,

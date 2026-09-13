@@ -1,6 +1,6 @@
 package io.github.test;
 
-import io.github.hexlodev.core.strategy.FieldEncryptorStrategy;
+import io.github.genkidoudou.core.strategy.FieldEncryptorStrategy;
 import org.springframework.stereotype.Component;
 
 /**
@@ -82,7 +82,7 @@ import org.springframework.stereotype.Component;
  * 
  * @author hexlodev
  * @since 1.1.0
- * @see io.github.hexlodev.core.strategy.FieldEncryptorStrategy
+ * @see io.github.genkidoudou.core.strategy.FieldEncryptorStrategy
  */
 @Component
 public class MyFieldEncryptorStrategy implements FieldEncryptorStrategy {

@@ -3,11 +3,11 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <groupId>io.github.hexlodev</groupId>
+        <groupId>io.github.genkidoudou</groupId>
         <artifactId>securt-kit</artifactId>
         <version>1.0-SNAPSHOT</version>
     </parent>
-    <groupId>io.github.hexlodev.core</groupId>
+    <groupId>io.github.genkidoudou.core</groupId>
     <artifactId>securt-kit-test-boot3</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>securt-kit-test-boot3</name>
@@ -19,12 +19,32 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <spring-boot.version>3.2.0</spring-boot.version>
         <!-- maven.test.skip 由父 POM 的 profile 统一控制，这里不设置 -->
+        <maven.deploy.skip>true</maven.deploy.skip>
     </properties>
     <dependencies>
+        <!-- Ensure Boot 3's SLF4J 2 API wins over classes embedded in the legacy shaded core jar. -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
         <!-- add securt-kit-starter-boot3 dependency -->
         <dependency>
-            <groupId>io.github.hexlodev</groupId>
+            <groupId>io.github.genkidoudou</groupId>
             <artifactId>securt-kit-starter-boot3</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
+
+        <!-- 仅测试工程使用的演示页（不进入 starter） -->
+        <dependency>
+            <groupId>io.github.genkidoudou</groupId>
+            <artifactId>securt-kit-playground</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
+
+        <!-- MYBATIS 通道：mode=MYBATIS / QueryWrapper 集成测试需要 -->
+        <dependency>
+            <groupId>io.github.genkidoudou</groupId>
+            <artifactId>securt-kit-mybatis</artifactId>
             <version>1.0-SNAPSHOT</version>
         </dependency>
 

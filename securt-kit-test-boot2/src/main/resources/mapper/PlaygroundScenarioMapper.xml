@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.mapper.PlaygroundScenarioMapper">
+
+  <select id="selectByPhoneTableAlias" resultType="map">
+    SELECT u.id, u.name, u.phone, u.age, u.email
+    FROM "user" u
+    WHERE u.phone = #{phone}
+    LIMIT 50
+  </select>
+
+  <select id="selectByPhoneColumnAlias" resultType="map">
+    SELECT id, name, phone AS mobile, age, email
+    FROM "user"
+    WHERE phone = #{phone}
+    LIMIT 50
+  </select>
+
+  <select id="selectJoinUserOrders" resultType="map">
+    SELECT
+      o.id AS orderId,
+      o.order_no AS orderNo,
+      o.customer_name AS customerName,
+      o.customer_phone AS customerPhone,
+      o.user_id AS userId,
+      u.name AS userName,
+      u.phone AS userPhone
+    FROM orders o
+    INNER JOIN "user" u ON o.user_id = u.id
+    <where>
+      <if test="userId != null">
+        AND o.user_id = #{userId}
+      </if>
+      <if test="phone != null and phone != ''">
+        AND u.phone = #{phone}
+      </if>
+    </where>
+    LIMIT 50
+  </select>
+
+  <select id="selectByPhoneLike" resultType="map">
+    SELECT id, name, phone, age, email
+    FROM "user"
+    WHERE phone LIKE #{pattern}
+    LIMIT 50
+  </select>
+
+  <select id="selectFuncOnCipher" resultType="map">
+    SELECT id, name, phone, age, email
+    FROM "user"
+    WHERE UPPER(phone) = UPPER(#{phone})
+    LIMIT 50
+  </select>
+
+</mapper>

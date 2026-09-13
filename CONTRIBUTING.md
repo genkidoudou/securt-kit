@@ -8,7 +8,7 @@
 
 如果你发现了 bug 或有功能建议，请：
 
-1. 检查 [Issues](https://github.com/hexlodev/securt-kit/issues) 中是否已有相关问题
+1. 检查 [Issues](https://github.com/genkidoudou/securt-kit/issues) 中是否已有相关问题
 2. 如果没有，创建新的 Issue，详细描述问题或建议
 
 ### 提交代码

@@ -1,8 +1,8 @@
 package io.github.test;
 
 import cn.hutool.db.ds.simple.SimpleDataSource;
-import io.github.hexlodev.core.TableCache;
-import io.github.hexlodev.core.config.FieldEncryptorProperties;
+import io.github.genkidoudou.core.TableCache;
+import io.github.genkidoudou.core.config.FieldEncryptorProperties;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -42,7 +42,7 @@ public class InterceptorSqlOperationTest {
     void setUp() {
         // 加载拦截器驱动
         try {
-            Class.forName("io.github.hexlodev.core.interceptor.SimpleInterceptorDriver");
+            Class.forName("io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver");
         } catch (ClassNotFoundException e) {
             throw new RuntimeException("Failed to load SimpleInterceptorDriver", e);
         }
@@ -567,7 +567,7 @@ public class InterceptorSqlOperationTest {
     }
 
     private DataSource getDataSource() throws SQLException {
-        return new SimpleDataSource(DB_URL, "sa", "", "io.github.hexlodev.core.interceptor.SimpleInterceptorDriver");
+        return new SimpleDataSource(DB_URL, "sa", "", "io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver");
     }
 }
 

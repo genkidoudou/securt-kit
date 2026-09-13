@@ -1,6 +1,6 @@
 # 字段完整性摘要（Digest）设计方案
 
-> 状态：**已实现 P0/P1**（P2 边界增强持续进行；实现计划：`docs/superpowers/plans/2026-09-05-field-digest-integrity.md`）  
+> 状态：**已实现**（P0/P1 + Boot2 IT / USAGE；OpenSpec change：`docs/openspec/changes/field-digest-integrity`）  
 > 版本：v1.0  
 > 日期：2026-09-05  
 > 目的：在配置字段加密的同时，对指定源字段的明文计算完整性摘要并落库，可选在读取时验签，用于检测库侧篡改。
@@ -61,7 +61,7 @@
 securtkit:
   encryptor:
     # 全局摘要默认（均可被表级 digest 项覆盖）
-    digest-strategy: io.github.hexlodev.core.strategy.HmacSha256DigestStrategy  # 示例类名，实现阶段定名
+    digest-strategy: io.github.genkidoudou.core.strategy.HmacSha256DigestStrategy  # 示例类名，实现阶段定名
     digest-partial-update: RELOAD   # SKIP | RELOAD | FAIL
     digest-verify-on-read: false
     # 可选：验签失败策略；未配则沿用 failure-policy

@@ -31,7 +31,7 @@
 //    @Primary
 //    public DataSource primaryDataSource() {
 //        HikariDataSource dataSource = new HikariDataSource();
-//        dataSource.setDriverClassName("io.github.hexlodev.core.interceptor.SimpleInterceptorDriver");
+//        dataSource.setDriverClassName("io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver");
 //        // 注意：URL 中包含 datasource-id 参数
 //        dataSource.setJdbcUrl("jdbc:interceptor:h2:mem:primary_db;DB_CLOSE_DELAY=-1;MODE=MySQL?datasource-id=primary");
 //        dataSource.setUsername("sa");
@@ -48,7 +48,7 @@
 //    @Bean("secondaryDataSource")
 //    public DataSource secondaryDataSource() {
 //        HikariDataSource dataSource = new HikariDataSource();
-//        dataSource.setDriverClassName("io.github.hexlodev.core.interceptor.SimpleInterceptorDriver");
+//        dataSource.setDriverClassName("io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver");
 //        // 注意：URL 中包含 datasource-id 参数
 //        dataSource.setJdbcUrl("jdbc:interceptor:h2:mem:secondary_db;DB_CLOSE_DELAY=-1;MODE=MySQL?datasource-id=secondary");
 //        dataSource.setUsername("sa");
@@ -65,7 +65,7 @@
 //    @Bean("thirdDataSource")
 //    public DataSource thirdDataSource() {
 //        HikariDataSource dataSource = new HikariDataSource();
-//        dataSource.setDriverClassName("io.github.hexlodev.core.interceptor.SimpleInterceptorDriver");
+//        dataSource.setDriverClassName("io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver");
 //        // 注意：URL 中包含 datasource-id 参数
 //        dataSource.setJdbcUrl("jdbc:interceptor:h2:mem:third_db;DB_CLOSE_DELAY=-1;MODE=MySQL?datasource-id=third");
 //        dataSource.setUsername("sa");

@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Securt-Kit Playground</title>
+    <link rel="stylesheet" href="/playground/css/style.css">
+</head>
+<body>
+<div id="loginPage" class="page" hidden>
+    <div class="login-container">
+        <h1>Playground 登录</h1>
+        <form id="loginForm" class="login-form">
+            <div class="form-group"><label for="username">用户名</label><input type="text" id="username" required></div>
+            <div class="form-group"><label for="password">密码</label><input type="password" id="password" required></div>
+            <div id="loginError" class="error-message"></div>
+            <button type="submit" class="btn btn-primary">登录</button>
+        </form>
+    </div>
+</div>
+
+<div id="mainPage" class="page">
+    <header class="header">
+        <div>
+            <p class="eyebrow">SECURT-KIT PLAYGROUND</p>
+            <h1 id="pageTitle">人员维护</h1>
+        </div>
+        <div class="header-actions">
+            <label class="ds-label">数据源 <select id="datasourceSelect"></select></label>
+            <a class="btn btn-link" id="monitorLink" href="/monitor/" target="_blank" rel="noopener">打开 Monitor</a>
+            <button id="logoutBtn" class="btn btn-secondary" hidden>退出</button>
+        </div>
+    </header>
+
+    <nav class="main-tabs" role="tablist" aria-label="Playground 主功能">
+        <button type="button" class="main-tab active" data-tab="person" id="tabPerson" role="tab" aria-selected="true">人员维护</button>
+        <button type="button" class="main-tab" data-tab="scenarios" id="tabScenarios" role="tab" aria-selected="false">复杂查询</button>
+    </nav>
+
+    <main class="container">
+        <section id="personPanel" class="tab-panel" data-panel="person">
+            <section id="preflightBanner" class="preflight-banner" aria-live="polite">
+                <strong id="preflightTitle">正在检查人员表配置…</strong>
+                <span id="preflightSummary"></span>
+                <details><summary>查看检查项</summary><ul id="preflightChecks"></ul></details>
+            </section>
+
+            <section class="toolbar-card">
+                <div class="view-toggle" role="group" aria-label="列表视图">
+                    <button type="button" class="view-btn active" data-view="business">业务视图</button>
+                    <button type="button" class="view-btn" data-view="raw">原始视图</button>
+                </div>
+                <button type="button" id="createBtn" class="btn btn-primary">新增</button>
+            </section>
+
+            <section class="filter-card">
+                <form id="filterForm" class="filter-grid">
+                    <div class="form-group"><label for="filterName">姓名</label><input id="filterName" placeholder="精确匹配"></div>
+                    <div class="form-group"><label for="filterPhone">手机号</label><input id="filterPhone" placeholder="明文精确匹配"></div>
+                    <div class="form-group"><label for="filterIdCard">身份证号</label><input id="filterIdCard" placeholder="明文精确匹配"></div>
+                    <div class="filter-actions">
+                        <button type="submit" class="btn btn-primary">查询</button>
+                        <button type="button" id="resetFilterBtn" class="btn btn-secondary">重置</button>
+                    </div>
+                </form>
+                <p id="viewHint" class="hint">业务视图：敏感字段已解密。原始视图：库内密文，不可编辑删除。</p>
+            </section>
+
+            <section class="table-card">
+                <div id="tableMessage" class="table-message" hidden></div>
+                <div class="table-wrap">
+                    <table id="personTable">
+                        <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>姓名</th>
+                            <th>手机号</th>
+                            <th>身份证号</th>
+                            <th>年龄</th>
+                            <th>摘要</th>
+                            <th>操作</th>
+                        </tr>
+                        </thead>
+                        <tbody id="personTableBody">
+                        <tr><td colspan="7" class="empty">暂无数据</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </section>
+
+        <section id="scenariosPanel" class="tab-panel" data-panel="scenarios" hidden>
+            <section class="seed-preview-card" id="seedPreviewCard" aria-label="演示数据">
+                <div class="seed-preview-header">
+                    <h2>演示数据</h2>
+                    <button type="button" id="refreshSeedPreviewBtn" class="btn btn-secondary">刷新预览</button>
+                </div>
+                <p id="seedEncryptNote" class="hint">加载 user / orders 预览…</p>
+                <div class="seed-preview-grid">
+                    <div class="seed-table-panel">
+                        <h3>user</h3>
+                        <div id="userPreviewTable" class="seed-table-wrap" aria-live="polite"></div>
+                    </div>
+                    <div class="seed-table-panel">
+                        <h3>orders</h3>
+                        <div id="ordersPreviewTable" class="seed-table-wrap" aria-live="polite"></div>
+                    </div>
+                </div>
+            </section>
+            <div class="scenario-layout">
+                <aside class="scenario-list-card">
+                    <h2>场景列表</h2>
+                    <ul id="scenarioList" class="scenario-list"></ul>
+                    <p id="scenarioCatalogHint" class="hint">加载场景目录…</p>
+                </aside>
+                <div class="scenario-main">
+                    <section class="scenario-run-card">
+                        <h2 id="scenarioTitle">选择场景</h2>
+                        <p id="scenarioDesc" class="hint">从左侧选择一个固定场景。</p>
+                        <p id="scenarioSampleHint" class="hint" hidden></p>
+                        <form id="scenarioForm" class="filter-grid">
+                            <div id="scenarioParams"></div>
+                            <div class="filter-actions">
+                                <button type="submit" id="runScenarioBtn" class="btn btn-primary" disabled>运行场景</button>
+                            </div>
+                        </form>
+                        <div class="sql-workbench">
+                            <label for="scenarioSqlEditor">只读 SELECT（可编辑）</label>
+                            <textarea id="scenarioSqlEditor" rows="6" spellcheck="false"
+                                      placeholder="选择场景后载入示例 SQL，或自行编写单条 SELECT"></textarea>
+                            <div class="sql-workbench-actions">
+                                <button type="button" id="loadPlainSqlBtn" class="btn btn-secondary">明文示例</button>
+                                <button type="button" id="loadCipherSqlBtn" class="btn btn-secondary">密文示例</button>
+                                <label class="checkbox-inline">
+                                    <input type="checkbox" id="useSkipCheckbox"> 使用 SECURT_SKIP
+                                </label>
+                                <button type="button" id="runSqlBtn" class="btn btn-primary">执行 SQL</button>
+                            </div>
+                            <p id="sqlRunBypassHint" class="hint">
+                                「执行 SQL」为旁路工具：MYBATIS 下明文字面量不会自动加密，通常无法命中密文列。
+                                加密列匹配请用「运行场景」，或勾选 SECURT_SKIP 并加载「密文示例」。
+                            </p>
+                        </div>
+                        <p id="scenarioRunMessage" class="table-message" hidden></p>
+                    </section>
+                    <section class="evidence-panels" id="scenarioEvidencePanels" aria-label="三栏结果">
+                        <article class="evidence-panel" id="plainPanel">
+                            <h3>明文结果</h3>
+                            <pre id="plainRowsOut" class="evidence-pre">—</pre>
+                        </article>
+                        <article class="evidence-panel" id="cipherPanel">
+                            <h3>密文结果</h3>
+                            <pre id="cipherRowsOut" class="evidence-pre">—</pre>
+                        </article>
+                        <article class="evidence-panel" id="sqlMetaPanel">
+                            <h3>SQL / 说明</h3>
+                            <pre id="sqlMetaOut" class="evidence-pre">—</pre>
+                        </article>
+                    </section>
+                </div>
+            </div>
+        </section>
+    </main>
+</div>
+
+<dialog id="personDialog">
+    <form id="personForm" method="dialog" class="dialog-form">
+        <h2 id="dialogTitle">新增人员</h2>
+        <input type="hidden" id="editId">
+        <div class="form-grid">
+            <div class="form-group"><label for="formName">姓名</label><input id="formName" required></div>
+            <div class="form-group"><label for="formPhone">手机号（加密）</label><input id="formPhone" required></div>
+            <div class="form-group"><label for="formIdCard">身份证号（加密）</label><input id="formIdCard" required></div>
+            <div class="form-group"><label for="formAge">年龄</label><input id="formAge" type="number" min="0"></div>
+        </div>
+        <p id="formError" class="error-message"></p>
+        <div class="dialog-actions">
+            <button type="button" id="cancelDialogBtn" class="btn btn-secondary" value="cancel">取消</button>
+            <button type="submit" class="btn btn-primary">保存</button>
+        </div>
+    </form>
+</dialog>
+
+<script src="/playground/js/app.js"></script>
+</body>
+</html>

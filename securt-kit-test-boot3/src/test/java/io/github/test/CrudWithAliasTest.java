@@ -1,7 +1,7 @@
 package io.github.test;
 
-import io.github.hexlodev.core.TableCache;
-import io.github.hexlodev.core.config.FieldEncryptorProperties;
+import io.github.genkidoudou.core.TableCache;
+import io.github.genkidoudou.core.config.FieldEncryptorProperties;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,7 +43,7 @@ public class CrudWithAliasTest {
     void setUp() {
         // 加载拦截器驱动
         try {
-            Class.forName("io.github.hexlodev.core.interceptor.SimpleInterceptorDriver");
+            Class.forName("io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver");
         } catch (ClassNotFoundException e) {
             throw new RuntimeException("Failed to load SimpleInterceptorDriver", e);
         }

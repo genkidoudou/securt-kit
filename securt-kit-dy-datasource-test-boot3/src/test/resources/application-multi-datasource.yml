@@ -15,7 +15,7 @@ spring:
       datasource:
         # 主数据源
         primary:
-          driver-class-name: io.github.hexlodev.core.interceptor.SimpleInterceptorDriver
+          driver-class-name: io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver
           # 通过 URL 参数传递数据源标识（通用方式，适用于所有连接池）
           # 注意：H2 数据库使用 ; 作为参数分隔符，MySQL 等使用 ? 或 &
           url: 'jdbc:interceptor:h2:mem:primary_db;DB_CLOSE_DELAY=-1;MODE=MySQL;datasource-id=primary'
@@ -26,7 +26,7 @@ spring:
             minimum-idle: 1
         # 从数据源
         secondary:
-          driver-class-name: io.github.hexlodev.core.interceptor.SimpleInterceptorDriver
+          driver-class-name: io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver
           # 通过 URL 参数传递数据源标识（通用方式，适用于所有连接池）
           url: 'jdbc:interceptor:h2:mem:secondary_db;DB_CLOSE_DELAY=-1;MODE=MySQL;datasource-id=secondary'
           username: sa
@@ -36,7 +36,7 @@ spring:
             minimum-idle: 1
         # 第三方数据源
         third:
-          driver-class-name: io.github.hexlodev.core.interceptor.SimpleInterceptorDriver
+          driver-class-name: io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver
           # 通过 URL 参数传递数据源标识（通用方式，适用于所有连接池）
           url: 'jdbc:interceptor:h2:mem:third_db;DB_CLOSE_DELAY=-1;MODE=MySQL;datasource-id=third'
           username: sa
@@ -63,7 +63,7 @@ logging:
   level:
     root: INFO
     io.github.test: DEBUG
-    io.github.hexlodev.core: DEBUG
+    io.github.genkidoudou.core: DEBUG
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
 

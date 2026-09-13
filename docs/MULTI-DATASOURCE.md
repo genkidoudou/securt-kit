@@ -17,10 +17,10 @@ spring:
       primary: primary
       datasource:
         primary:
-          driver-class-name: io.github.hexlodev.core.interceptor.SimpleInterceptorDriver
+          driver-class-name: io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver
           url: jdbc:interceptor:h2:mem:primary_db;datasource-id=primary
         secondary:
-          driver-class-name: io.github.hexlodev.core.interceptor.SimpleInterceptorDriver
+          driver-class-name: io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver
           url: jdbc:interceptor:h2:mem:secondary_db;datasource-id=secondary
 ```
 
