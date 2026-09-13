@@ -151,7 +151,8 @@ jobs:
       - name: Set release version in POMs
         run: |
           set -euo pipefail
-          mvn -B versions:set \
+          # -Prelease 会把 securt-kit-starter-boot3 纳入 reactor
+          mvn -B -Prelease versions:set \
             -DnewVersion="${{ steps.ver.outputs.release }}" \
             -DgenerateBackupPoms=false \
             -DprocessAllModules=true
@@ -196,7 +197,7 @@ jobs:
         if: ${{ inputs.dry_run }}
         run: |
           set -euo pipefail
-          mvn -B -DskipTests clean package \
+          mvn -B -Prelease -DskipTests clean package \
             -pl securt-kit-core,securt-kit-monitor,securt-kit-mybatis,securt-kit-starter-boot2,securt-kit-starter-boot3 \
             -am
 
@@ -217,7 +218,7 @@ jobs:
 
           git tag -a "v${RELEASE}" -m "Release v${RELEASE}"
 
-          mvn -B versions:set \
+          mvn -B -Prelease versions:set \
             -DnewVersion="${NEXT}" \
             -DgenerateBackupPoms=false \
             -DprocessAllModules=true

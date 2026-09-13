@@ -136,6 +136,10 @@
                 <gpg.skip>false</gpg.skip>
                 <maven.test.skip>true</maven.test.skip>
             </properties>
+            <!-- Boot3 starter 默认不在 reactor；发布时必须纳入，否则 -pl 报找不到 -->
+            <modules>
+                <module>securt-kit-starter-boot3</module>
+            </modules>
             <build>
                 <plugins>
                     <plugin>
