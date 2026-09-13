@@ -1,2 +1,0 @@
-org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
-com.chu7.securtkit.encrypt.config.EncryptAutoConfiguration

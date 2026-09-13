@@ -2,13 +2,13 @@ spring:
   datasource:
     url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
     username: sa
-    password: 
+    password:
     driver-class-name: org.h2.Driver
-  
+
   h2:
     console:
       enabled: true
-  
+
   sql:
     init:
       schema-locations: classpath:db/schema.sql
@@ -21,15 +21,8 @@ securt-kit:
     algorithm: AES
     key: test-secret-key-16-chars
     patternType: DB
-    fields:
-      user:
-        - phone
-        - email
-        - id_card
-    scanEntityPackages:
-      - com.chu7.securtkit.encrypt.entity
 
 logging:
   level:
-    com.chu7.securtkit.encrypt: DEBUG
+    io.github.genkidoudou: DEBUG
     org.apache.ibatis: DEBUG
