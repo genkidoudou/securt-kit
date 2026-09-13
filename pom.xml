@@ -79,6 +79,10 @@
         <jakarta-servlet.version>6.0.0</jakarta-servlet.version>
         <central-publishing-maven-plugin.version>0.10.0</central-publishing-maven-plugin.version>
         <gpg.skip>true</gpg.skip>
+        <!-- CI 可传 -Dcentral.autoPublish=true；本地默认 Portal 手动 Publish -->
+        <central.autoPublish>false</central.autoPublish>
+        <!-- validated | published | uploaded；autoPublish=false 时用 validated -->
+        <central.waitUntil>validated</central.waitUntil>
     </properties>
 
     <profiles>
@@ -141,8 +145,9 @@
                         <extensions>true</extensions>
                         <configuration>
                             <publishingServerId>central</publishingServerId>
-                            <!-- 首次建议 false：Portal 校验通过后再手动 Publish -->
-                            <autoPublish>false</autoPublish>
+                            <!-- 本地默认 false；CI：-Dcentral.autoPublish=true -->
+                            <autoPublish>${central.autoPublish}</autoPublish>
+                            <waitUntil>${central.waitUntil}</waitUntil>
                         </configuration>
                     </plugin>
                     <plugin>

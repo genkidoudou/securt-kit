@@ -1,0 +1,54 @@
+name: Cleanup excluded paths
+
+# 与 .gitattributes 对齐：push 到 main/master 后强制删除这些路径并回推。
+# 会删除已跟踪的 docs/、.cursor/、.superpowers/、skills-lock.json。
+# 用户手册在 doc/（sync-wiki），不受影响。
+# 仅 GitHub Actions；推 Gitee 不会跑。
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - "docs/**"
+      - ".cursor/**"
+      - ".superpowers/**"
+      - "skills-lock.json"
+  workflow_dispatch:
+
+concurrency:
+  group: cleanup-excluded-paths-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.head_commit.message || '', '[skip ci]') }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Remove excluded paths and push
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          for path in docs .cursor .superpowers skills-lock.json; do
+            git rm -rf --ignore-unmatch -- "$path" || true
+            rm -rf -- "$path"
+          done
+
+          if git diff --cached --quiet && [ -z "$(git status --porcelain)" ]; then
+            echo "无需清理，跳过。"
+            exit 0
+          fi
+
+          git add -A
+          git commit -m "chore: drop docs/.cursor/.superpowers after push [skip ci]"
+          git push
