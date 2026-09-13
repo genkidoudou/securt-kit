@@ -1,0 +1,13 @@
+
+# 数据源配置
+spring:
+  datasource:
+    driver-class-name: io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver
+    url: 'jdbc:interceptor:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=MySQL;INIT=CREATE SCHEMA IF NOT EXISTS TEST'
+    username: sa
+    password:
+
+# 加密测试
+securtkit:
+  encryptor:
+    mode: JDBC

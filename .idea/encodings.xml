@@ -1,12 +1,36 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="Encoding">
+    <file url="file://$APPLICATION_HOME_DIR$/jbr/bin/src/main/java" charset="UTF-8" />
+    <file url="file://$APPLICATION_HOME_DIR$/jbr/bin/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/securt-kit-core/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/securt-kit-core/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/securt-kit-dy-datasource-test-boot2/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/securt-kit-dy-datasource-test-boot2/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/securt-kit-dy-datasource-test-boot3/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/securt-kit-dy-datasource-test-boot3/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/securt-kit-dy-datasource-test/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/securt-kit-dy-datasource-test/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/securt-kit-monitor/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/securt-kit-monitor/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/securt-kit-mybatis/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/securt-kit-mybatis/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/securt-kit-playground/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/securt-kit-playground/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/securt-kit-starter-boot2/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/securt-kit-starter-boot2/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/securt-kit-starter-boot3/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/securt-kit-starter-boot3/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/securt-kit-starter/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/securt-kit-starter/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/securt-kit-test-boot2/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/securt-kit-test-boot2/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/securt-kit-test-boot3/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/securt-kit-test-boot3/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/securt-kit-test/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/securt-kit-test/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/securt-kit-ui/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/securt-kit-ui/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/src/main/resources" charset="UTF-8" />
   </component>

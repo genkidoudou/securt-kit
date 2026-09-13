@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>方案 3 · 多 Tab 视觉翻新</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Manrope:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #f7f4ef;
+      --ink: #1e2430;
+      --muted: #667085;
+      --line: #e4ddd2;
+      --card: #fffdf9;
+      --accent: #c45c26;
+      --accent2: #2f6f6a;
+      --header: #243038;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Manrope", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(700px 280px at 0% 0%, #f0e2d2, transparent 60%),
+        var(--bg);
+      min-height: 100vh;
+    }
+    .mock-bar {
+      display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+      padding: 8px 16px; background: #1a2228; color: #d7dde3; font-size: 13px;
+    }
+    .mock-bar a { color: #f0b27a; }
+    .top {
+      background: linear-gradient(120deg, var(--header), #33424c);
+      color: #f4f7fa;
+      padding: 20px 22px 0;
+    }
+    .top-row {
+      display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .top h1 {
+      font-family: "Space Grotesk", sans-serif;
+      margin: 0;
+      font-size: 1.35rem;
+      letter-spacing: -0.02em;
+    }
+    .top p { margin: 4px 0 0; color: #b7c2cb; font-size: 13px; }
+    .tabs {
+      display: flex; gap: 4px; overflow-x: auto; padding-bottom: 0;
+    }
+    .tab {
+      border: 0; background: transparent; color: #9eacb7;
+      font: inherit; font-weight: 600; padding: 12px 14px; cursor: pointer;
+      border-bottom: 2px solid transparent; white-space: nowrap;
+    }
+    .tab.on { color: #fff; border-bottom-color: var(--accent); }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 20px 18px 56px; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .cards {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 14px;
+    }
+    @media (max-width: 800px) { .cards { grid-template-columns: 1fr; } }
+    .card {
+      background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px;
+    }
+    .card h3 {
+      margin: 0 0 6px; font-family: "Space Grotesk", sans-serif; font-size: 1rem;
+    }
+    .card p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
+    .card button {
+      margin-top: 12px; border: 0; background: var(--accent2); color: #fff;
+      border-radius: 8px; padding: 8px 12px; font: inherit; font-weight: 600; cursor: pointer;
+    }
+    label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+    input, textarea, select {
+      width: 100%; border: 1px solid var(--line); border-radius: 10px;
+      padding: 10px 12px; font: inherit; background: #fff;
+    }
+    textarea { min-height: 100px; font-family: "JetBrains Mono", monospace; font-size: 12.5px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 700px) { .row { grid-template-columns: 1fr; } }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    .btn {
+      border: 0; border-radius: 8px; padding: 9px 14px; font: inherit; font-weight: 600; cursor: pointer;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-ghost { background: #efe8de; color: var(--ink); }
+    .note {
+      margin-top: 14px; padding: 12px 14px; border-radius: 10px;
+      background: #fff4e8; border: 1px solid #f0d7bd; color: #7a4a20; font-size: 13px;
+    }
+    .mono {
+      margin-top: 12px; background: #1d262c; color: #dce7e4; border-radius: 10px;
+      padding: 12px; font-family: "JetBrains Mono", monospace; font-size: 12px; white-space: pre-wrap;
+    }
+    .pillrow { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .pill {
+      border: 1px solid var(--line); background: #fff; border-radius: 999px;
+      padding: 6px 12px; font-size: 13px; cursor: pointer; color: var(--muted);
+    }
+    .pill.on { border-color: var(--accent2); color: var(--accent2); background: #e7f3f1; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="mock-bar">
+    <span>方案 3 · 多 Tab 视觉翻新（静态线框）</span>
+    <span><a href="./index.html">← 返回对比页</a> · <a href="./approach-1-sidebar.html">方案 1</a> · <a href="./approach-2-wizard.html">方案 2</a></span>
+  </div>
+
+  <div class="top">
+    <div class="top-row">
+      <div>
+        <h1>Securt-Kit 加密解密工具</h1>
+        <p>在现有 Tab 结构上做视觉翻新，并加一个工作台首屏；信息架构变化最小。</p>
+      </div>
+      <button class="btn btn-ghost" style="background:#3a4a54;color:#fff;">退出</button>
+    </div>
+    <div class="tabs">
+      <button class="tab on" data-panel="home">工作台</button>
+      <button class="tab" data-panel="crypto">加密解密</button>
+      <button class="tab" data-panel="row">单行验签</button>
+      <button class="tab" data-panel="batch">刷数作业</button>
+      <button class="tab" data-panel="sql">SQL</button>
+      <button class="tab" data-panel="init">数据初始化</button>
+      <button class="tab" data-panel="config">配置信息</button>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <section class="panel active" id="home">
+      <div class="cards">
+        <div class="card">
+          <h3>SQL 对照</h3>
+          <p>密文 / 明文双视图，适合排查字段是否加密正确。</p>
+          <button data-jump="sql">打开 SQL</button>
+        </div>
+        <div class="card">
+          <h3>刷数预览</h3>
+          <p>表 + WHERE → 预览 → 确认回写。</p>
+          <button data-jump="batch">打开刷数</button>
+        </div>
+        <div class="card">
+          <h3>配置快览</h3>
+          <p>mode / digest / 策略一眼确认。</p>
+          <button data-jump="config">打开配置</button>
+        </div>
+      </div>
+      <div class="note">方案 3 的核心：看起来更现代，但仍是一排 Tab。SQL 三个旧页合并成一个 Tab 内的小切换。</div>
+    </section>
+
+    <section class="panel" id="crypto">
+      <div class="card">
+        <div class="row">
+          <div>
+            <label>输入</label>
+            <textarea>13800138000</textarea>
+          </div>
+          <div>
+            <label>输出</label>
+            <textarea readonly>ENC(91c0…)</textarea>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary">加密</button>
+          <button class="btn btn-ghost">解密</button>
+          <button class="btn btn-ghost">签名</button>
+          <button class="btn btn-ghost">验签</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="row">
+      <div class="card">
+        <div class="row">
+          <div><label>表</label><input value="digest_user" /></div>
+          <div><label>id</label><input value="12" /></div>
+        </div>
+        <div class="actions"><button class="btn btn-primary">验签</button></div>
+        <div class="mono">MATCH · phone, email</div>
+      </div>
+    </section>
+
+    <section class="panel" id="batch">
+      <div class="card">
+        <div class="row">
+          <div><label>表</label><select><option>user</option></select></div>
+          <div><label>操作</label><select><option>批量加密</option></select></div>
+        </div>
+        <div style="margin-top:12px;"><label>WHERE</label><input value="id &lt; 100" /></div>
+        <div class="actions">
+          <button class="btn btn-primary">预览</button>
+          <button class="btn btn-ghost">确认回写</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="sql">
+      <div class="pillrow">
+        <span class="pill on">查询双视图</span>
+        <span class="pill">解析</span>
+        <span class="pill">参数加密</span>
+      </div>
+      <div class="card">
+        <label>SQL</label>
+        <textarea>SELECT id, name, phone FROM user WHERE id = 1</textarea>
+        <div class="actions"><button class="btn btn-primary">执行</button></div>
+        <div class="row" style="margin-top:12px;">
+          <div class="mono">cipher rows…</div>
+          <div class="mono">plain rows…</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="init">
+      <div class="card">
+        <h3>数据初始化</h3>
+        <p style="color:var(--muted);font-size:14px;">与现网能力一致，只是样式更新。</p>
+        <div class="actions"><button class="btn btn-primary">初始化</button></div>
+      </div>
+    </section>
+
+    <section class="panel" id="config">
+      <div class="card">
+        <div class="mono">mode=JDBC
+tables=user,order
+digest=digest_user</div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    function show(id) {
+      document.querySelectorAll(".panel").forEach(function (p) { p.classList.toggle("active", p.id === id); });
+      document.querySelectorAll(".tab").forEach(function (t) { t.classList.toggle("on", t.getAttribute("data-panel") === id); });
+    }
+    document.querySelectorAll(".tab").forEach(function (tab) {
+      tab.addEventListener("click", function () { show(tab.getAttribute("data-panel")); });
+    });
+    document.querySelectorAll("[data-jump]").forEach(function (btn) {
+      btn.addEventListener("click", function () { show(btn.getAttribute("data-jump")); });
+    });
+    document.querySelectorAll(".pill").forEach(function (pill) {
+      pill.addEventListener("click", function () {
+        pill.parentElement.querySelectorAll(".pill").forEach(function (p) { p.classList.remove("on"); });
+        pill.classList.add("on");
+      });
+    });
+  </script>
+</body>
+</html>

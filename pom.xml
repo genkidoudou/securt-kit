@@ -4,28 +4,253 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.chu7.securtkit</groupId>
+    <groupId>io.github.genkidoudou</groupId>
     <artifactId>securt-kit</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
+
+    <name>Securt-Kit</name>
+    <description>
+        Field-level encryption toolkit for JDBC / MyBatis (Spring Boot 2.7 and 3.x).
+        Transparent encrypt/decrypt, LIKE handling, and optional field digest integrity.
+    </description>
+    <url>https://github.com/genkidoudou/securt-kit</url>
+    <inceptionYear>2024</inceptionYear>
+
+    <licenses>
+        <license>
+            <name>The Apache Software License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>genkidoudou</id>
+            <name>genkidoudou</name>
+            <url>https://github.com/genkidoudou</url>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:https://github.com/genkidoudou/securt-kit.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/genkidoudou/securt-kit.git</developerConnection>
+        <url>https://github.com/genkidoudou/securt-kit</url>
+        <tag>HEAD</tag>
+    </scm>
+
+    <issueManagement>
+        <system>GitHub</system>
+        <url>https://github.com/genkidoudou/securt-kit/issues</url>
+    </issueManagement>
+
+    <!-- 默认只包含 Boot 2.7 模块（Java 8 环境） -->
+    <!-- Boot 3 模块需要使用 -pl 参数单独构建（需要 Java 17+） -->
     <modules>
         <module>securt-kit-core</module>
-        <module>securt-kit-starter</module>
-        <module>securt-kit-test</module>
+        <module>securt-kit-monitor</module>
+        <module>securt-kit-playground</module>
+        <module>securt-kit-mybatis</module>
+        <module>securt-kit-starter-boot2</module>
+        <module>securt-kit-test-boot2</module>
+        <module>securt-kit-dy-datasource-test-boot2</module>
+        <!-- Boot 3 模块不包含在默认 modules 中，需要使用 -pl 参数构建 -->
+<!--         <module>securt-kit-starter-boot3</module>-->
+<!--         <module>securt-kit-test-boot3</module>-->
+<!--         <module>securt-kit-dy-datasource-test-boot3</module>-->
     </modules>
 
     <properties>
         <maven.compiler.source>8</maven.compiler.source>
         <maven.compiler.target>8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <spring-boot.version>2.7.18</spring-boot.version>
-        <mybatis.version>3.5.13</mybatis.version>
-        <mybatis-plus.version>3.5.3.1</mybatis-plus.version>
-        <jsqlparser.version>4.5</jsqlparser.version>
+        <spring-boot-2.version>2.7.18</spring-boot-2.version>
+        <spring-boot-3.version>3.2.0</spring-boot-3.version>
+        <spring-boot.version>${spring-boot-2.version}</spring-boot.version>
+        <java.version>8</java.version>
+        <java.version.boot3>17</java.version.boot3>
+        <jsqlparser.version>4.9</jsqlparser.version>
         <hutool.version>5.8.20</hutool.version>
-        <h2.version>2.2.224</h2.version>
-        <junit.version>5.9.2</junit.version>
+        <lombok.version>1.18.36</lombok.version>
+        <javax-validation.version>2.0.1.Final</javax-validation.version>
+        <jakarta-validation.version>3.0.2</jakarta-validation.version>
+        <javax-servlet.version>4.0.1</javax-servlet.version>
+        <jakarta-servlet.version>6.0.0</jakarta-servlet.version>
+        <central-publishing-maven-plugin.version>0.10.0</central-publishing-maven-plugin.version>
+        <gpg.skip>true</gpg.skip>
     </properties>
+
+    <profiles>
+
+        <!-- 仅构建 Boot 2.7 模块（默认，Java 8+） -->
+        <profile>
+            <id>boot2</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <properties>
+                <spring-boot.version>${spring-boot-2.version}</spring-boot.version>
+                <skip.module-starter-boot2>true</skip.module-starter-boot2>
+                <build.profile.id>boot2</build.profile.id>
+                <!-- 跳过所有测试 -->
+                <maven.test.skip>true</maven.test.skip>
+            </properties>
+
+            <modules>
+                <module>securt-kit-core</module>
+                <module>securt-kit-monitor</module>
+                <module>securt-kit-playground</module>
+                <module>securt-kit-mybatis</module>
+                <module>securt-kit-starter-boot2</module>
+                <module>securt-kit-test-boot2</module>
+                <module>securt-kit-dy-datasource-test-boot2</module>
+            </modules>
+        </profile>
+
+        <!-- 仅构建 Boot 3.x 模块（需要 Java 17+） -->
+        <!-- 注意：使用此 profile 时，需要使用 -pl 参数指定 Boot 3 模块 -->
+        <profile>
+            <id>boot3</id>
+            <properties>
+                <spring-boot.version>${spring-boot-3.version}</spring-boot.version>
+                <build.profile.id>boot3</build.profile.id>
+                <!-- 跳过所有测试 -->
+                <maven.test.skip>true</maven.test.skip>
+            </properties>
+        </profile>
+
+        <!--
+          Maven Central（Central Publisher Portal）发布。
+          用法：mvn -Prelease clean deploy
+          凭据：~/.m2/settings.xml 中 server id = central（Portal User Token）
+          GPG：本机已配置 gpg 且可非交互签名（或设置 gpg.passphrase）
+        -->
+        <profile>
+            <id>release</id>
+            <properties>
+                <gpg.skip>false</gpg.skip>
+                <maven.test.skip>true</maven.test.skip>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>${central-publishing-maven-plugin.version}</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <publishingServerId>central</publishingServerId>
+                            <!-- 首次建议 false：Portal 校验通过后再手动 Publish -->
+                            <autoPublish>false</autoPublish>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <version>3.3.1</version>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <goals>
+                                    <goal>jar-no-fork</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <version>3.11.2</version>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                                <configuration>
+                                    <failOnError>false</failOnError>
+                                    <doclint>none</doclint>
+                                    <quiet>true</quiet>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>3.2.7</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <gpgArguments>
+                                <arg>--pinentry-mode</arg>
+                                <arg>loopback</arg>
+                            </gpgArguments>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
+    <!-- 配置阿里云 Maven 镜像源 -->
+    <repositories>
+        <repository>
+            <id>aliyun-public</id>
+            <name>Aliyun Public Repository</name>
+            <url>https://maven.aliyun.com/repository/public</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </repository>
+        <repository>
+            <id>aliyun-central</id>
+            <name>Aliyun Central Repository</name>
+            <url>https://maven.aliyun.com/repository/central</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
+
+    <pluginRepositories>
+        <pluginRepository>
+            <id>aliyun-public</id>
+            <name>Aliyun Public Repository</name>
+            <url>https://maven.aliyun.com/repository/public</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </pluginRepository>
+        <pluginRepository>
+            <id>aliyun-central</id>
+            <name>Aliyun Central Repository</name>
+            <url>https://maven.aliyun.com/repository/central</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </pluginRepository>
+    </pluginRepositories>
 
     <dependencyManagement>
         <dependencies>
@@ -37,60 +262,49 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
-            
-            <!-- MyBatis -->
-            <dependency>
-                <groupId>org.mybatis</groupId>
-                <artifactId>mybatis</artifactId>
-                <version>${mybatis.version}</version>
-            </dependency>
-            
-            <!-- MyBatis Plus -->
-            <dependency>
-                <groupId>com.baomidou</groupId>
-                <artifactId>mybatis-plus-boot-starter</artifactId>
-                <version>${mybatis-plus.version}</version>
-            </dependency>
-            
-            <!-- JSqlParser -->
+            <!-- Manage jsqlparser version centrally to keep modules aligned -->
             <dependency>
                 <groupId>com.github.jsqlparser</groupId>
                 <artifactId>jsqlparser</artifactId>
                 <version>${jsqlparser.version}</version>
             </dependency>
-            
-            <!-- Hutool -->
+            <!-- Manage hutool version -->
             <dependency>
                 <groupId>cn.hutool</groupId>
                 <artifactId>hutool-all</artifactId>
                 <version>${hutool.version}</version>
             </dependency>
-            
-            <!-- H2 Database -->
+            <!-- Manage lombok version -->
             <dependency>
-                <groupId>com.h2database</groupId>
-                <artifactId>h2</artifactId>
-                <version>${h2.version}</version>
+                <groupId>org.projectlombok</groupId>
+                <artifactId>lombok</artifactId>
+                <version>${lombok.version}</version>
             </dependency>
-            
-            <!-- JUnit 5 -->
+            <!-- javax validation (for Boot 2.7) -->
             <dependency>
-                <groupId>org.junit.jupiter</groupId>
-                <artifactId>junit-jupiter</artifactId>
-                <version>${junit.version}</version>
-                <scope>test</scope>
+                <groupId>javax.validation</groupId>
+                <artifactId>validation-api</artifactId>
+                <version>${javax-validation.version}</version>
+            </dependency>
+            <!-- jakarta validation (for Boot 3.x) -->
+            <dependency>
+                <groupId>jakarta.validation</groupId>
+                <artifactId>jakarta.validation-api</artifactId>
+                <version>${jakarta-validation.version}</version>
+            </dependency>
+            <!-- javax servlet (for Boot 2.7) -->
+            <dependency>
+                <groupId>javax.servlet</groupId>
+                <artifactId>javax.servlet-api</artifactId>
+                <version>${javax-servlet.version}</version>
+            </dependency>
+            <!-- jakarta servlet (for Boot 3.x) -->
+            <dependency>
+                <groupId>jakarta.servlet</groupId>
+                <artifactId>jakarta.servlet-api</artifactId>
+                <version>${jakarta-servlet.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
-
-    <dependencies>
-        <!-- Lombok -->
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <version>1.18.30</version>
-            <scope>provided</scope>
-        </dependency>
-    </dependencies>
 
 </project>

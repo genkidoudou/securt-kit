@@ -1,0 +1,243 @@
+spring:
+  # 应用名称
+  application:
+    name: securt-kit-multi-datasource-demo
+
+  # MyBatis-Plus 多数据源配置（使用 dynamic-datasource）
+  datasource:
+    # 动态数据源配置
+    dynamic:
+      # 是否启用严格模式（默认 false，建议开启）
+      strict: true
+      # 主数据源（默认数据源）
+      primary: primary
+      # 数据源配置
+      datasource:
+        # 主数据源
+        primary:
+          driver-class-name: io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver
+          # 通过 URL 参数传递数据源标识（通用方式，适用于所有连接池）
+          # 注意：H2 数据库使用 ; 作为参数分隔符，MySQL 等使用 ? 或 &
+          url: 'jdbc:interceptor:h2:mem:primary_db;DB_CLOSE_DELAY=-1;MODE=MySQL;datasource-id=primary'
+          username: sa
+          password:
+          hikari:
+            maximum-pool-size: 5
+            minimum-idle: 1
+        # 从数据源
+        secondary:
+          driver-class-name: io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver
+          # 通过 URL 参数传递数据源标识（通用方式，适用于所有连接池）
+          url: 'jdbc:interceptor:h2:mem:secondary_db;DB_CLOSE_DELAY=-1;MODE=MySQL;datasource-id=secondary'
+          username: sa
+          password:
+          hikari:
+            maximum-pool-size: 5
+            minimum-idle: 1
+        # 第三方数据源
+        third:
+          driver-class-name: io.github.genkidoudou.core.interceptor.SimpleInterceptorDriver
+          # 通过 URL 参数传递数据源标识（通用方式，适用于所有连接池）
+          url: 'jdbc:interceptor:h2:mem:third_db;DB_CLOSE_DELAY=-1;MODE=MySQL;datasource-id=third'
+          username: sa
+          password:
+          hikari:
+            maximum-pool-size: 5
+            minimum-idle: 1
+  
+  # SQL 初始化配置
+  sql:
+    init:
+      mode: never  # 多数据源测试中手动初始化表结构
+
+# MyBatis 配置
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: io.github.test.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+# MyBatis-Plus 配置
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      # 数据库类型：H2
+      db-type: h2
+      # 表名策略：使用下划线命名
+      table-underline: true
+
+# 日志配置
+logging:
+  level:
+    root: INFO
+    io.github.test: DEBUG
+    io.github.genkidoudou.core: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# 服务器配置
+server:
+  port: 8081
+
+# 多数据源加密配置（新配置方式：在 tables 中直接指定 datasource-id）
+securtkit:
+  encryptor:
+    enable: true
+    failure-policy: FALLBACK
+    digest-strategy: io.github.genkidoudou.core.strategy.HmacSha256DigestStrategy
+    digest-hmac-key: multi-ds-playground-secret
+    digest-partial-update: RELOAD
+    digest-verify-on-read: true
+    digest-failure-policy: FAIL_FAST
+    skip-comment:
+      enable: true
+      token: SECURT_SKIP
+    sql-parse-cache:
+      enable: true
+      max-size: 1000
+    tables:
+      # ========== 主数据源（primary）配置 ==========
+      # 用户表：加密 name 和 phone
+      - table-name: user
+        datasource-id: primary
+        fields:
+          - field-name: name
+          - field-name: phone
+      
+      # 订单表：加密收货地址和订单编号
+      - table-name: order
+        datasource-id: primary
+        fields:
+          - field-name: address
+          - field-name: orderNo
+      
+      # 产品表：加密产品名称和描述
+      - table-name: product
+        datasource-id: primary
+        fields:
+          - field-name: productName
+          - field-name: description
+      
+      # 客户表：加密客户姓名和联系方式
+      - table-name: customer
+        datasource-id: primary
+        fields:
+          - field-name: customerName
+          - field-name: contactPhone
+          - field-name: email
+      
+      # ========== 从数据源（secondary）配置 ==========
+      # 用户表：只加密 name（phone 保持明文）
+      - table-name: user
+        datasource-id: secondary
+        fields:
+          - field-name: name
+      
+      # 订单表：只加密收货地址
+      - table-name: order
+        datasource-id: secondary
+        fields:
+          - field-name: address
+      
+      # 产品表：加密产品名称（使用自定义策略）
+      - table-name: product
+        datasource-id: secondary
+        fields:
+          - field-name: productName
+            strategy: io.github.test.MyFieldEncryptorStrategy
+      
+      # 分类表：加密分类名称
+      - table-name: category
+        datasource-id: secondary
+        fields:
+          - field-name: categoryName
+          - field-name: description
+      
+      # ========== 第三方数据源（third）配置 ==========
+      # 用户表：加密邮箱
+      - table-name: user
+        datasource-id: third
+        fields:
+          - field-name: email
+      
+      # 订单表：加密订单金额
+      - table-name: order
+        datasource-id: third
+        fields:
+          - field-name: amount
+      
+      # 日志表：加密日志内容
+      - table-name: log
+        datasource-id: third
+        fields:
+          - field-name: logContent
+          - field-name: operatorName
+      
+      # ========== 默认数据源（不指定 datasource-id）配置 ==========
+      # 配置表：加密配置值
+      - table-name: config
+        fields:
+          - field-name: configValue
+          - field-name: secretKey
+      # Playground 生命周期表：所有数据源采用一致规则，便于切换对照
+      - table-name: digest_user
+        datasource-id: primary
+        fields:
+          - field-name: name
+          - field-name: phone
+        digest:
+          - source-fields: [phone]
+            target-field: row_digest
+      - table-name: digest_user
+        datasource-id: secondary
+        fields:
+          - field-name: name
+          - field-name: phone
+        digest:
+          - source-fields: [phone]
+            target-field: row_digest
+      - table-name: digest_user
+        datasource-id: third
+        fields:
+          - field-name: name
+          - field-name: phone
+        digest:
+          - source-fields: [phone]
+            target-field: row_digest
+      - table-name: playground_person
+        datasource-id: primary
+        fields:
+          - field-name: phone
+          - field-name: id_card
+        digest:
+          - source-fields: [phone, id_card]
+            target-field: row_digest
+      - table-name: playground_person
+        datasource-id: secondary
+        fields:
+          - field-name: phone
+          - field-name: id_card
+        digest:
+          - source-fields: [phone, id_card]
+            target-field: row_digest
+      - table-name: playground_person
+        datasource-id: third
+        fields:
+          - field-name: phone
+          - field-name: id_card
+        digest:
+          - source-fields: [phone, id_card]
+            target-field: row_digest
+  monitor:
+    username: admin
+    password: admin
+    enabled: true
+  playground:
+    enabled: true
+    path: /playground
+    auth-enabled: false
+    allowed-tables: [user, order, digest_user, playground_person]
