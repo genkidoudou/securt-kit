@@ -1,0 +1,4 @@
+docs/** merge=ours
+.cursor/** merge=ours
+.superpowers/** merge=ours
+skills-lock.json merge=ours
