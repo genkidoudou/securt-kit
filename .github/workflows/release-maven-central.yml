@@ -58,9 +58,45 @@ jobs:
           distribution: temurin
           java-version: "17"
           cache: maven
-          server-id: central
-          server-username: CENTRAL_USERNAME
-          server-password: CENTRAL_PASSWORD
+
+      # central-publishing 插件对 settings.xml 里 ${env.*} 占位符解析不可靠，写成字面量
+      - name: Write Maven Central settings.xml
+        if: ${{ !inputs.dry_run }}
+        env:
+          CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
+          CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${CENTRAL_USERNAME:-}" || -z "${CENTRAL_PASSWORD:-}" ]]; then
+            echo "::error::缺少 CENTRAL_USERNAME / CENTRAL_PASSWORD。请到 https://central.sonatype.com/account 生成 Portal User Token（不是旧 OSSRH token）。"
+            exit 1
+          fi
+          mkdir -p ~/.m2
+          python3 <<'PY'
+          import os
+          from pathlib import Path
+          from xml.sax.saxutils import escape
+
+          user = escape(os.environ["CENTRAL_USERNAME"])
+          password = escape(os.environ["CENTRAL_PASSWORD"])
+          Path.home().joinpath(".m2").mkdir(parents=True, exist_ok=True)
+          Path.home().joinpath(".m2/settings.xml").write_text(
+              f"""<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0 https://maven.apache.org/xsd/settings-1.2.0.xsd">
+            <servers>
+              <server>
+                <id>central</id>
+                <username>{user}</username>
+                <password>{password}</password>
+              </server>
+            </servers>
+          </settings>
+          """,
+              encoding="utf-8",
+          )
+          print("Maven settings.xml ready (server id=central)")
+          PY
 
       - name: Resolve release version
         id: ver

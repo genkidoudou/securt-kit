@@ -1,6 +1,12 @@
 name: Sync GitHub Wiki
 
 # 将仓库 doc/*.md 同步到 GitHub Wiki（不含 docs/ 设计文档）
+#
+# 一次性准备：
+# 1. 仓库 Settings → Features → 勾选 Wikis
+# 2. 打开 Wiki 页，Create the first page（生成 *.wiki.git）
+# 3. 创建 Classic PAT（必须 classic，勾选 repo），写入 Secret：WIKI_TOKEN
+#    Fine-grained PAT 通常无法访问 *.wiki.git，会报 Repository not found
 on:
   push:
     branches:
@@ -23,21 +29,23 @@ jobs:
 
       - name: Publish doc/ to wiki
         env:
-          # 默认 GITHUB_TOKEN 通常无法推 wiki；请在仓库 Secrets 配置 WIKI_TOKEN
-          # （classic PAT：勾选 repo；或 fine-grained：Contents 对本仓读写，并确保已开启 Wiki）
           GH_TOKEN: ${{ secrets.WIKI_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           if [ -z "${GH_TOKEN:-}" ]; then
-            echo "::error::缺少 secrets.WIKI_TOKEN。请创建有 wiki 写权限的 PAT 并加入仓库 Secrets。"
+            echo "::error::缺少 secrets.WIKI_TOKEN。请创建 Classic PAT（勾选 repo）并加入仓库 Secrets。"
             exit 1
           fi
 
-          # 首次使用前请在 GitHub 仓库 Settings → Wikis 启用 Wiki（会生成空 Home）
+          echo "Wiki remote: https://github.com/${REPO}.wiki.git"
+
           WIKI_DIR="${RUNNER_TEMP}/securt-kit-wiki"
           rm -rf "${WIKI_DIR}"
-          git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.wiki.git" "${WIKI_DIR}"
+          if ! git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.wiki.git" "${WIKI_DIR}"; then
+            echo "::error::无法 clone ${REPO}.wiki.git。请确认：1) 已启用 Wikis 并创建过首页；2) WIKI_TOKEN 是 Classic PAT 且勾选 repo（不要用 Fine-grained）。"
+            exit 1
+          fi
 
           # 同步白名单：仅这些用户手册进入 Wiki
           for f in Home.md Quick-Start.md Usage.md Monitor.md Playground.md Multi-Datasource.md FAQ.md _Sidebar.md; do
